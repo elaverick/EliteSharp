@@ -1,0 +1,232 @@
+# EliteSharp
+
+**Classic Elite, as it played on the BBC Master, rebuilt for modern Windows PCs.**
+
+Elite is the 1984 space trading and combat game that started it all. You begin
+with a Cobra Mk III, 100 credits and a tank of fuel, docked at the space station
+orbiting Lave. From there the eight galaxies are yours: trade between the stars,
+hunt pirates for bounties (or turn pirate yourself), take on missions for the
+Navy, and work your way up the ranks from Harmless all the way to Elite.
+
+EliteSharp is a faithful recreation of the BBC Master version of the game. The
+ships, the universe, the markets, the combat and the missions all behave exactly
+as they did in 1986. The difference is that it runs in a window on your PC, drawn
+with crisp wireframes that you can scale up to fill your screen, and that you
+can play it with an Xbox controller as well as the keyboard.
+
+## What you need
+
+- A 64-bit Windows 10 or 11 PC
+- A graphics card with Vulkan support (almost any card from the last ten years,
+  with up-to-date drivers)
+- Optionally, an Xbox controller (or any controller Windows recognises)
+
+## Getting the game
+
+There isn't a ready-made download yet, so for now you need to build the game
+yourself, which only takes a couple of minutes:
+
+1. Install the free [.NET 10 SDK](https://dotnet.microsoft.com/download) from
+   Microsoft.
+2. Download the game, either with **Code → Download ZIP** on the GitHub page (then
+   unzip it), or with Git:
+   ```
+   git clone https://github.com/elaverick/EliteSharp.git
+   ```
+3. Open a command prompt in the game's `src\EliteSharp` folder and run:
+   ```
+   dotnet run -c Release
+   ```
+
+After the first build, you'll find `EliteSharp.exe` in
+`src\EliteSharp\bin\Release\net10.0`, and you can run that directly.
+
+## Starting out
+
+When the game starts, it asks if you want to load a saved commander. Press
+**N** to start a new career as Commander Jameson, then **Space** to go to your
+ship.
+
+A few tips for new pilots:
+
+- **Launch** with **F1**. You'll fly out of the station's slot into space.
+- **Trade** by buying goods cheaply in one system (**F2** while docked) and
+  selling them for more in another (**F3**). Agricultural worlds sell food
+  cheaply, and industrial worlds pay well for it. Look at a system's data
+  (**F7**) to see what kind of economy it has.
+- **Travel** by picking a destination on the short-range chart (**F6**) with the
+  cursor keys, then pressing **H** to start the hyperspace countdown. You can
+  jump as far as your fuel allows (up to 7 light years).
+- **Docking** is the hardest thing in Elite. Fly towards the station, line
+  yourself up with the slot, match the station's spin, and fly in slowly. Until
+  you get the hang of it, save up for a **docking computer**. Press **C** to let
+  it fly you in.
+- **Save** your commander while docked by pressing **F12** (or the **`** key)
+  for the disc menu. Do this often!
+
+## Keyboard controls
+
+The game uses the original BBC Micro keys wherever possible. The BBC's red
+function keys f0 to f9 are on your **F1** to **F10** keys.
+
+### Flying
+
+| Key | Action |
+| --- | --- |
+| **<** and **>** (the , and . keys) | Roll left and right |
+| **S** and **X** | Dive and climb |
+| **Space** and **?** (the / key) | Speed up and slow down |
+| **A** | Fire laser |
+| **T** | Target a missile |
+| **M** | Fire the targeted missile |
+| **U** | Unarm the missile |
+| **E** | Fire the E.C.M. (destroys incoming missiles) |
+| **Tab** | Set off the energy bomb |
+| **J** | In-system jump (a quick hop towards the planet, if nothing is nearby) |
+| **H** | Hyperspace to the selected system |
+| **Ctrl + H** | Galactic hyperspace (needs a galactic hyperdrive) |
+| **C** / **P** | Turn the docking computer on / off |
+| **Escape** | Launch the escape pod |
+
+### Screens
+
+| Key | Docked | In flight |
+| --- | --- | --- |
+| **F1** | Launch | Front view |
+| **F2** | Buy cargo | Rear view |
+| **F3** | Sell cargo | Left view |
+| **F4** | Equip ship | Right view |
+| **F5** | Galactic chart | Galactic chart |
+| **F6** | Short-range chart | Short-range chart |
+| **F7** | Data on the selected system | Data on the selected system |
+| **F8** | Market prices | Market prices |
+| **F9** | Status | Status |
+| **F10** | Inventory | Inventory |
+| **F12** or **`** | Save and load commanders | |
+
+On the charts, the **cursor keys** move the cross-hairs (hold **Shift** to move
+them faster), **D** shows the distance to the selected system, **O** moves the
+cross-hairs back to your current system, and **F** (while docked) lets you find
+a system by typing its name.
+
+### Pausing and options
+
+Press **F11** (or **Pause**, or **End**) to pause the game. While paused:
+
+| Key | Option |
+| --- | --- |
+| **Delete** or **Backspace** | Carry on playing |
+| **Escape** | Quit to the title screen |
+| **Q** / **S** | Sound off / on |
+| **<** / **>** | Volume down / up |
+| **Caps Lock** | Keyboard damping on / off |
+| **A** | Keyboard auto-recentre on / off |
+| **F** | Flashing console bars on / off |
+| **X** | Show the authors' names on the title screen (and allow manual mis-jumps into witchspace) |
+| **Y** | Reverse the controller's pitch axis |
+| **J** | Reverse both controller axes |
+| **K** | Controller-only flying (see below) |
+
+Press **Alt + Enter** at any time to switch between a window and full screen.
+
+## Playing with a controller
+
+Plug in an Xbox controller (or any controller Windows recognises) and it just
+works, even while the game is running. You can use the keyboard and controller at
+the same time.
+
+The **left stick** flies the ship, just like the analogue joystick you could plug
+into a BBC Master: push left and right to roll, and pull back to climb. The
+**triggers** are your throttle: the harder you squeeze the **right trigger**, the
+faster you speed up, and the **left trigger** slows you down. Let go of the
+stick, and the keyboard takes over again. If you'd rather the stick was always in
+charge, press **K** while paused.
+
+On the charts, either stick moves the cross-hairs.
+
+| Button | In flight | On other screens (and when docked) |
+| --- | --- | --- |
+| **A** | Fire laser | Enter (carry on) |
+| **B** | Fire missile | "N" (answer No) |
+| **X** | Target missile | |
+| **Y** | Unarm missile | "Y" (answer Yes, or load a commander on the title screen) |
+| **RB** | E.C.M. | Move the cross-hairs faster |
+| **D-pad** | Front, rear, left and right views | Move the cross-hairs |
+| **Start** | Pause | Front view (or launch, when docked) |
+| **Back** | Short-range chart | Short-range chart |
+| **Left stick click** | In-system jump | In-system jump |
+| **Right stick click** | Docking computer on / off | Docking computer on / off |
+
+Hold **LB** for more functions:
+
+| Button | With LB held |
+| --- | --- |
+| **D-pad up / down** | Status / market prices |
+| **D-pad left / right** | Short-range chart / galactic chart |
+| **A** | Hyperspace |
+| **B** | Galactic hyperspace |
+| **X** | Data on the selected system |
+| **Y** | Inventory |
+| **RB** | Energy bomb |
+| **Back** | Escape pod |
+| **Start** | Equip ship |
+
+While the game is paused, **Start** or **B** carries on, **Back** quits to the
+title screen, the **D-pad** changes the volume (left and right) and turns the
+sound on and off (up and down), **Y** reverses the pitch axis, and **X** switches
+controller-only flying on and off.
+
+You still need the keyboard for typing: naming your commander, and entering how
+much cargo to buy.
+
+## Options
+
+You can add these options to the end of the command that starts the game, for
+example `EliteSharp.exe --fullscreen --scale 3`, or add them to a Windows
+shortcut:
+
+| Option | What it does |
+| --- | --- |
+| `--fullscreen` | Start in full-screen mode |
+| `--scale <1-8>` | The size of the window, as a multiple of the original screen size (default 4) |
+| `--fps <1-50>` | The game speed, in main loop updates per second (default 16, which feels like the original) |
+| `--nosound` | Turn off the sound |
+| `--nopad` | Ignore any game controllers |
+| `--data <folder>` | Where to keep saved commanders |
+
+Your saved commanders live in `%APPDATA%\EliteSharp`, in a folder for each of the
+game's "disc drives".
+
+## Credits and thanks
+
+**Elite was written by David Braben and Ian Bell**, and first published by
+Acornsoft for the BBC Micro in 1984. The BBC Master version that EliteSharp
+recreates was released by Acornsoft in 1986. Their game created a whole genre
+and inspired generations of players and programmers, and EliteSharp exists
+purely out of admiration for what they achieved.
+
+**Ian Bell released the original source code for Elite** on his website, which
+is what made a faithful recreation like this possible.
+
+**Mark Moxon** has spent years turning that source code into a fully documented,
+line-by-line commentary on how Elite works. His annotated BBC Master source
+([github.com/markmoxon/elite-source-code-bbc-master](https://github.com/markmoxon/elite-source-code-bbc-master)),
+and his wonderful website at [bbcelite.com](https://www.bbcelite.com), explain
+every routine, every table and every trick in the game. EliteSharp was translated
+from his commented code, and it was used at every step to check that the game
+behaves exactly like the original. This project simply wouldn't exist without
+his amazing work, so thank you, Mark.
+
+EliteSharp also stands on the shoulders of:
+
+- [Silk.NET](https://github.com/dotnet/Silk.NET), for Vulkan, windowing and input
+- [SDL](https://www.libsdl.org), for game controller support
+- [OpenAL Soft](https://openal-soft.org), for sound
+- The Khronos Group, for [Vulkan](https://www.vulkan.org) and
+  [glTF](https://www.khronos.org/gltf/), the format the ship models are stored in
+
+EliteSharp is an unofficial, non-commercial fan project. It isn't affiliated
+with, or endorsed by, David Braben, Ian Bell, Acornsoft or Frontier Developments.
+Elite remains the work of its original authors.
+
+Right on, Commander!

@@ -1,0 +1,135 @@
+using System.Runtime.InteropServices;
+
+namespace EliteSharp.Rendering;
+
+/// <summary>
+/// A vertex as sent to the GPU. For 2D primitives the position is in logical
+/// BBC screen pixels (256 x 248, origin top-left); for 3D primitives it is a
+/// point in space relative to our ship, which the vertex shader projects using
+/// Elite's perspective (screen x = 128 + 256 * x / z, screen y = 96 - 256 * y / z).
+/// </summary>
+[StructLayout(LayoutKind.Sequential, Pack = 4)]
+public struct Vertex(float x, float y, float z, uint colour, uint flags)
+{
+    public float X = x;
+    public float Y = y;
+    public float Z = z;
+
+    /// <summary>The BBC colour byte (a mode 1 or mode 2 pixel pattern).</summary>
+    public uint Colour = colour;
+
+    /// <summary>See <see cref="VertexFlags"/>.</summary>
+    public uint Flags = flags;
+
+    public static readonly uint SizeInBytes = (uint)Marshal.SizeOf<Vertex>();
+}
+
+public static class VertexFlags
+{
+    /// <summary>Decode the colour byte as a mode 2 (dashboard) pattern rather than mode 1.</summary>
+    public const uint Mode2 = 1;
+
+    /// <summary>The position is a 3D point in space to be projected.</summary>
+    public const uint Space3D = 2;
+
+    /// <summary>The primitive belongs to the dashboard rather than the space view (for clipping).</summary>
+    public const uint Dashboard = 4;
+}
+
+/// <summary>
+/// A complete frame to be drawn: the vertices for the triangle list and the line
+/// list, plus the palette state. Built on the game thread, drawn by the renderer.
+/// </summary>
+public sealed class FrameData
+{
+    public Vertex[] Triangles = [];
+    public int TriangleVertexCount;
+
+    public Vertex[] Lines = [];
+    public int LineVertexCount;
+
+    /// <summary>The sixteen physical colours (0-7) of the ULA palette for the space view.</summary>
+    public int[] SpacePalette = new int[16];
+
+    /// <summary>The sixteen physical colours (0-7) for mode 2 logical colours 0-15.</summary>
+    public int[] DashboardPalette = new int[16];
+
+    /// <summary>The hyperspace colour effect (the space view is decoded as mode 2).</summary>
+    public bool HyperspaceColours;
+
+    /// <summary>Whether the dashboard is visible (it is hidden on the death screen).</summary>
+    public bool DashboardVisible = true;
+}
+
+/// <summary>
+/// Accumulates primitives for a frame.
+/// </summary>
+public sealed class FrameBuilder
+{
+    private readonly List<Vertex> _triangles = new(16384);
+    private readonly List<Vertex> _lines = new(8192);
+
+    public void Clear()
+    {
+        _triangles.Clear();
+        _lines.Clear();
+    }
+
+    /// <summary>Add a 2D line in logical screen coordinates, drawn to the pixel centres.</summary>
+    public void Line(float x1, float y1, float x2, float y2, int colour, uint flags = 0)
+    {
+        _lines.Add(new Vertex(x1 + 0.5f, y1 + 0.5f, 0, (uint)colour, flags));
+        _lines.Add(new Vertex(x2 + 0.5f, y2 + 0.5f, 0, (uint)colour, flags));
+    }
+
+    /// <summary>Add a 3D line between two points in space relative to our ship.</summary>
+    public void Line3D(float x1, float y1, float z1, float x2, float y2, float z2, int colour)
+    {
+        _lines.Add(new Vertex(x1, y1, z1, (uint)colour, VertexFlags.Space3D));
+        _lines.Add(new Vertex(x2, y2, z2, (uint)colour, VertexFlags.Space3D));
+    }
+
+    /// <summary>Add a filled rectangle in logical screen coordinates.</summary>
+    public void Rect(float x, float y, float width, float height, int colour, uint flags = 0)
+    {
+        var c = (uint)colour;
+        var a = new Vertex(x, y, 0, c, flags);
+        var b = new Vertex(x + width, y, 0, c, flags);
+        var d = new Vertex(x, y + height, 0, c, flags);
+        var e = new Vertex(x + width, y + height, 0, c, flags);
+        _triangles.Add(a);
+        _triangles.Add(b);
+        _triangles.Add(d);
+        _triangles.Add(b);
+        _triangles.Add(e);
+        _triangles.Add(d);
+    }
+
+    public FrameData Build(int[] spacePalette, int[] dashboardPalette, bool hyperspaceColours, bool dashboardVisible)
+    {
+        return new FrameData
+        {
+            Triangles = _triangles.ToArray(),
+            TriangleVertexCount = _triangles.Count,
+            Lines = _lines.ToArray(),
+            LineVertexCount = _lines.Count,
+            SpacePalette = (int[])spacePalette.Clone(),
+            DashboardPalette = (int[])dashboardPalette.Clone(),
+            HyperspaceColours = hyperspaceColours,
+            DashboardVisible = dashboardVisible,
+        };
+    }
+}
+
+/// <summary>
+/// Hands completed frames from the game thread to the render thread. The render
+/// thread always draws the most recently published frame.
+/// </summary>
+public sealed class FrameExchange
+{
+    private FrameData? _latest;
+
+    public void Publish(FrameData frame) => Volatile.Write(ref _latest, frame);
+
+    public FrameData? Latest => Volatile.Read(ref _latest);
+}

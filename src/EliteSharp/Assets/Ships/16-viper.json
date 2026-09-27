@@ -1,0 +1,17 @@
+{
+  "$schema": "ship.schema.json",
+  "type": 16,
+  "name": "Viper",
+  "model": "Models/viper.gltf",
+  "maxEnergy": 140,
+  "maxSpeed": 32,
+  "laserPower": 2,
+  "missiles": 1,
+  "bounty": 0.0,
+  "targetRadius": 75,
+  "canisters": 0,
+  "killPoints": 0.1015625,
+  "colour": "0xFF",
+  "scannerColour": "0x3C",
+  "flags": ["bountyHunter", "cop", "escapePod"]
+}

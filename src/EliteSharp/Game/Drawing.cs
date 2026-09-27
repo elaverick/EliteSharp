@@ -98,7 +98,7 @@ public sealed partial class EliteGame
         }
 
         var owner = INWK.DisplayOwner;
-        COL = GameData.ShipColours[TYPE];
+        COL = ShipCatalogue.Get(TYPE).Colour;
         XX4 = 31;
 
         if ((INWK.Newb & 0x80) != 0)

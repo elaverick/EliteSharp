@@ -1,0 +1,17 @@
+{
+  "$schema": "ship.schema.json",
+  "type": 1,
+  "name": "Missile",
+  "model": "Models/missile.gltf",
+  "maxEnergy": 2,
+  "maxSpeed": 44,
+  "laserPower": 0,
+  "missiles": 0,
+  "bounty": 0.0,
+  "targetRadius": 40,
+  "canisters": 0,
+  "killPoints": 0.58203125,
+  "colour": "0x0F",
+  "scannerColour": "0x0F",
+  "flags": []
+}

@@ -53,12 +53,12 @@ public sealed class ExplosionCloud
 /// A ship (or planet, or sun) in the local bubble of universe. This mirrors the
 /// 37-byte ship data block (INWK / K%) from the original, with coordinates and
 /// orientation vectors held as signed integers rather than sign-magnitude bytes.
-/// Each ship type is a subclass (see ShipBlueprints.g.cs) that supplies its
-/// blueprint.
+/// What makes each type of ship different is its blueprint, which comes from
+/// the ship assets (see ShipCatalogue); use <see cref="Create"/> to make one.
 /// </summary>
-public class Ship
+public sealed class Ship
 {
-    protected Ship(int type, ShipBlueprint? blueprint)
+    private Ship(int type, ShipBlueprint? blueprint)
     {
         Type = type;
         Blueprint = blueprint;
@@ -227,72 +227,42 @@ public class Ship
         Newb = 0;
     }
 
-    public override string ToString() => $"{Blueprint?.Name ?? GetType().Name} (type {Type}) at ({X}, {Y}, {Z})";
+    public override string ToString() => $"{Blueprint?.Name ?? TypeName(Type)} (type {Type}) at ({X}, {Y}, {Z})";
 
-    /// <summary>Create a new ship of the given type (as stored in FRIN).</summary>
+    /// <summary>
+    /// Create a new ship of the given type (as stored in FRIN): 1-33 for ships,
+    /// 128 or 130 for the planet and 129 for the sun. If this is the space
+    /// station and the system has a Dodo station, it gets the Dodo's blueprint.
+    /// </summary>
     public static Ship Create(int type, bool dodoStation = false) => type switch
     {
-        ShipType.Missile => new Missile(),
-        ShipType.SpaceStation => dodoStation ? new DodoStation { Type = ShipType.SpaceStation } : new CoriolisStation(),
-        ShipType.EscapePod => new EscapePod(),
-        ShipType.AlloyPlate => new AlloyPlate(),
-        ShipType.CargoCanister => new CargoCanister(),
-        6 => new Boulder(),
-        ShipType.Asteroid => new Asteroid(),
-        ShipType.Splinter => new Splinter(),
-        ShipType.Shuttle => new Shuttle(),
-        10 => new Transporter(),
-        ShipType.CobraMkIII => new CobraMkIII(),
-        12 => new Python(),
-        13 => new Boa(),
-        ShipType.Anaconda => new Anaconda(),
-        ShipType.RockHermit => new RockHermit(),
-        ShipType.Viper => new Viper(),
-        ShipType.Sidewinder => new Sidewinder(),
-        18 => new Mamba(),
-        ShipType.Krait => new Krait(),
-        ShipType.Adder => new Adder(),
-        21 => new Gecko(),
-        22 => new CobraMkI(),
-        ShipType.Worm => new Worm(),
-        ShipType.CobraMkIIIPirate => new CobraMkIIIPirate(),
-        ShipType.AspMkII => new AspMkII(),
-        26 => new PythonPirate(),
-        27 => new FerDeLance(),
-        28 => new Moray(),
-        ShipType.Thargoid => new Thargoid(),
-        ShipType.Thargon => new Thargon(),
-        ShipType.Constrictor => new Constrictor(),
-        ShipType.Cougar => new Cougar(),
-        ShipType.Dodo => new DodoStation(),
-        ShipType.Planet or ShipType.PlanetWithCrater => new Planet(type),
-        ShipType.Sun => new Sun(),
+        >= 1 and <= ShipCatalogue.Count => new Ship(type, BlueprintFor(type, dodoStation)),
+        ShipType.Planet or ShipType.PlanetWithCrater or ShipType.Sun => new Ship(type, null),
         _ => throw new ArgumentOutOfRangeException(nameof(type), type, "Unknown ship type"),
     };
+
+    /// <summary>
+    /// Create an empty ship data block that isn't in the local bubble, for use
+    /// as the INWK workspace when setting up new ships.
+    /// </summary>
+    public static Ship Workspace() => new(0, null);
 
     /// <summary>The blueprint for a ship type, as looked up in XX21.</summary>
     public static ShipBlueprint? BlueprintFor(int type, bool dodoStation = false) => type switch
     {
-        ShipType.SpaceStation => dodoStation ? DodoStation.Data : CoriolisStation.Data,
-        >= 1 and <= 33 => Create(type).Blueprint,
+        ShipType.SpaceStation => ShipCatalogue.Get(dodoStation ? ShipType.Dodo : ShipType.SpaceStation),
+        >= 1 and <= ShipCatalogue.Count => ShipCatalogue.Get(type),
         _ => null,
     };
+
+    private static string TypeName(int type) => type switch
+    {
+        ShipType.Planet => "Planet",
+        ShipType.PlanetWithCrater => "Planet with crater",
+        ShipType.Sun => "Sun",
+        _ => "Workspace",
+    };
 }
-
-/// <summary>
-/// A ship data block that isn't in the local bubble, used as the INWK
-/// workspace when setting up new ships.
-/// </summary>
-public sealed class WorkspaceShip() : Ship(0, null);
-
-/// <summary>The planet, which is type 128 (equator and meridian) or 130 (crater).</summary>
-public sealed class Planet(int type) : Ship(type, null)
-{
-    public bool HasCrater => Type == ShipType.PlanetWithCrater;
-}
-
-/// <summary>The sun, which is type 129.</summary>
-public sealed class Sun() : Ship(ShipType.Sun, null);
 
 /// <summary>Ship type numbers, as defined by the configuration variables in the original.</summary>
 public static class ShipType
@@ -302,19 +272,29 @@ public static class ShipType
     public const int EscapePod = 3;         // ESC
     public const int AlloyPlate = 4;        // PLT
     public const int CargoCanister = 5;     // OIL
+    public const int Boulder = 6;
     public const int Asteroid = 7;          // AST
     public const int Splinter = 8;          // SPL
     public const int Shuttle = 9;           // SHU
+    public const int Transporter = 10;
     public const int CobraMkIII = 11;       // CYL
+    public const int Python = 12;
+    public const int Boa = 13;
     public const int Anaconda = 14;         // ANA
     public const int RockHermit = 15;       // HER
     public const int Viper = 16;            // COPS
     public const int Sidewinder = 17;       // SH3
+    public const int Mamba = 18;
     public const int Krait = 19;            // KRA
     public const int Adder = 20;            // ADA
+    public const int Gecko = 21;
+    public const int CobraMkI = 22;
     public const int Worm = 23;             // WRM
     public const int CobraMkIIIPirate = 24; // CYL2
     public const int AspMkII = 25;          // ASP
+    public const int PythonPirate = 26;
+    public const int FerDeLance = 27;
+    public const int Moray = 28;
     public const int Thargoid = 29;         // THG
     public const int Thargon = 30;          // TGL
     public const int Constrictor = 31;      // CON

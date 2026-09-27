@@ -232,7 +232,7 @@ public sealed partial class EliteGame
             return;
         }
 
-        int colour = GameData.ScannerColours[TYPE];
+        int colour = ShipCatalogue.Get(TYPE).ScannerColour;
         if (((INWK.XHi | INWK.YHi | INWK.ZHi) & 0b11000000) != 0)
         {
             return;

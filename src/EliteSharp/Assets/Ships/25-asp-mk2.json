@@ -1,0 +1,17 @@
+{
+  "$schema": "ship.schema.json",
+  "type": 25,
+  "name": "Asp Mk II",
+  "model": "Models/asp-mk2.gltf",
+  "maxEnergy": 150,
+  "maxSpeed": 40,
+  "laserPower": 5,
+  "missiles": 1,
+  "bounty": 20.0,
+  "targetRadius": 60,
+  "canisters": 0,
+  "killPoints": 1.08203125,
+  "colour": "0xFF",
+  "scannerColour": "0x3C",
+  "flags": ["hostile", "pirate", "escapePod"]
+}

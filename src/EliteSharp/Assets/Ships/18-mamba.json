@@ -1,0 +1,17 @@
+{
+  "$schema": "ship.schema.json",
+  "type": 18,
+  "name": "Mamba",
+  "model": "Models/mamba.gltf",
+  "maxEnergy": 90,
+  "maxSpeed": 30,
+  "laserPower": 2,
+  "missiles": 2,
+  "bounty": 15.0,
+  "targetRadius": 70,
+  "canisters": 1,
+  "killPoints": 0.5,
+  "colour": "0xFF",
+  "scannerColour": "0x3C",
+  "flags": ["hostile", "pirate", "escapePod"]
+}

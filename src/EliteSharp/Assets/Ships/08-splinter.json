@@ -1,0 +1,18 @@
+{
+  "$schema": "ship.schema.json",
+  "type": 8,
+  "name": "Splinter",
+  "model": "Models/splinter.gltf",
+  "maxEnergy": 20,
+  "maxSpeed": 10,
+  "laserPower": 0,
+  "missiles": 0,
+  "bounty": 0.0,
+  "targetRadius": 16,
+  "canisters": 0,
+  "scoopedAs": "Minerals",
+  "killPoints": 0.0390625,
+  "colour": "0xF0",
+  "scannerColour": "0x03",
+  "flags": []
+}

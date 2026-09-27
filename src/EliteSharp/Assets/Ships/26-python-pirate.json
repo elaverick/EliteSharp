@@ -1,0 +1,17 @@
+{
+  "$schema": "ship.schema.json",
+  "type": 26,
+  "name": "Python (pirate)",
+  "model": "Models/python.gltf",
+  "maxEnergy": 250,
+  "maxSpeed": 20,
+  "laserPower": 3,
+  "missiles": 3,
+  "bounty": 20.0,
+  "targetRadius": 80,
+  "canisters": 2,
+  "killPoints": 1.1640625,
+  "colour": "0xFF",
+  "scannerColour": "0x33",
+  "flags": ["hostile", "pirate", "escapePod"]
+}

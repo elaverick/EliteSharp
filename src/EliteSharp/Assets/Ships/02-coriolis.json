@@ -1,0 +1,17 @@
+{
+  "$schema": "ship.schema.json",
+  "type": 2,
+  "name": "Coriolis space station",
+  "model": "Models/coriolis.gltf",
+  "maxEnergy": 240,
+  "maxSpeed": 0,
+  "laserPower": 0,
+  "missiles": 6,
+  "bounty": 0.0,
+  "targetRadius": 160,
+  "canisters": 0,
+  "killPoints": 0.0,
+  "colour": "0xFF",
+  "scannerColour": "0x0C",
+  "flags": []
+}

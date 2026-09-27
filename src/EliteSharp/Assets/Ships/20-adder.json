@@ -1,0 +1,17 @@
+{
+  "$schema": "ship.schema.json",
+  "type": 20,
+  "name": "Adder",
+  "model": "Models/adder.gltf",
+  "maxEnergy": 85,
+  "maxSpeed": 24,
+  "laserPower": 2,
+  "missiles": 0,
+  "bounty": 4.0,
+  "targetRadius": 50,
+  "canisters": 0,
+  "killPoints": 0.3515625,
+  "colour": "0xFF",
+  "scannerColour": "0x3C",
+  "flags": ["hostile", "pirate", "escapePod"]
+}

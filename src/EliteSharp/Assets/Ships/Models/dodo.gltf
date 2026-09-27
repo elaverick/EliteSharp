@@ -1,0 +1,157 @@
+{
+  "asset": {
+    "version": "2.0",
+    "generator": "EliteSharp tools/export_ships.py",
+    "extras": {
+      "description": "Elite ship wireframe. Coordinates are in the original's left-handed space (x right, y up, z forward); the node mirrors x to convert to glTF's right-handed space."
+    }
+  },
+  "scene": 0,
+  "scenes": [
+    {
+      "nodes": [0]
+    }
+  ],
+  "nodes": [
+    {
+      "name": "Dodecahedron (\"Dodo\") space station",
+      "mesh": 0,
+      "scale": [-1, 1, 1]
+    }
+  ],
+  "meshes": [
+    {
+      "name": "Dodecahedron (\"Dodo\") space station",
+      "primitives": [
+        {
+          "mode": 1,
+          "attributes": {
+            "POSITION": 0,
+            "_FACES": 1,
+            "_VISIBILITY": 2
+          },
+          "indices": 3
+        }
+      ],
+      "extras": {
+        "elite": {
+          "normalScale": 0,
+          "dotDistance": 125,
+          "maxVisibleEdges": 25,
+          "gunVertex": 0,
+          "explosionVertices": 12,
+          "edges": [
+            {"faces": [1, 0], "visibility": 31},
+            {"faces": [2, 0], "visibility": 31},
+            {"faces": [3, 0], "visibility": 31},
+            {"faces": [4, 0], "visibility": 31},
+            {"faces": [5, 0], "visibility": 31},
+            {"faces": [6, 1], "visibility": 31},
+            {"faces": [7, 1], "visibility": 31},
+            {"faces": [7, 2], "visibility": 31},
+            {"faces": [8, 2], "visibility": 31},
+            {"faces": [8, 3], "visibility": 31},
+            {"faces": [9, 3], "visibility": 31},
+            {"faces": [9, 4], "visibility": 31},
+            {"faces": [10, 4], "visibility": 31},
+            {"faces": [10, 5], "visibility": 31},
+            {"faces": [6, 5], "visibility": 31},
+            {"faces": [11, 7], "visibility": 31},
+            {"faces": [11, 8], "visibility": 31},
+            {"faces": [11, 9], "visibility": 31},
+            {"faces": [11, 10], "visibility": 31},
+            {"faces": [11, 6], "visibility": 31},
+            {"faces": [5, 1], "visibility": 31},
+            {"faces": [2, 1], "visibility": 31},
+            {"faces": [3, 2], "visibility": 31},
+            {"faces": [4, 3], "visibility": 31},
+            {"faces": [5, 4], "visibility": 31},
+            {"faces": [7, 6], "visibility": 31},
+            {"faces": [8, 7], "visibility": 31},
+            {"faces": [9, 8], "visibility": 31},
+            {"faces": [10, 9], "visibility": 31},
+            {"faces": [10, 6], "visibility": 31},
+            {"faces": [0, 0], "visibility": 30},
+            {"faces": [0, 0], "visibility": 20},
+            {"faces": [0, 0], "visibility": 23},
+            {"faces": [0, 0], "visibility": 20}
+          ],
+          "faces": [
+            {"normal": [0, 0, 196], "visibility": 31},
+            {"normal": [103, 142, 88], "visibility": 31},
+            {"normal": [169, -55, 89], "visibility": 31},
+            {"normal": [0, -176, 88], "visibility": 31},
+            {"normal": [-169, -55, 89], "visibility": 31},
+            {"normal": [-103, 142, 88], "visibility": 31},
+            {"normal": [0, 176, -88], "visibility": 31},
+            {"normal": [169, 55, -89], "visibility": 31},
+            {"normal": [103, -142, -88], "visibility": 31},
+            {"normal": [-103, -142, -88], "visibility": 31},
+            {"normal": [-169, 55, -89], "visibility": 31},
+            {"normal": [0, 0, -196], "visibility": 31}
+          ]
+        }
+      }
+    }
+  ],
+  "accessors": [
+    {
+      "bufferView": 0,
+      "componentType": 5126,
+      "count": 24,
+      "type": "VEC3",
+      "min": [-231, -243, -196],
+      "max": [231, 243, 196]
+    },
+    {
+      "bufferView": 1,
+      "componentType": 5121,
+      "count": 24,
+      "type": "VEC4"
+    },
+    {
+      "bufferView": 2,
+      "componentType": 5126,
+      "count": 24,
+      "type": "SCALAR"
+    },
+    {
+      "bufferView": 3,
+      "componentType": 5123,
+      "count": 68,
+      "type": "SCALAR"
+    }
+  ],
+  "bufferViews": [
+    {
+      "buffer": 0,
+      "byteOffset": 0,
+      "byteLength": 288,
+      "target": 34962
+    },
+    {
+      "buffer": 0,
+      "byteOffset": 288,
+      "byteLength": 96,
+      "target": 34962
+    },
+    {
+      "buffer": 0,
+      "byteOffset": 384,
+      "byteLength": 96,
+      "target": 34962
+    },
+    {
+      "buffer": 0,
+      "byteOffset": 480,
+      "byteLength": 136,
+      "target": 34963
+    }
+  ],
+  "buffers": [
+    {
+      "byteLength": 616,
+      "uri": "data:application/octet-stream;base64,AAAAAAAAFkMAAERDAAAPQwAAOEIAAERDAACwQgAA8sIAAERDAACwwgAA8sIAAERDAAAPwwAAOEIAAERDAAAAAAAAc0MAADhCAABnQwAAlkIAADhCAAAPQwAARMMAADhCAAAPwwAARMMAADhCAABnwwAAlkIAADhCAAAPQwAAREMAADjCAABnQwAAlsIAADjCAAAAAAAAc8MAADjCAABnwwAAlsIAADjCAAAPwwAAREMAADjCAACwQgAA8kIAAETDAAAPQwAAOMIAAETDAAAAAAAAFsMAAETDAAAPwwAAOMIAAETDAACwwgAA8kIAAETDAACAwQAAAEIAAERDAACAwQAAAMIAAERDAACAQQAAAEIAAERDAACAQQAAAMIAAERDAQAFBQEAAgICAAMDAwAEBAQABQUFAQYGAgEHBwMCCAgEAwkJBQQKCgYBBwcHAggICAMJCQkECgoGBQoKBwYLCwgHCwsJCAsLCgkLCwoGCwsAAAAAAAAAAAAAAAAAAAAAAAD4QQAA+EEAAPhBAAD4QQAA+EEAAPhBAAD4QQAA+EEAAPhBAAD4QQAA+EEAAPhBAAD4QQAA+EEAAPhBAAD4QQAA+EEAAPhBAAD4QQAA+EEAAPBBAADwQQAAuEEAALhBAAABAAEAAgACAAMAAwAEAAQAAAAFAAoACgAGAAYACwALAAcABwAMAAwACAAIAA0ADQAJAAkADgAOAAUADwAQABAAEQARABIAEgATABMADwAAAAUAAQAGAAIABwADAAgABAAJAAoADwALABAADAARAA0AEgAOABMAFAAVABUAFwAXABYAFgAUAA=="
+    }
+  ]
+}

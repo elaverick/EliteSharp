@@ -1,0 +1,17 @@
+{
+  "$schema": "ship.schema.json",
+  "type": 9,
+  "name": "Shuttle",
+  "model": "Models/shuttle.gltf",
+  "maxEnergy": 32,
+  "maxSpeed": 8,
+  "laserPower": 0,
+  "missiles": 0,
+  "bounty": 0.0,
+  "targetRadius": 50,
+  "canisters": 15,
+  "killPoints": 0.0625,
+  "colour": "0xFF",
+  "scannerColour": "0x3C",
+  "flags": ["trader", "innocent"]
+}

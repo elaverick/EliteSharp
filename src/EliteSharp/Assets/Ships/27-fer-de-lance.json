@@ -1,0 +1,17 @@
+{
+  "$schema": "ship.schema.json",
+  "type": 27,
+  "name": "Fer-de-lance",
+  "model": "Models/fer-de-lance.gltf",
+  "maxEnergy": 160,
+  "maxSpeed": 30,
+  "laserPower": 2,
+  "missiles": 2,
+  "bounty": 0.0,
+  "targetRadius": 40,
+  "canisters": 0,
+  "killPoints": 1.25,
+  "colour": "0xFF",
+  "scannerColour": "0x3C",
+  "flags": ["bountyHunter", "escapePod"]
+}

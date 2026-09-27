@@ -1,0 +1,146 @@
+{
+  "asset": {
+    "version": "2.0",
+    "generator": "EliteSharp tools/export_ships.py",
+    "extras": {
+      "description": "Elite ship wireframe. Coordinates are in the original's left-handed space (x right, y up, z forward); the node mirrors x to convert to glTF's right-handed space."
+    }
+  },
+  "scene": 0,
+  "scenes": [
+    {
+      "nodes": [0]
+    }
+  ],
+  "nodes": [
+    {
+      "name": "Asteroid",
+      "mesh": 0,
+      "scale": [-1, 1, 1]
+    }
+  ],
+  "meshes": [
+    {
+      "name": "Asteroid",
+      "primitives": [
+        {
+          "mode": 1,
+          "attributes": {
+            "POSITION": 0,
+            "_FACES": 1,
+            "_VISIBILITY": 2
+          },
+          "indices": 3
+        }
+      ],
+      "extras": {
+        "elite": {
+          "normalScale": 1,
+          "dotDistance": 50,
+          "maxVisibleEdges": 17,
+          "gunVertex": 0,
+          "explosionVertices": 7,
+          "edges": [
+            {"faces": [2, 7], "visibility": 31},
+            {"faces": [6, 13], "visibility": 31},
+            {"faces": [5, 12], "visibility": 31},
+            {"faces": [4, 11], "visibility": 31},
+            {"faces": [3, 10], "visibility": 31},
+            {"faces": [2, 3], "visibility": 31},
+            {"faces": [1, 3], "visibility": 31},
+            {"faces": [1, 4], "visibility": 31},
+            {"faces": [0, 1], "visibility": 31},
+            {"faces": [0, 6], "visibility": 31},
+            {"faces": [4, 5], "visibility": 31},
+            {"faces": [0, 2], "visibility": 31},
+            {"faces": [5, 6], "visibility": 31},
+            {"faces": [8, 10], "visibility": 31},
+            {"faces": [7, 8], "visibility": 31},
+            {"faces": [7, 13], "visibility": 31},
+            {"faces": [12, 13], "visibility": 31},
+            {"faces": [9, 12], "visibility": 31},
+            {"faces": [9, 11], "visibility": 31},
+            {"faces": [10, 11], "visibility": 31},
+            {"faces": [8, 9], "visibility": 31}
+          ],
+          "faces": [
+            {"normal": [9, 66, 81], "visibility": 31},
+            {"normal": [9, -66, 81], "visibility": 31},
+            {"normal": [-72, 64, 31], "visibility": 31},
+            {"normal": [-64, -73, 47], "visibility": 31},
+            {"normal": [45, -79, 65], "visibility": 31},
+            {"normal": [135, 15, 35], "visibility": 31},
+            {"normal": [38, 76, 70], "visibility": 31},
+            {"normal": [-66, 59, -39], "visibility": 31},
+            {"normal": [-67, -15, -80], "visibility": 31},
+            {"normal": [66, -14, -75], "visibility": 31},
+            {"normal": [-70, -80, -40], "visibility": 31},
+            {"normal": [58, -102, -51], "visibility": 31},
+            {"normal": [81, 9, -67], "visibility": 31},
+            {"normal": [47, 94, -63], "visibility": 31}
+          ]
+        }
+      }
+    }
+  ],
+  "accessors": [
+    {
+      "bufferView": 0,
+      "componentType": 5126,
+      "count": 9,
+      "type": "VEC3",
+      "min": [-80, -80, -75],
+      "max": [70, 80, 70]
+    },
+    {
+      "bufferView": 1,
+      "componentType": 5121,
+      "count": 9,
+      "type": "VEC4"
+    },
+    {
+      "bufferView": 2,
+      "componentType": 5126,
+      "count": 9,
+      "type": "SCALAR"
+    },
+    {
+      "bufferView": 3,
+      "componentType": 5123,
+      "count": 42,
+      "type": "SCALAR"
+    }
+  ],
+  "bufferViews": [
+    {
+      "buffer": 0,
+      "byteOffset": 0,
+      "byteLength": 108,
+      "target": 34962
+    },
+    {
+      "buffer": 0,
+      "byteOffset": 108,
+      "byteLength": 36,
+      "target": 34962
+    },
+    {
+      "buffer": 0,
+      "byteOffset": 144,
+      "byteLength": 36,
+      "target": 34962
+    },
+    {
+      "buffer": 0,
+      "byteOffset": 180,
+      "byteLength": 84,
+      "target": 34963
+    }
+  ],
+  "buffers": [
+    {
+      "byteLength": 264,
+      "uri": "data:application/octet-stream;base64,AAAAAAAAoEIAAAAAAACgwgAAIMEAAAAAAAAAAAAAoMIAAAAAAACMQgAAIMIAAAAAAABwQgAASEIAAAAAAABIQgAAAAAAAHBCAAAgwgAAAAAAAIxCAAAAAAAA8EEAAJbCAAAAAAAASMIAAHDCDw8PDw8PDw8PDw8PDw8PDwUGDA0PDw8PAAECAw8PDw8ICQoLAAD4QQAA+EEAAPhBAAD4QQAA+EEAAPhBAAD4QQAA+EEAAPhBAAABAAAABAADAAQAAgADAAEAAgABAAYAAgAGAAIABQAFAAYAAAAFAAMABQAAAAYABAAFAAEACAABAAcAAAAHAAQABwADAAcAAwAIAAIACAAHAAgA"
+    }
+  ]
+}

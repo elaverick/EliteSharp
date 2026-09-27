@@ -1,0 +1,133 @@
+{
+  "asset": {
+    "version": "2.0",
+    "generator": "EliteSharp tools/export_ships.py",
+    "extras": {
+      "description": "Elite ship wireframe. Coordinates are in the original's left-handed space (x right, y up, z forward); the node mirrors x to convert to glTF's right-handed space."
+    }
+  },
+  "scene": 0,
+  "scenes": [
+    {
+      "nodes": [0]
+    }
+  ],
+  "nodes": [
+    {
+      "name": "Sidewinder",
+      "mesh": 0,
+      "scale": [-1, 1, 1]
+    }
+  ],
+  "meshes": [
+    {
+      "name": "Sidewinder",
+      "primitives": [
+        {
+          "mode": 1,
+          "attributes": {
+            "POSITION": 0,
+            "_FACES": 1,
+            "_VISIBILITY": 2
+          },
+          "indices": 3
+        }
+      ],
+      "extras": {
+        "elite": {
+          "normalScale": 2,
+          "dotDistance": 20,
+          "maxVisibleEdges": 16,
+          "gunVertex": 0,
+          "explosionVertices": 6,
+          "edges": [
+            {"faces": [0, 5], "visibility": 31},
+            {"faces": [2, 6], "visibility": 31},
+            {"faces": [0, 2], "visibility": 31},
+            {"faces": [0, 1], "visibility": 31},
+            {"faces": [1, 4], "visibility": 31},
+            {"faces": [1, 3], "visibility": 31},
+            {"faces": [2, 3], "visibility": 31},
+            {"faces": [3, 4], "visibility": 31},
+            {"faces": [3, 6], "visibility": 31},
+            {"faces": [5, 6], "visibility": 31},
+            {"faces": [4, 5], "visibility": 31},
+            {"faces": [3, 3], "visibility": 15},
+            {"faces": [3, 3], "visibility": 12},
+            {"faces": [3, 3], "visibility": 12},
+            {"faces": [3, 3], "visibility": 12}
+          ],
+          "faces": [
+            {"normal": [0, 32, 8], "visibility": 31},
+            {"normal": [-12, 47, 6], "visibility": 31},
+            {"normal": [12, 47, 6], "visibility": 31},
+            {"normal": [0, 0, -112], "visibility": 31},
+            {"normal": [-12, -47, 6], "visibility": 31},
+            {"normal": [0, -32, 8], "visibility": 31},
+            {"normal": [12, -47, 6], "visibility": 31}
+          ]
+        }
+      }
+    }
+  ],
+  "accessors": [
+    {
+      "bufferView": 0,
+      "componentType": 5126,
+      "count": 10,
+      "type": "VEC3",
+      "min": [-64, -16, -28],
+      "max": [64, 16, 36]
+    },
+    {
+      "bufferView": 1,
+      "componentType": 5121,
+      "count": 10,
+      "type": "VEC4"
+    },
+    {
+      "bufferView": 2,
+      "componentType": 5126,
+      "count": 10,
+      "type": "SCALAR"
+    },
+    {
+      "bufferView": 3,
+      "componentType": 5123,
+      "count": 30,
+      "type": "SCALAR"
+    }
+  ],
+  "bufferViews": [
+    {
+      "buffer": 0,
+      "byteOffset": 0,
+      "byteLength": 120,
+      "target": 34962
+    },
+    {
+      "buffer": 0,
+      "byteOffset": 120,
+      "byteLength": 40,
+      "target": 34962
+    },
+    {
+      "buffer": 0,
+      "byteOffset": 160,
+      "byteLength": 40,
+      "target": 34962
+    },
+    {
+      "buffer": 0,
+      "byteOffset": 200,
+      "byteLength": 60,
+      "target": 34963
+    }
+  ],
+  "buffers": [
+    {
+      "byteLength": 260,
+      "uri": "data:application/octet-stream;base64,AAAAwgAAAAAAABBCAAAAQgAAAAAAABBCAACAQgAAAAAAAODBAACAwgAAAAAAAODBAAAAAAAAgEEAAODBAAAAAAAAgMEAAODBAABAwQAAwEAAAODBAABAQQAAwEAAAODBAABAQQAAwMAAAODBAABAwQAAwMAAAODBAAEEBQACBQYCAwYGAQMEBAABAgMDBAUGAwMDAwMDAwMDAwMDAwMDAwAA+EEAAPhBAAD4QQAA+EEAAPhBAAD4QQAAcEEAAHBBAABAQQAAQEEAAAEAAQACAAEABAAAAAQAAAADAAMABAACAAQAAwAFAAIABQABAAUAAAAFAAYABwAHAAgABgAJAAgACQA="
+    }
+  ]
+}

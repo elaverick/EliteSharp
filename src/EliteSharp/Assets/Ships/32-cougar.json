@@ -1,0 +1,17 @@
+{
+  "$schema": "ship.schema.json",
+  "type": 32,
+  "name": "Cougar",
+  "model": "Models/cougar.gltf",
+  "maxEnergy": 252,
+  "maxSpeed": 40,
+  "laserPower": 6,
+  "missiles": 4,
+  "bounty": 0.0,
+  "targetRadius": 70,
+  "canisters": 3,
+  "killPoints": 5.33203125,
+  "colour": "0xFF",
+  "scannerColour": "0x00",
+  "flags": ["innocent"]
+}

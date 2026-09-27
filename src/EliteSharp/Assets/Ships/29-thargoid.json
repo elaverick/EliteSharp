@@ -1,0 +1,17 @@
+{
+  "$schema": "ship.schema.json",
+  "type": 29,
+  "name": "Thargoid",
+  "model": "Models/thargoid.gltf",
+  "maxEnergy": 240,
+  "maxSpeed": 39,
+  "laserPower": 2,
+  "missiles": 6,
+  "bounty": 50.0,
+  "targetRadius": 99,
+  "canisters": 0,
+  "killPoints": 2.6640625,
+  "colour": "0xFA",
+  "scannerColour": "0x3F",
+  "flags": ["hostile", "pirate"]
+}

@@ -1,0 +1,18 @@
+{
+  "$schema": "ship.schema.json",
+  "type": 30,
+  "name": "Thargon",
+  "model": "Models/thargon.gltf",
+  "maxEnergy": 20,
+  "maxSpeed": 30,
+  "laserPower": 2,
+  "missiles": 0,
+  "bounty": 5.0,
+  "targetRadius": 40,
+  "canisters": 0,
+  "scoopedAs": "Alien Items",
+  "killPoints": 0.12890625,
+  "colour": "0xFA",
+  "scannerColour": "0x3C",
+  "flags": ["hostile"]
+}

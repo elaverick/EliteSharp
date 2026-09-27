@@ -1,0 +1,138 @@
+{
+  "asset": {
+    "version": "2.0",
+    "generator": "EliteSharp tools/export_ships.py",
+    "extras": {
+      "description": "Elite ship wireframe. Coordinates are in the original's left-handed space (x right, y up, z forward); the node mirrors x to convert to glTF's right-handed space."
+    }
+  },
+  "scene": 0,
+  "scenes": [
+    {
+      "nodes": [0]
+    }
+  ],
+  "nodes": [
+    {
+      "name": "Krait",
+      "mesh": 0,
+      "scale": [-1, 1, 1]
+    }
+  ],
+  "meshes": [
+    {
+      "name": "Krait",
+      "primitives": [
+        {
+          "mode": 1,
+          "attributes": {
+            "POSITION": 0,
+            "_FACES": 1,
+            "_VISIBILITY": 2
+          },
+          "indices": 3
+        }
+      ],
+      "extras": {
+        "elite": {
+          "normalScale": 1,
+          "dotDistance": 20,
+          "maxVisibleEdges": 22,
+          "gunVertex": 0,
+          "explosionVertices": 3,
+          "edges": [
+            {"faces": [3, 0], "visibility": 31},
+            {"faces": [2, 1], "visibility": 31},
+            {"faces": [1, 0], "visibility": 31},
+            {"faces": [3, 2], "visibility": 31},
+            {"faces": [5, 3], "visibility": 31},
+            {"faces": [5, 2], "visibility": 31},
+            {"faces": [4, 1], "visibility": 31},
+            {"faces": [4, 0], "visibility": 31},
+            {"faces": [1, 0], "visibility": 30},
+            {"faces": [3, 2], "visibility": 30},
+            {"faces": [5, 4], "visibility": 8},
+            {"faces": [0, 0], "visibility": 9},
+            {"faces": [0, 0], "visibility": 6},
+            {"faces": [3, 3], "visibility": 9},
+            {"faces": [3, 3], "visibility": 6},
+            {"faces": [4, 4], "visibility": 8},
+            {"faces": [4, 4], "visibility": 8},
+            {"faces": [4, 4], "visibility": 7},
+            {"faces": [5, 5], "visibility": 7},
+            {"faces": [5, 5], "visibility": 8},
+            {"faces": [5, 5], "visibility": 8}
+          ],
+          "faces": [
+            {"normal": [3, 24, 3], "visibility": 31},
+            {"normal": [3, -24, 3], "visibility": 31},
+            {"normal": [-3, -24, 3], "visibility": 31},
+            {"normal": [-3, 24, 3], "visibility": 31},
+            {"normal": [38, 0, -77], "visibility": 31},
+            {"normal": [-38, 0, -77], "visibility": 31}
+          ]
+        }
+      }
+    }
+  ],
+  "accessors": [
+    {
+      "bufferView": 0,
+      "componentType": 5126,
+      "count": 17,
+      "type": "VEC3",
+      "min": [-90, -18, -48],
+      "max": [90, 18, 96]
+    },
+    {
+      "bufferView": 1,
+      "componentType": 5121,
+      "count": 17,
+      "type": "VEC4"
+    },
+    {
+      "bufferView": 2,
+      "componentType": 5126,
+      "count": 17,
+      "type": "SCALAR"
+    },
+    {
+      "bufferView": 3,
+      "componentType": 5123,
+      "count": 42,
+      "type": "SCALAR"
+    }
+  ],
+  "bufferViews": [
+    {
+      "buffer": 0,
+      "byteOffset": 0,
+      "byteLength": 204,
+      "target": 34962
+    },
+    {
+      "buffer": 0,
+      "byteOffset": 204,
+      "byteLength": 68,
+      "target": 34962
+    },
+    {
+      "buffer": 0,
+      "byteOffset": 272,
+      "byteLength": 68,
+      "target": 34962
+    },
+    {
+      "buffer": 0,
+      "byteOffset": 340,
+      "byteLength": 84,
+      "target": 34963
+    }
+  ],
+  "buffers": [
+    {
+      "byteLength": 424,
+      "uri": "data:application/octet-stream;base64,AAAAAAAAAAAAAMBCAAAAAAAAkEEAAEDCAAAAAAAAkMEAAEDCAAC0QgAAAAAAAEDAAAC0wgAAAAAAAEDAAAC0QgAAAAAAAK5CAAC0wgAAAAAAAK5CAAAAAAAAoEAAAFRCAAAAAAAA4EAAABhCAACQwQAA4EAAAJhBAACQQQAA4EAAAJhBAACQQQAAMEEAABzCAACQQQAAMMEAABzCAAAQQgAAAAAAAPDBAACQwQAAMEEAABzCAACQwQAAMMEAABzCAAAQwgAAAAAAAPDBAQADAgMABQQCAQUEAQAEBAMCBQUBAAEBAwIDAwAAAwMAAAMDAwMDAwAAAAAEBAQEBAQEBAQEBAQFBQUFBQUFBQUFBQUAAPhBAAD4QQAA+EEAAPhBAAD4QQAA8EEAAPBBAAAQQQAAwEAAABBBAAAQQQAAAEEAAABBAAAAQQAAAEEAAABBAAAAQQAAAQAAAAIAAAADAAAABAABAAQABAACAAIAAwADAAEAAwAFAAQABgABAAIABwAKAAgACgAHAAkACAAJAAsADQANAAwADAALAA4ADwAPABAAEAAOAA=="
+    }
+  ]
+}

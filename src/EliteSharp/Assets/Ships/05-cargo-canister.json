@@ -1,0 +1,17 @@
+{
+  "$schema": "ship.schema.json",
+  "type": 5,
+  "name": "Cargo canister",
+  "model": "Models/cargo-canister.gltf",
+  "maxEnergy": 17,
+  "maxSpeed": 15,
+  "laserPower": 0,
+  "missiles": 0,
+  "bounty": 0.0,
+  "targetRadius": 20,
+  "canisters": 0,
+  "killPoints": 0.0390625,
+  "colour": "0xFF",
+  "scannerColour": "0x30",
+  "flags": []
+}

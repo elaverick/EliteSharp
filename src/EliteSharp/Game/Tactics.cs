@@ -303,7 +303,7 @@ public sealed partial class EliteGame
             return;
         }
 
-        if ((half >> 2) >= INWK.Energy && DORND() >= 230 && (GameData.DefaultNewbFlags[TYPE - 1] & 0x80) != 0)
+        if ((half >> 2) >= INWK.Energy && DORND() >= 230 && (ShipCatalogue.Get(TYPE).DefaultNewb & 0x80) != 0)
         {
             INWK.Newb &= 0b11110000;
             INF!.Newb = INWK.Newb;
@@ -847,11 +847,11 @@ public sealed partial class EliteGame
     /// <summary>EXNO2: process the fact that we have killed a ship, updating the kill tally.</summary>
     private void EXNO2(int type)
     {
-        int index = Math.Clamp(type - 1, 0, GameData.KillFraction.Length - 1);
-        int low = TALLYL + GameData.KillFraction[index];
+        var blueprint = ShipCatalogue.Get(Math.Clamp(type, 1, ShipCatalogue.Count));
+        int low = TALLYL + blueprint.KillFraction;
         TALLYL = low & 0xFF;
         int carry = low > 0xFF ? 1 : 0;
-        int talliedLow = (TALLY & 0xFF) + GameData.KillInteger[index] + carry;
+        int talliedLow = (TALLY & 0xFF) + blueprint.KillInteger + carry;
         TALLY = (TALLY & 0xFF00) | (talliedLow & 0xFF);
         if (talliedLow > 0xFF)
         {

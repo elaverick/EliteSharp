@@ -1,0 +1,17 @@
+{
+  "$schema": "ship.schema.json",
+  "type": 7,
+  "name": "Asteroid",
+  "model": "Models/asteroid.gltf",
+  "maxEnergy": 60,
+  "maxSpeed": 30,
+  "laserPower": 0,
+  "missiles": 0,
+  "bounty": 0.5,
+  "targetRadius": 80,
+  "canisters": 0,
+  "killPoints": 0.03125,
+  "colour": "0xF0",
+  "scannerColour": "0x03",
+  "flags": []
+}

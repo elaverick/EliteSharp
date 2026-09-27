@@ -1,0 +1,17 @@
+{
+  "$schema": "ship.schema.json",
+  "type": 10,
+  "name": "Transporter",
+  "model": "Models/transporter.gltf",
+  "maxEnergy": 32,
+  "maxSpeed": 10,
+  "laserPower": 0,
+  "missiles": 0,
+  "bounty": 0.0,
+  "targetRadius": 50,
+  "canisters": 0,
+  "killPoints": 0.06640625,
+  "colour": "0xFF",
+  "scannerColour": "0x3C",
+  "flags": ["trader", "innocent", "cop"]
+}

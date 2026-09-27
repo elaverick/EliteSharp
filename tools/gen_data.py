@@ -2,11 +2,11 @@
 """
 Generates the C# data files for EliteSharp from the BBC Master Elite source.
 
-Ship blueprints are parsed from the annotated source (elite-data.asm) so the
-generated classes keep the vertex/edge/face layout readable. Everything else
-(text token tables, maths tables, font, dashboard bitmap, market data and so on)
-is lifted byte-for-byte from the assembled binaries, using the label addresses
-in the assembler listing, so the port uses exactly the same data as the game.
+The data tables (text token tables, maths tables, font, dashboard bitmap,
+market data and so on) are lifted byte-for-byte from the assembled binaries,
+using the label addresses in the assembler listing, so the port uses exactly the
+same data as the game. The ships are exported separately, as assets, by
+tools/export_ships.py.
 
 Usage: python tools/gen_data.py   (run from the repository root)
 """
@@ -71,174 +71,6 @@ def data_bytes(label, count=None, end_label=None):
 
 
 # ---------------------------------------------------------------------------
-# Ship blueprints
-# ---------------------------------------------------------------------------
-
-SHIP_ORDER = [
-    ("SHIP_MISSILE", "Missile", "Missile"),
-    ("SHIP_CORIOLIS", "CoriolisStation", "Coriolis space station"),
-    ("SHIP_ESCAPE_POD", "EscapePod", "Escape pod"),
-    ("SHIP_PLATE", "AlloyPlate", "Alloy plate"),
-    ("SHIP_CANISTER", "CargoCanister", "Cargo canister"),
-    ("SHIP_BOULDER", "Boulder", "Boulder"),
-    ("SHIP_ASTEROID", "Asteroid", "Asteroid"),
-    ("SHIP_SPLINTER", "Splinter", "Splinter"),
-    ("SHIP_SHUTTLE", "Shuttle", "Shuttle"),
-    ("SHIP_TRANSPORTER", "Transporter", "Transporter"),
-    ("SHIP_COBRA_MK_3", "CobraMkIII", "Cobra Mk III"),
-    ("SHIP_PYTHON", "Python", "Python"),
-    ("SHIP_BOA", "Boa", "Boa"),
-    ("SHIP_ANACONDA", "Anaconda", "Anaconda"),
-    ("SHIP_ROCK_HERMIT", "RockHermit", "Rock hermit (asteroid)"),
-    ("SHIP_VIPER", "Viper", "Viper"),
-    ("SHIP_SIDEWINDER", "Sidewinder", "Sidewinder"),
-    ("SHIP_MAMBA", "Mamba", "Mamba"),
-    ("SHIP_KRAIT", "Krait", "Krait"),
-    ("SHIP_ADDER", "Adder", "Adder"),
-    ("SHIP_GECKO", "Gecko", "Gecko"),
-    ("SHIP_COBRA_MK_1", "CobraMkI", "Cobra Mk I"),
-    ("SHIP_WORM", "Worm", "Worm"),
-    ("SHIP_COBRA_MK_3_P", "CobraMkIIIPirate", "Cobra Mk III (pirate)"),
-    ("SHIP_ASP_MK_2", "AspMkII", "Asp Mk II"),
-    ("SHIP_PYTHON_P", "PythonPirate", "Python (pirate)"),
-    ("SHIP_FER_DE_LANCE", "FerDeLance", "Fer-de-lance"),
-    ("SHIP_MORAY", "Moray", "Moray"),
-    ("SHIP_THARGOID", "Thargoid", "Thargoid"),
-    ("SHIP_THARGON", "Thargon", "Thargon"),
-    ("SHIP_CONSTRICTOR", "Constrictor", "Constrictor"),
-    ("SHIP_COUGAR", "Cougar", "Cougar"),
-    ("SHIP_DODO", "DodoStation", "Dodecahedron (\"Dodo\") space station"),
-]
-
-
-def mem(addr):
-    """Read a byte from the assembled game data at a BBC memory address."""
-    return BDATA_BYTES[addr - BDATA_BASE]
-
-
-def signed_coord(sign_bit, magnitude):
-    return -magnitude if sign_bit else magnitude
-
-
-def parse_ships():
-    """
-    Decode every blueprint from the assembled data, following the same pointers
-    the game does (XX21 table, then the edge/face offsets in each header). This
-    reproduces the original's quirks exactly, such as the splinter's face data
-    pointing 24 bytes past its own faces, into the Shuttle's blueprint.
-    """
-    xx21 = LABELS["XX21"]
-    ships = {}
-    for index, (label, _, _) in enumerate(SHIP_ORDER):
-        base = mem(xx21 + index * 2) | (mem(xx21 + index * 2 + 1) << 8)
-        assert base == LABELS[label], (label, hex(base), hex(LABELS[label]))
-        h = [mem(base + i) for i in range(20)]
-        edges_off = (h[16] << 8) | h[3]
-        faces_off = (h[17] << 8) | h[4]
-        if edges_off >= 0x8000:
-            edges_off -= 0x10000
-        if faces_off >= 0x8000:
-            faces_off -= 0x10000
-        nverts = h[8] // 6
-        nedges = h[9]
-        nfaces = h[12] // 4
-
-        vertices = []
-        for v in range(nverts):
-            b = [mem(base + 20 + v * 6 + i) for i in range(6)]
-            s = b[3]
-            vertices.append([signed_coord(s & 0x80, b[0]), signed_coord(s & 0x40, b[1]),
-                             signed_coord(s & 0x20, b[2]), b[4] & 15, b[4] >> 4,
-                             b[5] & 15, b[5] >> 4, s & 31])
-        edges = []
-        for e in range(nedges):
-            b = [mem(base + edges_off + e * 4 + i) for i in range(4)]
-            edges.append([b[2] // 4, b[3] // 4, b[1] & 15, b[1] >> 4, b[0]])
-        faces = []
-        for f in range(nfaces):
-            b = [mem(base + faces_off + f * 4 + i) for i in range(4)]
-            s = b[0]
-            faces.append([signed_coord(s & 0x80, b[1]), signed_coord(s & 0x40, b[2]),
-                          signed_coord(s & 0x20, b[3]), s & 31])
-
-        def owner(offset):
-            target = base + offset
-            for other, _, _ in SHIP_ORDER:
-                for part in ("EDGES", "FACES"):
-                    key = f"{other}_{part}"
-                    if LABELS.get(key) == target:
-                        return other
-            return f"&{target:04X}"
-
-        ships[label] = dict(byte0=h[0], area=h[1] | (h[2] << 8), maxedge=h[5], gun=h[6],
-                            expl=h[7], nverts=nverts, nedges=nedges,
-                            bounty=h[10] | (h[11] << 8), nfaces=nfaces, vis=h[13],
-                            energy=h[14], speed=h[15], normscale=h[18], lasmis=h[19],
-                            edges_src=owner(edges_off), faces_src=owner(faces_off),
-                            vertices=vertices, edges=edges, faces=faces)
-    return ships
-
-
-def gen_ships(ships):
-    out = []
-    out.append("// <auto-generated>")
-    out.append("// Generated by tools/gen_data.py from elite-data.asm (BBC Master Elite).")
-    out.append("// Do not edit by hand.")
-    out.append("// </auto-generated>")
-    out.append("")
-    out.append("namespace EliteSharp.Game.Ships;")
-    out.append("")
-    for index, (label, cls, desc) in enumerate(SHIP_ORDER):
-        s = ships[label]
-        shared = []
-        if s["edges_src"] != label:
-            shared.append(f"edges from {s['edges_src']}")
-        if s["faces_src"] != label:
-            shared.append(f"faces from {s['faces_src']}")
-        note = f" (shares {', '.join(shared)})" if shared else ""
-        out.append(f"/// <summary>{desc} ({label}){note}.</summary>")
-        out.append(f"public sealed partial class {cls} : Ship")
-        out.append("{")
-        out.append(f"    public static readonly ShipBlueprint Data = new(")
-        out.append(f"        blueprintNumber: {index + 1},")
-        out.append(f"        name: \"{desc.replace(chr(34), chr(92) + chr(34))}\",")
-        out.append(f"        byte0: {s['byte0']},")
-        out.append(f"        targetableArea: {s['area']},")
-        out.append(f"        lineHeapSize: {s['maxedge']},")
-        out.append(f"        gunVertex: {s['gun'] // 4},")
-        out.append(f"        explosionCountByte: {s['expl']},")
-        out.append(f"        bounty: {s['bounty']},")
-        out.append(f"        visibilityDistance: {s['vis']},")
-        out.append(f"        maxEnergy: {s['energy']},")
-        out.append(f"        maxSpeed: {s['speed']},")
-        out.append(f"        normalScale: {s['normscale']},")
-        out.append(f"        laserAndMissiles: 0b{s['lasmis']:08b},")
-        out.append("        vertices:")
-        out.append("        [")
-        for v in s["vertices"]:
-            x, y, z, f1, f2, f3, f4, vis = v
-            out.append(f"            new({x}, {y}, {z}, {f1}, {f2}, {f3}, {f4}, {vis}),")
-        out.append("        ],")
-        out.append("        edges:")
-        out.append("        [")
-        for e in s["edges"][:s["nedges"]]:
-            v1, v2, f1, f2, vis = e
-            out.append(f"            new({v1}, {v2}, {f1}, {f2}, {vis}),")
-        out.append("        ],")
-        out.append("        faces:")
-        out.append("        [")
-        for f in s["faces"][:s["nfaces"]]:
-            nx, ny, nz, vis = f
-            out.append(f"            new({nx}, {ny}, {nz}, {vis}),")
-        out.append("        ]);")
-        out.append("")
-        out.append(f"    public {cls}() : base({index + 1}, Data) {{ }}")
-        out.append("}")
-        out.append("")
-    return "\n".join(out)
-
-
-# ---------------------------------------------------------------------------
 # Byte tables
 # ---------------------------------------------------------------------------
 
@@ -272,12 +104,6 @@ def gen_tables():
                    "SNE: sine table, 32 segments of a half circle, scaled so 1.0 = 256."))
     tables.append(("Arctan", data_bytes("ACT", 32),
                    "ACT: arctan table for 0 to 45 degrees, 256 = full circle."))
-    tables.append(("DefaultNewbFlags", data_bytes("E%", 33),
-                   "E%: default NEWB flags for each ship type (index = type - 1)."))
-    tables.append(("KillFraction", data_bytes("KWL%", 33),
-                   "KWL%: fractional kill points for each ship type (index = type - 1)."))
-    tables.append(("KillInteger", data_bytes("KWH%", 33),
-                   "KWH%: integer kill points for each ship type (index = type - 1)."))
 
     # Tables in the main code block
     tables.append(("LogHigh", code_bytes("log", 256), "log: high byte of 32 * log2(n) * 256."))
@@ -293,10 +119,6 @@ def gen_tables():
                    "QQ23: market table (base price, factor/units, base quantity, mask) for 17 items."))
     tables.append(("EquipmentPrices", code_bytes("PRXS", 28),
                    "PRXS: equipment prices * 10 as 16-bit little-endian words."))
-    tables.append(("ShipColours", code_bytes("shpcol", 34),
-                   "shpcol: mode 1 colour byte for each ship type (index = type)."))
-    tables.append(("ScannerColours", code_bytes("scacol", 34),
-                   "scacol: mode 2 scanner colour byte for each ship type (index = type)."))
     tables.append(("ExplosionColours", code_bytes("coltabl", 4),
                    "coltabl: mode 1 colours for explosion particles."))
     tables.append(("SightColours", code_bytes("sightcol", 4),
@@ -342,12 +164,9 @@ def gen_tables():
 
 def main():
     os.makedirs(OUT_DIR, exist_ok=True)
-    ships = parse_ships()
-    with open(os.path.join(OUT_DIR, "ShipBlueprints.g.cs"), "w", newline="\n") as f:
-        f.write(gen_ships(ships) + "\n")
     with open(os.path.join(OUT_DIR, "GameData.g.cs"), "w", newline="\n") as f:
         f.write(gen_tables() + "\n")
-    print("Generated", len(ships), "ship blueprints and data tables into", OUT_DIR)
+    print("Generated the data tables into", OUT_DIR)
 
 
 if __name__ == "__main__":

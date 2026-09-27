@@ -1,0 +1,18 @@
+{
+  "$schema": "ship.schema.json",
+  "type": 3,
+  "name": "Escape pod",
+  "model": "Models/escape-pod.gltf",
+  "maxEnergy": 17,
+  "maxSpeed": 8,
+  "laserPower": 0,
+  "missiles": 0,
+  "bounty": 0.0,
+  "targetRadius": 16,
+  "canisters": 0,
+  "scoopedAs": "Slaves",
+  "killPoints": 0.0625,
+  "colour": "0xFF",
+  "scannerColour": "0x30",
+  "flags": ["trader"]
+}

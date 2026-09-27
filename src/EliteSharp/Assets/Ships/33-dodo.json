@@ -1,0 +1,17 @@
+{
+  "$schema": "ship.schema.json",
+  "type": 33,
+  "name": "Dodecahedron (\"Dodo\") space station",
+  "model": "Models/dodo.gltf",
+  "maxEnergy": 240,
+  "maxSpeed": 0,
+  "laserPower": 0,
+  "missiles": 0,
+  "bounty": 0.0,
+  "targetRadius": 180,
+  "canisters": 0,
+  "killPoints": 0.0,
+  "colour": "0xFF",
+  "scannerColour": "0x3C",
+  "flags": []
+}

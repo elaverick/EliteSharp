@@ -1,0 +1,17 @@
+{
+  "$schema": "ship.schema.json",
+  "type": 28,
+  "name": "Moray",
+  "model": "Models/moray.gltf",
+  "maxEnergy": 100,
+  "maxSpeed": 25,
+  "laserPower": 2,
+  "missiles": 0,
+  "bounty": 5.0,
+  "targetRadius": 30,
+  "canisters": 1,
+  "killPoints": 0.75,
+  "colour": "0xC9",
+  "scannerColour": "0x3C",
+  "flags": ["hostile", "pirate"]
+}

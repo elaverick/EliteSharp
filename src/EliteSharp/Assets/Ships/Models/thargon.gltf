@@ -1,0 +1,133 @@
+{
+  "asset": {
+    "version": "2.0",
+    "generator": "EliteSharp tools/export_ships.py",
+    "extras": {
+      "description": "Elite ship wireframe. Coordinates are in the original's left-handed space (x right, y up, z forward); the node mirrors x to convert to glTF's right-handed space."
+    }
+  },
+  "scene": 0,
+  "scenes": [
+    {
+      "nodes": [0]
+    }
+  ],
+  "nodes": [
+    {
+      "name": "Thargon",
+      "mesh": 0,
+      "scale": [-1, 1, 1]
+    }
+  ],
+  "meshes": [
+    {
+      "name": "Thargon",
+      "primitives": [
+        {
+          "mode": 1,
+          "attributes": {
+            "POSITION": 0,
+            "_FACES": 1,
+            "_VISIBILITY": 2
+          },
+          "indices": 3
+        }
+      ],
+      "extras": {
+        "elite": {
+          "normalScale": 2,
+          "dotDistance": 20,
+          "maxVisibleEdges": 17,
+          "gunVertex": 0,
+          "explosionVertices": 3,
+          "edges": [
+            {"faces": [0, 1], "visibility": 31},
+            {"faces": [0, 2], "visibility": 31},
+            {"faces": [0, 3], "visibility": 31},
+            {"faces": [0, 4], "visibility": 31},
+            {"faces": [0, 5], "visibility": 31},
+            {"faces": [1, 5], "visibility": 31},
+            {"faces": [1, 2], "visibility": 31},
+            {"faces": [2, 3], "visibility": 31},
+            {"faces": [3, 4], "visibility": 31},
+            {"faces": [4, 5], "visibility": 31},
+            {"faces": [1, 6], "visibility": 31},
+            {"faces": [2, 6], "visibility": 31},
+            {"faces": [3, 6], "visibility": 31},
+            {"faces": [4, 6], "visibility": 31},
+            {"faces": [5, 6], "visibility": 31}
+          ],
+          "faces": [
+            {"normal": [-36, 0, 0], "visibility": 31},
+            {"normal": [20, -5, 7], "visibility": 31},
+            {"normal": [46, -42, -14], "visibility": 31},
+            {"normal": [36, 0, -104], "visibility": 31},
+            {"normal": [46, 42, -14], "visibility": 31},
+            {"normal": [20, 5, 7], "visibility": 31},
+            {"normal": [36, 0, 0], "visibility": 31}
+          ]
+        }
+      }
+    }
+  ],
+  "accessors": [
+    {
+      "bufferView": 0,
+      "componentType": 5126,
+      "count": 10,
+      "type": "VEC3",
+      "min": [-9, -38, -32],
+      "max": [9, 38, 40]
+    },
+    {
+      "bufferView": 1,
+      "componentType": 5121,
+      "count": 10,
+      "type": "VEC4"
+    },
+    {
+      "bufferView": 2,
+      "componentType": 5126,
+      "count": 10,
+      "type": "SCALAR"
+    },
+    {
+      "bufferView": 3,
+      "componentType": 5123,
+      "count": 30,
+      "type": "SCALAR"
+    }
+  ],
+  "bufferViews": [
+    {
+      "buffer": 0,
+      "byteOffset": 0,
+      "byteLength": 120,
+      "target": 34962
+    },
+    {
+      "buffer": 0,
+      "byteOffset": 120,
+      "byteLength": 40,
+      "target": 34962
+    },
+    {
+      "buffer": 0,
+      "byteOffset": 160,
+      "byteLength": 40,
+      "target": 34962
+    },
+    {
+      "buffer": 0,
+      "byteOffset": 200,
+      "byteLength": 60,
+      "target": 34963
+    }
+  ],
+  "buffers": [
+    {
+      "byteLength": 260,
+      "uri": "data:application/octet-stream;base64,AAAQwQAAAAAAACBCAAAQwQAAGMIAAEBBAAAQwQAAwMEAAADCAAAQwQAAwEEAAADCAAAQwQAAGEIAAEBBAAAQQQAAAAAAAADBAAAQQQAAIMEAAHDBAAAQQQAAwMAAANDBAAAQQQAAwEAAANDBAAAQQQAAIEEAAHDBAQAFBQEAAgICAAMDAwAEBAQABQUFAQYGAgEGBgMCBgYEAwYGBQQGBgAA+EEAAPhBAAD4QQAA+EEAAPhBAAD4QQAA+EEAAPhBAAD4QQAA+EEAAAEAAQACAAIAAwADAAQAAAAEAAAABQABAAYAAgAHAAMACAAEAAkABQAGAAYABwAHAAgACAAJAAkABQA="
+    }
+  ]
+}

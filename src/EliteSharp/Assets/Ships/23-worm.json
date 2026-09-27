@@ -1,0 +1,17 @@
+{
+  "$schema": "ship.schema.json",
+  "type": 23,
+  "name": "Worm",
+  "model": "Models/worm.gltf",
+  "maxEnergy": 30,
+  "maxSpeed": 23,
+  "laserPower": 1,
+  "missiles": 0,
+  "bounty": 0.0,
+  "targetRadius": 99,
+  "canisters": 0,
+  "killPoints": 0.1953125,
+  "colour": "0xFF",
+  "scannerColour": "0x30",
+  "flags": ["trader", "hostile"]
+}

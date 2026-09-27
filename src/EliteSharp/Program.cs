@@ -1,5 +1,6 @@
 using EliteSharp;
 using EliteSharp.Game;
+using EliteSharp.Game.Ships;
 using EliteSharp.Input;
 using EliteSharp.Rendering;
 using EliteSharp.Sound;
@@ -8,6 +9,21 @@ using Silk.NET.Maths;
 using Silk.NET.Windowing;
 
 var options = GameOptions.Parse(args);
+
+// Load the ship assets before anything else, so any problems are reported
+// straight away
+try
+{
+    ShipCatalogue.Reload();
+}
+catch (Exception e) when (e is InvalidDataException or IOException)
+{
+    Directory.CreateDirectory(options.DataFolder);
+    File.WriteAllText(Path.Combine(options.DataFolder, "crash.log"), e.Message);
+    Console.Error.WriteLine(e.Message);
+    return 1;
+}
+
 var exchange = new FrameExchange();
 var screen = new Screen(exchange);
 var keyboard = new BbcKeyboard();

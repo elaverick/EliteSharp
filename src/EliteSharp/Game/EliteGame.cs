@@ -170,7 +170,7 @@ public sealed partial class EliteGame
     /// </summary>
     private Ship Planet => Slots[0] ?? _emptySlot;
 
-    private readonly WorkspaceShip _emptySlot = new();
+    private readonly Ship _emptySlot = Ship.Workspace();
 
     /// <summary>
     /// INWK: the ship we are currently working with. The original copies each

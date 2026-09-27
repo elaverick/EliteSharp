@@ -1,0 +1,17 @@
+{
+  "$schema": "ship.schema.json",
+  "type": 19,
+  "name": "Krait",
+  "model": "Models/krait.gltf",
+  "maxEnergy": 80,
+  "maxSpeed": 30,
+  "laserPower": 2,
+  "missiles": 0,
+  "bounty": 10.0,
+  "targetRadius": 60,
+  "canisters": 1,
+  "killPoints": 0.33203125,
+  "colour": "0xFF",
+  "scannerColour": "0x3C",
+  "flags": ["hostile", "pirate", "escapePod"]
+}

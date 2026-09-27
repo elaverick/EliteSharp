@@ -1,0 +1,18 @@
+{
+  "$schema": "ship.schema.json",
+  "type": 4,
+  "name": "Alloy plate",
+  "model": "Models/alloy-plate.gltf",
+  "maxEnergy": 16,
+  "maxSpeed": 16,
+  "laserPower": 0,
+  "missiles": 0,
+  "bounty": 0.0,
+  "targetRadius": 10,
+  "canisters": 0,
+  "scoopedAs": "Alloys",
+  "killPoints": 0.0390625,
+  "colour": "0xFF",
+  "scannerColour": "0x30",
+  "flags": []
+}

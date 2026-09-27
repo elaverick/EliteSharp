@@ -1,0 +1,17 @@
+{
+  "$schema": "ship.schema.json",
+  "type": 15,
+  "name": "Rock hermit",
+  "model": "Models/rock-hermit.gltf",
+  "maxEnergy": 180,
+  "maxSpeed": 30,
+  "laserPower": 0,
+  "missiles": 2,
+  "bounty": 0.0,
+  "targetRadius": 80,
+  "canisters": 7,
+  "killPoints": 0.33203125,
+  "colour": "0xF0",
+  "scannerColour": "0x03",
+  "flags": ["trader", "innocent", "escapePod"]
+}

@@ -10,7 +10,7 @@ namespace EliteSharp.Game;
 public sealed partial class EliteGame
 {
     /// <summary>The INWK workspace used when setting up new ships.</summary>
-    private readonly WorkspaceShip _workspace = new();
+    private readonly Ship _workspace = Ship.Workspace();
 
     /// <summary>True if the station in this system is a Dodo rather than a Coriolis.</summary>
     private bool _dodoStation;
@@ -70,7 +70,7 @@ public sealed partial class EliteGame
             Many[type]++;
 
             // NW8: add the default NEWB flags from E%
-            INWK.Newb |= GameData.DefaultNewbFlags[type - 1] & 0b01101111;
+            INWK.Newb |= ShipCatalogue.Get(type).DefaultNewb & 0b01101111;
         }
 
         ship.CopyStateFrom(INWK);

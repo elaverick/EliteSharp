@@ -296,7 +296,7 @@ public sealed partial class EliteGame
     private void HAS1()
     {
         // Each ship in the hangar gets its own on-screen image
-        INWK = new WorkspaceShip();
+        INWK = Ship.Workspace();
         INWK.ResetOrientationAndPosition();
 
         int zLo = XX15[0];

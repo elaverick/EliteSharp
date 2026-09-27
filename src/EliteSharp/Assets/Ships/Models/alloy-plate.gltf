@@ -1,0 +1,116 @@
+{
+  "asset": {
+    "version": "2.0",
+    "generator": "EliteSharp tools/export_ships.py",
+    "extras": {
+      "description": "Elite ship wireframe. Coordinates are in the original's left-handed space (x right, y up, z forward); the node mirrors x to convert to glTF's right-handed space."
+    }
+  },
+  "scene": 0,
+  "scenes": [
+    {
+      "nodes": [0]
+    }
+  ],
+  "nodes": [
+    {
+      "name": "Alloy plate",
+      "mesh": 0,
+      "scale": [-1, 1, 1]
+    }
+  ],
+  "meshes": [
+    {
+      "name": "Alloy plate",
+      "primitives": [
+        {
+          "mode": 1,
+          "attributes": {
+            "POSITION": 0,
+            "_FACES": 1,
+            "_VISIBILITY": 2
+          },
+          "indices": 3
+        }
+      ],
+      "extras": {
+        "elite": {
+          "normalScale": 3,
+          "dotDistance": 5,
+          "maxVisibleEdges": 5,
+          "gunVertex": 0,
+          "explosionVertices": 1,
+          "edges": [
+            {"faces": [15, 15], "visibility": 31},
+            {"faces": [15, 15], "visibility": 16},
+            {"faces": [15, 15], "visibility": 20},
+            {"faces": [15, 15], "visibility": 16}
+          ],
+          "faces": [
+            {"normal": [0, 0, 0], "visibility": 0}
+          ]
+        }
+      }
+    }
+  ],
+  "accessors": [
+    {
+      "bufferView": 0,
+      "componentType": 5126,
+      "count": 4,
+      "type": "VEC3",
+      "min": [-15, -46, -9],
+      "max": [19, 38, 11]
+    },
+    {
+      "bufferView": 1,
+      "componentType": 5121,
+      "count": 4,
+      "type": "VEC4"
+    },
+    {
+      "bufferView": 2,
+      "componentType": 5126,
+      "count": 4,
+      "type": "SCALAR"
+    },
+    {
+      "bufferView": 3,
+      "componentType": 5123,
+      "count": 8,
+      "type": "SCALAR"
+    }
+  ],
+  "bufferViews": [
+    {
+      "buffer": 0,
+      "byteOffset": 0,
+      "byteLength": 48,
+      "target": 34962
+    },
+    {
+      "buffer": 0,
+      "byteOffset": 48,
+      "byteLength": 16,
+      "target": 34962
+    },
+    {
+      "buffer": 0,
+      "byteOffset": 64,
+      "byteLength": 16,
+      "target": 34962
+    },
+    {
+      "buffer": 0,
+      "byteOffset": 80,
+      "byteLength": 16,
+      "target": 34963
+    }
+  ],
+  "buffers": [
+    {
+      "byteLength": 96,
+      "uri": "data:application/octet-stream;base64,AABwwQAAsMEAABDBAABwwQAAGEIAABDBAACYQQAAAEIAADBBAAAgQQAAOMIAAMBADw8PDw8PDw8PDw8PDw8PDwAA+EEAAPhBAACgQQAAoEEAAAEAAQACAAIAAwADAAAA"
+    }
+  ]
+}

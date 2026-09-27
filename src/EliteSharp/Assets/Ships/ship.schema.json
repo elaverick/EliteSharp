@@ -1,0 +1,65 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "ship.schema.json",
+  "title": "EliteSharp ship type",
+  "description": "The attributes of one of the 33 ship types. The ship's wireframe is in the glTF model named by 'model'.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["type", "name", "model", "colour", "scannerColour"],
+  "properties": {
+    "$schema": { "type": "string" },
+    "type": {
+      "description": "The ship type number (1-33), as used by the game logic. Each type must be defined exactly once.",
+      "type": "integer", "minimum": 1, "maximum": 33
+    },
+    "name": { "description": "The ship's name.", "type": "string" },
+    "model": {
+      "description": "The path of the ship's glTF 2.0 model, relative to this file.",
+      "type": "string"
+    },
+    "maxEnergy": { "description": "The ship's maximum energy.", "type": "integer", "minimum": 0, "maximum": 255 },
+    "maxSpeed": { "description": "The ship's maximum speed.", "type": "integer", "minimum": 0, "maximum": 255 },
+    "laserPower": { "description": "The power of the ship's lasers (0 for none).", "type": "integer", "minimum": 0, "maximum": 31 },
+    "missiles": { "description": "The number of missiles the ship carries.", "type": "integer", "minimum": 0, "maximum": 7 },
+    "bounty": {
+      "description": "The bounty for destroying the ship, in credits (to one decimal place).",
+      "type": "number", "minimum": 0, "maximum": 6553.5
+    },
+    "targetRadius": {
+      "description": "The radius within which the ship can be hit by lasers or targeted by missiles.",
+      "type": "integer", "minimum": 0, "maximum": 255
+    },
+    "canisters": {
+      "description": "The most cargo canisters released when the ship is destroyed.",
+      "type": "integer", "minimum": 0, "maximum": 15
+    },
+    "scoopedAs": {
+      "description": "The market item the ship turns into when scooped (leave out if it can't be scooped).",
+      "enum": [
+        "Textiles", "Radioactives", "Slaves", "Liquor/Wines", "Luxuries", "Narcotics",
+        "Computers", "Machinery", "Alloys", "Firearms", "Furs", "Minerals", "Gold",
+        "Platinum", "Gem-Stones", "Alien Items"
+      ]
+    },
+    "killPoints": {
+      "description": "The points added to the kill tally for destroying the ship (in 256ths; 256 points to go from Harmless to Competent).",
+      "type": "number", "minimum": 0, "maximum": 255.99609375, "multipleOf": 0.00390625
+    },
+    "colour": {
+      "description": "The ship's colour in the space view, as a BBC mode 1 screen byte (e.g. \"0xFF\" for colour 3 in all four pixels).",
+      "type": "string", "pattern": "^0x[0-9A-Fa-f]{2}$"
+    },
+    "scannerColour": {
+      "description": "The colour of the ship on the scanner, as a BBC mode 2 screen byte.",
+      "type": "string", "pattern": "^0x[0-9A-Fa-f]{2}$"
+    },
+    "flags": {
+      "description": "The ship's default behaviour flags (NEWB).",
+      "type": "array",
+      "uniqueItems": true,
+      "items": {
+        "enum": ["trader", "bountyHunter", "hostile", "pirate", "docking", "innocent", "cop", "escapePod"]
+      }
+    }
+  }
+}

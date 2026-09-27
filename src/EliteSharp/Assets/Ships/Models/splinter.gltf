@@ -1,0 +1,121 @@
+{
+  "asset": {
+    "version": "2.0",
+    "generator": "EliteSharp tools/export_ships.py",
+    "extras": {
+      "description": "Elite ship wireframe. Coordinates are in the original's left-handed space (x right, y up, z forward); the node mirrors x to convert to glTF's right-handed space."
+    }
+  },
+  "scene": 0,
+  "scenes": [
+    {
+      "nodes": [0]
+    }
+  ],
+  "nodes": [
+    {
+      "name": "Splinter",
+      "mesh": 0,
+      "scale": [-1, 1, 1]
+    }
+  ],
+  "meshes": [
+    {
+      "name": "Splinter",
+      "primitives": [
+        {
+          "mode": 1,
+          "attributes": {
+            "POSITION": 0,
+            "_FACES": 1,
+            "_VISIBILITY": 2
+          },
+          "indices": 3
+        }
+      ],
+      "extras": {
+        "elite": {
+          "normalScale": 5,
+          "dotDistance": 8,
+          "maxVisibleEdges": 7,
+          "gunVertex": 0,
+          "explosionVertices": 4,
+          "edges": [
+            {"faces": [3, 2], "visibility": 31},
+            {"faces": [3, 0], "visibility": 31},
+            {"faces": [1, 0], "visibility": 31},
+            {"faces": [2, 1], "visibility": 31},
+            {"faces": [3, 1], "visibility": 31},
+            {"faces": [2, 0], "visibility": 31}
+          ],
+          "faces": [
+            {"normal": [30, 0, 0], "visibility": 18},
+            {"normal": [22, 32, -8], "visibility": 20},
+            {"normal": [0, 2, 0], "visibility": 0},
+            {"normal": [17, 23, 95], "visibility": 0}
+          ]
+        }
+      }
+    }
+  ],
+  "accessors": [
+    {
+      "bufferView": 0,
+      "componentType": 5126,
+      "count": 4,
+      "type": "VEC3",
+      "min": [-24, -25, -10],
+      "max": [12, 42, 16]
+    },
+    {
+      "bufferView": 1,
+      "componentType": 5121,
+      "count": 4,
+      "type": "VEC4"
+    },
+    {
+      "bufferView": 2,
+      "componentType": 5126,
+      "count": 4,
+      "type": "SCALAR"
+    },
+    {
+      "bufferView": 3,
+      "componentType": 5123,
+      "count": 12,
+      "type": "SCALAR"
+    }
+  ],
+  "bufferViews": [
+    {
+      "buffer": 0,
+      "byteOffset": 0,
+      "byteLength": 48,
+      "target": 34962
+    },
+    {
+      "buffer": 0,
+      "byteOffset": 48,
+      "byteLength": 16,
+      "target": 34962
+    },
+    {
+      "buffer": 0,
+      "byteOffset": 64,
+      "byteLength": 16,
+      "target": 34962
+    },
+    {
+      "buffer": 0,
+      "byteOffset": 80,
+      "byteLength": 24,
+      "target": 34963
+    }
+  ],
+  "buffers": [
+    {
+      "byteLength": 104,
+      "uri": "data:application/octet-stream;base64,AADAwQAAyMEAAIBBAAAAAAAAQEEAACDBAAAwQQAAwMAAAABAAABAQQAAKEIAAOBAAgEDAwIAAwMBAAMDAQACAgAA+EEAAPhBAAD4QQAA+EEAAAEAAQACAAIAAwADAAAAAAACAAMAAQA="
+    }
+  ]
+}

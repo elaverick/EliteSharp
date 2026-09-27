@@ -1,0 +1,17 @@
+{
+  "$schema": "ship.schema.json",
+  "type": 17,
+  "name": "Sidewinder",
+  "model": "Models/sidewinder.gltf",
+  "maxEnergy": 70,
+  "maxSpeed": 37,
+  "laserPower": 2,
+  "missiles": 0,
+  "bounty": 5.0,
+  "targetRadius": 65,
+  "canisters": 0,
+  "killPoints": 0.33203125,
+  "colour": "0xFF",
+  "scannerColour": "0x3C",
+  "flags": ["hostile", "pirate"]
+}

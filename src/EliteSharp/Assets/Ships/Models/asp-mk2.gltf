@@ -1,0 +1,151 @@
+{
+  "asset": {
+    "version": "2.0",
+    "generator": "EliteSharp tools/export_ships.py",
+    "extras": {
+      "description": "Elite ship wireframe. Coordinates are in the original's left-handed space (x right, y up, z forward); the node mirrors x to convert to glTF's right-handed space."
+    }
+  },
+  "scene": 0,
+  "scenes": [
+    {
+      "nodes": [0]
+    }
+  ],
+  "nodes": [
+    {
+      "name": "Asp Mk II",
+      "mesh": 0,
+      "scale": [-1, 1, 1]
+    }
+  ],
+  "meshes": [
+    {
+      "name": "Asp Mk II",
+      "primitives": [
+        {
+          "mode": 1,
+          "attributes": {
+            "POSITION": 0,
+            "_FACES": 1,
+            "_VISIBILITY": 2
+          },
+          "indices": 3
+        }
+      ],
+      "extras": {
+        "elite": {
+          "normalScale": 1,
+          "dotDistance": 40,
+          "maxVisibleEdges": 26,
+          "gunVertex": 8,
+          "explosionVertices": 5,
+          "edges": [
+            {"faces": [2, 1], "visibility": 22},
+            {"faces": [1, 0], "visibility": 22},
+            {"faces": [2, 0], "visibility": 22},
+            {"faces": [11, 1], "visibility": 31},
+            {"faces": [6, 1], "visibility": 31},
+            {"faces": [9, 7], "visibility": 16},
+            {"faces": [4, 0], "visibility": 31},
+            {"faces": [10, 8], "visibility": 16},
+            {"faces": [5, 2], "visibility": 31},
+            {"faces": [11, 2], "visibility": 31},
+            {"faces": [7, 1], "visibility": 31},
+            {"faces": [7, 0], "visibility": 31},
+            {"faces": [8, 2], "visibility": 31},
+            {"faces": [8, 0], "visibility": 31},
+            {"faces": [11, 6], "visibility": 31},
+            {"faces": [11, 5], "visibility": 31},
+            {"faces": [6, 3], "visibility": 22},
+            {"faces": [5, 3], "visibility": 22},
+            {"faces": [4, 3], "visibility": 22},
+            {"faces": [10, 5], "visibility": 31},
+            {"faces": [10, 4], "visibility": 31},
+            {"faces": [9, 6], "visibility": 31},
+            {"faces": [9, 4], "visibility": 31},
+            {"faces": [11, 11], "visibility": 10},
+            {"faces": [11, 11], "visibility": 9},
+            {"faces": [11, 11], "visibility": 8},
+            {"faces": [11, 11], "visibility": 8},
+            {"faces": [4, 0], "visibility": 10}
+          ],
+          "faces": [
+            {"normal": [0, -35, 5], "visibility": 31},
+            {"normal": [8, -38, -7], "visibility": 31},
+            {"normal": [-8, -38, -7], "visibility": 31},
+            {"normal": [0, 24, -1], "visibility": 22},
+            {"normal": [0, 43, 19], "visibility": 31},
+            {"normal": [-6, 28, -2], "visibility": 31},
+            {"normal": [6, 28, -2], "visibility": 31},
+            {"normal": [59, -64, 31], "visibility": 31},
+            {"normal": [-59, -64, 31], "visibility": 31},
+            {"normal": [80, 46, 50], "visibility": 31},
+            {"normal": [-80, 46, 50], "visibility": 31},
+            {"normal": [0, 0, -90], "visibility": 31}
+          ]
+        }
+      }
+    }
+  ],
+  "accessors": [
+    {
+      "bufferView": 0,
+      "componentType": 5126,
+      "count": 19,
+      "type": "VEC3",
+      "min": [-69, -18, -45],
+      "max": [69, 14, 83]
+    },
+    {
+      "bufferView": 1,
+      "componentType": 5121,
+      "count": 19,
+      "type": "VEC4"
+    },
+    {
+      "bufferView": 2,
+      "componentType": 5126,
+      "count": 19,
+      "type": "SCALAR"
+    },
+    {
+      "bufferView": 3,
+      "componentType": 5123,
+      "count": 56,
+      "type": "SCALAR"
+    }
+  ],
+  "bufferViews": [
+    {
+      "buffer": 0,
+      "byteOffset": 0,
+      "byteLength": 228,
+      "target": 34962
+    },
+    {
+      "buffer": 0,
+      "byteOffset": 228,
+      "byteLength": 76,
+      "target": 34962
+    },
+    {
+      "buffer": 0,
+      "byteOffset": 304,
+      "byteLength": 76,
+      "target": 34962
+    },
+    {
+      "buffer": 0,
+      "byteOffset": 380,
+      "byteLength": 112,
+      "target": 34963
+    }
+  ],
+  "buffers": [
+    {
+      "byteLength": 492,
+      "uri": "data:application/octet-stream;base64,AAAAAAAAkMEAAAAAAAAAAAAAEMEAADTCAAAsQgAAAAAAADTCAACKQgAAQMAAAAAAAAAsQgAAYMEAAOBBAAAswgAAAAAAADTCAACKwgAAQMAAAAAAAAAswgAAYMEAAOBBAADQQQAA4MAAAJJCAADQwQAA4MAAAJJCAAAsQgAAYEEAAOBBAAAswgAAYEEAAOBBAAAAAAAAEEEAADTCAACIwQAAAAAAADTCAACIQQAAAAAAADTCAAAAAAAAgMAAADTCAAAAAAAAgEAAADTCAAAAAAAA4MAAAJJCAAAAAAAA4MAAAKZCAQACAgIBCwsGAQsLBgEJBwEABwcFAgsLBQIKCAIACAgEAAkHBAAKCAQDCQYEAwoFBQMLBgsLCwsLCwsLCwsLCwsLCwsEAAQABAAEAAAAsEEAAPhBAAD4QQAA+EEAAPhBAAD4QQAA+EEAAPhBAAD4QQAA+EEAAPhBAAD4QQAA+EEAACBBAAAQQQAAIEEAAABBAAAgQQAAIEEAAAEAAAAEAAAABwABAAIAAgADAAMACAAIAAkABgAJAAUABgABAAUAAwAEAAQACAAGAAcABwAJAAIADAAFAAwACgAMAAsADAAKAAsABgALAAkACwADAAoACAAKAA0ADwAPAA4ADgAQABAADQASABEA"
+    }
+  ]
+}

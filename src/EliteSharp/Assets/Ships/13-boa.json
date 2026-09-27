@@ -1,0 +1,17 @@
+{
+  "$schema": "ship.schema.json",
+  "type": 13,
+  "name": "Boa",
+  "model": "Models/boa.gltf",
+  "maxEnergy": 250,
+  "maxSpeed": 24,
+  "laserPower": 3,
+  "missiles": 4,
+  "bounty": 0.0,
+  "targetRadius": 70,
+  "canisters": 5,
+  "killPoints": 0.83203125,
+  "colour": "0xFF",
+  "scannerColour": "0x33",
+  "flags": ["innocent", "escapePod"]
+}

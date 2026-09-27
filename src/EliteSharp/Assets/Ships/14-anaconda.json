@@ -1,0 +1,17 @@
+{
+  "$schema": "ship.schema.json",
+  "type": 14,
+  "name": "Anaconda",
+  "model": "Models/anaconda.gltf",
+  "maxEnergy": 252,
+  "maxSpeed": 14,
+  "laserPower": 7,
+  "missiles": 7,
+  "bounty": 0.0,
+  "targetRadius": 100,
+  "canisters": 7,
+  "killPoints": 1.0,
+  "colour": "0xFF",
+  "scannerColour": "0x33",
+  "flags": ["trader", "innocent", "escapePod"]
+}

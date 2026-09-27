@@ -1,0 +1,17 @@
+{
+  "$schema": "ship.schema.json",
+  "type": 22,
+  "name": "Cobra Mk I",
+  "model": "Models/cobra-mk1.gltf",
+  "maxEnergy": 90,
+  "maxSpeed": 26,
+  "laserPower": 2,
+  "missiles": 2,
+  "bounty": 7.5,
+  "targetRadius": 99,
+  "canisters": 3,
+  "killPoints": 0.6640625,
+  "colour": "0xFF",
+  "scannerColour": "0x3C",
+  "flags": ["hostile", "pirate", "escapePod"]
+}

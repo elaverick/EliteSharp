@@ -117,7 +117,7 @@ public sealed class ShipBlueprint
             scooped = item - 1;
         }
 
-        Byte0 = (scooped << 4) | Range(attributes.Canisters, 0, 15, "canisters");
+        CanisterAndScoopByte = (scooped << 4) | Range(attributes.Canisters, 0, 15, "canisters");
 
         int killPoints = Fixed(attributes.KillPoints, 256, 0xFFFF, "killPoints");
         KillInteger = killPoints >> 8;
@@ -134,7 +134,7 @@ public sealed class ShipBlueprint
                 throw new InvalidDataException($"Unknown flag '{flag}' (the flags are: {string.Join(", ", FlagNames)})");
             }
 
-            DefaultNewb |= 1 << bit;
+            DefaultBehaviour |= 1 << bit;
         }
     }
 
@@ -154,12 +154,12 @@ public sealed class ShipBlueprint
     /// Blueprint byte #0: bits 0-3 contain the maximum number of canisters released
     /// on demise, bits 4-7 contain the market item (less 1) when the ship is scooped.
     /// </summary>
-    public int Byte0 { get; }
+    public int CanisterAndScoopByte { get; }
 
-    public int MaxCanisters => Byte0 & 0x0F;
+    public int MaxCanisters => CanisterAndScoopByte & 0x0F;
 
     /// <summary>The market item when scooped (bits 4-7 of byte #0 plus 1), or 0 for none.</summary>
-    public int ScoopedItem => Byte0 >> 4;
+    public int ScoopedItem => CanisterAndScoopByte >> 4;
 
     /// <summary>Bytes #1-2: the targetable area (the square of the targeting radius).</summary>
     public int TargetableArea { get; }
@@ -210,7 +210,7 @@ public sealed class ShipBlueprint
     public int ScannerColour { get; }
 
     /// <summary>E%: the ship's default NEWB flags.</summary>
-    public int DefaultNewb { get; }
+    public int DefaultBehaviour { get; }
 
     /// <summary>KWH%: the integer part of the kill points for the ship.</summary>
     public int KillInteger { get; }

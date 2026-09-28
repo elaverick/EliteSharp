@@ -25,13 +25,13 @@ internal sealed class GameJumpException(GameJump target, int key = 0) : Exceptio
 internal enum GameJump
 {
     /// <summary>TT170: start (or restart) the game.</summary>
-    TT170,
+    StartGame,
 
     /// <summary>DEATH2: reset and show the title screens after dying.</summary>
-    Death2,
+    RestartAfterDeath,
 
     /// <summary>QU5: load the default commander and show the second title screen.</summary>
-    QU5,
+    LoadDefaultCommander,
 
     /// <summary>FRCE: jump into the main loop to process the key in A.</summary>
     ForceKey,
@@ -49,6 +49,11 @@ internal enum GameJump
 ///
 /// The class is split across several files, roughly following the categories
 /// used in the original source.
+///
+/// Each member's documentation starts with the label of the routine or
+/// variable it was ported from (such as "TT26:" or "INWK:"), and comments
+/// refer to the original's labels in capitals, so the code can be checked
+/// against the annotated source line by line.
 /// </summary>
 public sealed partial class EliteGame
 {
@@ -86,55 +91,152 @@ public sealed partial class EliteGame
     // ------------------------------------------------------------------------
 
     /// <summary>NOST: the number of stardust particles in normal space.</summary>
-    private const int NOST = 20;
+    private const int NormalStardustCount = 20;
 
     /// <summary>NOSH: the maximum number of ships in the local bubble.</summary>
-    private const int NOSH = 12;
+    private const int MaxShips = 12;
 
     /// <summary>POW: pulse laser power.</summary>
-    private const int POW = 15;
+    private const int PulseLaserPower = 15;
 
     /// <summary>Mlas: mining laser power.</summary>
-    private const int Mlas = 50;
+    private const int MiningLaserPower = 50;
 
     /// <summary>Armlas: military laser power (with bit 7 set to indicate a beam laser).</summary>
-    private const int Armlas = 151; // INT(128.5 + 1.5 * POW)
+    private const int MilitaryLaserPower = 151; // INT(128.5 + 1.5 * POW)
 
-    /// <summary>X and Y: the centre of the space view.</summary>
+    /// <summary>X: the x-coordinate of the centre of the space view.</summary>
     private const int CentreX = 128;
+
+    /// <summary>Y: the y-coordinate of the centre of the space view.</summary>
     private const int CentreY = 96;
 
-    /// <summary>GCYT and GCYB: the top and bottom of the galactic chart.</summary>
-    private const int GCYT = 24;
-    private const int GCYB = GCYT + 128;
+    /// <summary>GCYT: the y-coordinate of the top of the galactic chart.</summary>
+    private const int GalacticChartTop = 24;
 
-    // Function key codes, as returned by RDKEY via TRTB%
-    private const int f0 = 0x80, f1 = 0x81, f2 = 0x82, f3 = 0x83, f4 = 0x84;
-    private const int f5 = 0x85, f6 = 0x86, f7 = 0x87, f8 = 0x88, f9 = 0x89;
+    /// <summary>GCYB: the y-coordinate of the bottom of the galactic chart.</summary>
+    private const int GalacticChartBottom = GalacticChartTop + 128;
 
-    // Mode 1 colour bytes (space view)
-    private const int YELLOW = 0b00001111;
-    private const int RED = 0b11110000;
-    private const int CYAN = 0b11111111;
-    private const int GREEN = 0b10101111;
-    private const int WHITE = 0b11111010;
-    private const int MAGENTA = RED;
-    private const int DUST = WHITE;
+    // The codes that ReadKey returns (via TRTB%) for the red function keys f0-f9
 
-    // Mode 2 colour bytes (dashboard)
-    private const int RED2 = 0b00000011;
-    private const int GREEN2 = 0b00001100;
-    private const int YELLOW2 = 0b00001111;
-    private const int BLUE2 = 0b00110000;
-    private const int MAG2 = 0b00110011;
-    private const int CYAN2 = 0b00111100;
-    private const int WHITE2 = 0b00111111;
-    private const int STRIPE = 0b00100011;
+    /// <summary>f0: launch, or the front space view.</summary>
+    private const int FunctionKey0 = 0x80;
 
-    // Sound effect numbers
-    private const int soboop = 0, sobeep = 1, soclick = 2, solaser = 3, soexpl = 4;
-    private const int solas2 = 5, sohit = 6, sobomb = 6, soecm = 7, solaun = 8;
-    private const int sohyp = 10, sohyp2 = 11;
+    /// <summary>f1: buy cargo, or the rear space view.</summary>
+    private const int FunctionKey1 = 0x81;
+
+    /// <summary>f2: sell cargo, or the left space view.</summary>
+    private const int FunctionKey2 = 0x82;
+
+    /// <summary>f3: equip ship, or the right space view.</summary>
+    private const int FunctionKey3 = 0x83;
+
+    /// <summary>f4: the long-range (galactic) chart.</summary>
+    private const int FunctionKey4 = 0x84;
+
+    /// <summary>f5: the short-range chart.</summary>
+    private const int FunctionKey5 = 0x85;
+
+    /// <summary>f6: data on the selected system.</summary>
+    private const int FunctionKey6 = 0x86;
+
+    /// <summary>f7: market prices.</summary>
+    private const int FunctionKey7 = 0x87;
+
+    /// <summary>f8: the Status Mode screen.</summary>
+    private const int FunctionKey8 = 0x88;
+
+    /// <summary>f9: the inventory.</summary>
+    private const int FunctionKey9 = 0x89;
+
+    // Colour bytes for the space view, which uses screen mode 1 (four pixels
+    // per byte, with two bits per pixel)
+
+    /// <summary>YELLOW: yellow in the space view (colour 1).</summary>
+    private const int Yellow = 0b00001111;
+
+    /// <summary>RED: red in the space view (colour 2).</summary>
+    private const int Red = 0b11110000;
+
+    /// <summary>CYAN: cyan in the space view (colour 3).</summary>
+    private const int Cyan = 0b11111111;
+
+    /// <summary>GREEN: green in the space view (a stripe of colours 3 and 1, which shows as green).</summary>
+    private const int Green = 0b10101111;
+
+    /// <summary>WHITE: white in the space view (a stripe of colours 3 and 2).</summary>
+    private const int White = 0b11111010;
+
+    /// <summary>MAGENTA: magenta in the space view (the same byte as red, with a different palette).</summary>
+    private const int Magenta = Red;
+
+    /// <summary>DUST: the colour of the stardust.</summary>
+    private const int DustColour = White;
+
+    // Colour bytes for the dashboard, which uses screen mode 2 (two pixels per
+    // byte, with four bits per pixel)
+
+    /// <summary>RED2: red on the dashboard.</summary>
+    private const int DashboardRed = 0b00000011;
+
+    /// <summary>GREEN2: green on the dashboard.</summary>
+    private const int DashboardGreen = 0b00001100;
+
+    /// <summary>YELLOW2: yellow on the dashboard.</summary>
+    private const int DashboardYellow = 0b00001111;
+
+    /// <summary>BLUE2: blue on the dashboard.</summary>
+    private const int DashboardBlue = 0b00110000;
+
+    /// <summary>MAG2: magenta on the dashboard.</summary>
+    private const int DashboardMagenta = 0b00110011;
+
+    /// <summary>CYAN2: cyan on the dashboard.</summary>
+    private const int DashboardCyan = 0b00111100;
+
+    /// <summary>WHITE2: white on the dashboard.</summary>
+    private const int DashboardWhite = 0b00111111;
+
+    /// <summary>STRIPE: a red and magenta stripe on the dashboard.</summary>
+    private const int DashboardStripe = 0b00100011;
+
+    // Sound effect numbers, as passed to MakeSound
+
+    /// <summary>soboop: a long, low beep.</summary>
+    private const int SoundBoop = 0;
+
+    /// <summary>sobeep: a short, high beep.</summary>
+    private const int SoundBeep = 1;
+
+    /// <summary>soclick: a click.</summary>
+    private const int SoundClick = 2;
+
+    /// <summary>solaser: our laser firing (first part).</summary>
+    private const int SoundLaser = 3;
+
+    /// <summary>soexpl: an explosion.</summary>
+    private const int SoundExplosion = 4;
+
+    /// <summary>solas2: the second part of the sound of a laser firing (ours or an enemy's).</summary>
+    private const int SoundLaser2 = 5;
+
+    /// <summary>sohit: a laser strike on another ship.</summary>
+    private const int SoundHit = 6;
+
+    /// <summary>sobomb: the energy bomb (the same sound as a laser strike).</summary>
+    private const int SoundBomb = 6;
+
+    /// <summary>soecm: the E.C.M.</summary>
+    private const int SoundEcm = 7;
+
+    /// <summary>solaun: launching from or docking with the space station.</summary>
+    private const int SoundLaunch = 8;
+
+    /// <summary>sohyp: hyperspace (first part).</summary>
+    private const int SoundHyperspace = 10;
+
+    /// <summary>sohyp2: hyperspace (second part).</summary>
+    private const int SoundHyperspace2 = 11;
 
     // ------------------------------------------------------------------------
     // The local bubble of universe
@@ -145,23 +247,23 @@ public sealed partial class EliteGame
     /// the space station, and the rest are ships. There is always an empty slot
     /// at the end (FRIN+NOSH) to terminate the list.
     /// </summary>
-    private readonly Ship?[] Slots = new Ship?[NOSH + 1];
+    private readonly Ship?[] Slots = new Ship?[MaxShips + 1];
 
     /// <summary>FRIN: the type of the ship in a slot, or 0 if the slot is empty.</summary>
     private int SlotType(int slot) => Slots[slot]?.Type ?? 0;
 
     /// <summary>MANY: the number of ships of each type in the bubble.</summary>
-    private readonly int[] Many = new int[ShipType.Count + 1];
+    private readonly int[] _shipCounts = new int[ShipType.Count + 1];
 
     /// <summary>SSPR: non-zero if we are inside the space station's safe zone.</summary>
-    private int SSPR
+    private int InSafeZone
     {
-        get => Many[ShipType.SpaceStation];
-        set => Many[ShipType.SpaceStation] = value;
+        get => _shipCounts[ShipType.SpaceStation];
+        set => _shipCounts[ShipType.SpaceStation] = value;
     }
 
     /// <summary>JUNK: the amount of junk (asteroids, canisters and so on) in the bubble.</summary>
-    private int Junk;
+    private int _junkCount;
 
     /// <summary>
     /// The planet, which lives in slot 0 (K%). If the slot is empty, the
@@ -170,6 +272,7 @@ public sealed partial class EliteGame
     /// </summary>
     private Ship Planet => Slots[0] ?? _emptySlot;
 
+    /// <summary>An empty data block returned by <see cref="Planet"/> when slot 0 is empty.</summary>
     private readonly Ship _emptySlot = Ship.Workspace();
 
     /// <summary>
@@ -177,150 +280,219 @@ public sealed partial class EliteGame
     /// ship's data block into INWK; here INWK refers to the ship object itself,
     /// or to a copy where the original's copy diverges from the stored data.
     /// </summary>
-    private Ship INWK = null!;
+    private Ship _currentShip = null!;
 
     /// <summary>INF: the slot number of the ship in INWK (the original stores its address).</summary>
-    private Ship? INF;
+    private Ship? _slotShip;
 
     /// <summary>TYPE: the type of the ship in INWK.</summary>
-    private int TYPE;
+    private int _shipType;
 
     /// <summary>XX0: the blueprint of the ship in INWK.</summary>
-    private ShipBlueprint? XX0;
+    private ShipBlueprint? _blueprint;
 
     /// <summary>XSAV: the slot number being processed in the main flight loop.</summary>
-    private int XSAV;
+    private int _currentSlot;
 
     // ------------------------------------------------------------------------
     // Flight state
     // ------------------------------------------------------------------------
 
     /// <summary>DELTA: our current speed (1-40).</summary>
-    private int DELTA;
+    private int _speed;
 
     /// <summary>DELT4: our speed * 64 as a 16-bit value (DELT4+1 is the high byte).</summary>
-    private int DELT4;
+    private int _speedTimes64;
 
     /// <summary>ALPHA: the roll angle as a sign-magnitude byte.</summary>
-    private int ALPHA;
+    private int _rollAngle;
 
     /// <summary>ALP1: the magnitude of the roll angle (0-31).</summary>
-    private int ALP1;
+    private int _rollMagnitude;
 
     /// <summary>ALP2 and ALP2+1: the sign of the roll angle, and its flipped sign.</summary>
-    private int ALP2, ALP2Flipped;
+    private int _rollSign, _rollSignFlipped;
 
     /// <summary>BETA: the pitch angle as a sign-magnitude byte.</summary>
-    private int BETA;
+    private int _pitchAngle;
 
     /// <summary>BET1: the magnitude of the pitch angle (0-8).</summary>
-    private int BET1;
+    private int _pitchMagnitude;
 
     /// <summary>BET2 and BET2+1: the sign of the pitch angle, and its flipped sign.</summary>
-    private int BET2, BET2Flipped;
+    private int _pitchSign, _pitchSignFlipped;
 
     /// <summary>
     /// JSTX and JSTY: the current roll and pitch rates (128 = centre). These
     /// aren't initialised by the game code (the loader leaves them centred).
     /// </summary>
-    private int JSTX = 128, JSTY = 128;
+    private int _rollRate = 128, _pitchRate = 128;
 
     /// <summary>ENERGY: our energy banks (0-255).</summary>
-    private int ENERGY;
+    private int _energy;
 
     /// <summary>FSH and ASH: forward and aft shields.</summary>
-    private int FSH, ASH;
+    private int _forwardShield, _aftShield;
 
     /// <summary>CABTMP: cabin temperature.</summary>
-    private int CABTMP;
+    private int _cabinTemperature;
 
     /// <summary>GNTMP: laser temperature.</summary>
-    private int GNTMP;
+    private int _laserTemperature;
 
     /// <summary>ALTIT: our altitude above the planet.</summary>
-    private int ALTIT;
+    private int _altitude;
 
     /// <summary>LAS: the laser power of the current view's laser if it is firing this iteration.</summary>
-    private int LAS;
+    private int _firingLaserPower;
 
     /// <summary>LAS2: the laser power of the laser beam currently on-screen.</summary>
-    private int LAS2;
+    private int _laserBeamPower;
 
     /// <summary>LASCT: the laser pulse counter.</summary>
-    private int LASCT;
+    private int _laserPulseCounter;
 
     /// <summary>LASX and LASY: the screen coordinates of the laser beam's end point.</summary>
-    private int LASX, LASY;
+    private int _laserEndX, _laserEndY;
 
     /// <summary>MSAR: non-zero if the missile is armed and looking for a target.</summary>
-    private int MSAR;
+    private int _missileArmed;
 
     /// <summary>MSTG: the slot number of the current missile target, or &amp;FF for none.</summary>
-    private int MSTG;
+    private int _missileTarget;
 
     /// <summary>ECMA: the E.C.M. counter (non-zero while an E.C.M. is active).</summary>
-    private int ECMA;
+    private int _ecmCounter;
 
     /// <summary>ECMP: non-zero if our E.C.M. is the active one.</summary>
-    private int ECMP;
+    private int _ourEcmActive;
 
     /// <summary>MJ: non-zero if we are in witchspace.</summary>
-    private int MJ;
+    private int _inWitchspace;
 
     /// <summary>auto: non-zero if the docking computer is engaged.</summary>
-    private int Auto;
+    private int _autoDocking;
 
     /// <summary>VIEW: the current space view (0 = front, 1 = rear, 2 = left, 3 = right).</summary>
-    private int VIEW;
+    private int _view;
 
     /// <summary>QQ11: the type of the current view (0 = space view).</summary>
-    private int QQ11;
+    private int _viewType;
 
     /// <summary>QQ12: non-zero if we are docked.</summary>
-    private int QQ12;
+    private int _docked;
 
     /// <summary>MCNT: the main loop counter.</summary>
-    private int MCNT;
+    private int _mainLoopCounter;
 
     /// <summary>DLY: the in-flight message delay counter.</summary>
-    private int DLY;
+    private int _messageDelay;
 
     /// <summary>de: bit 1 set means append " DESTROYED" to the in-flight message.</summary>
-    private int de;
+    private int _messageDestroyed;
 
     /// <summary>MCH: the token number of the current in-flight message.</summary>
-    private int MCH;
+    private int _messageToken;
 
     /// <summary>messXC: the x-coordinate of the current in-flight message.</summary>
-    private int messXC;
+    private int _messageX;
 
     /// <summary>EV: the extra vessels spawning counter.</summary>
-    private int EV;
+    private int _extraVesselsDelay;
 
     /// <summary>NOSTM: the number of stardust particles.</summary>
-    private int NOSTM;
+    private int _stardustCount;
 
     /// <summary>HFX: non-zero while the hyperspace colour effect is on.</summary>
-    private int HFX
+    private int HyperspaceColoursOn
     {
         get => _screen.HyperspaceColours ? 1 : 0;
         set => _screen.HyperspaceColours = value != 0;
     }
 
-    /// <summary>QQ22 and QQ22+1: the hyperspace countdown timers.</summary>
-    private int QQ22, QQ22Hi;
+    /// <summary>
+    /// QQ22: the inner hyperspace countdown, which counts down from 5 (or 15
+    /// at the start) between each tick of <see cref="_hyperspaceCountdown"/>.
+    /// </summary>
+    private int _hyperspaceTicks;
 
-    /// <summary>KL and the KY flags: the keyboard logger.</summary>
-    private int KL;
-    private bool KY1, KY2, KY3, KY4, KY5, KY6, KY7, KY12, KY13, KY14, KY15, KY16, KY17, KY18, KY19, KY20;
+    /// <summary>QQ22+1: the hyperspace countdown shown on-screen, or 0 if no countdown is in progress.</summary>
+    private int _hyperspaceCountdown;
 
-    // Stardust (SX, SY, SZ and their low bytes)
-    private readonly int[] SX = new int[NOST + 1];
-    private readonly int[] SY = new int[NOST + 1];
-    private readonly int[] SZ = new int[NOST + 1];
-    private readonly int[] SXL = new int[NOST + 1];
-    private readonly int[] SYL = new int[NOST + 1];
-    private readonly int[] SZL = new int[NOST + 1];
+    // The key logger, which records which keys are being pressed
+
+    /// <summary>KL: the ASCII code (via TRTB%) of the last key pressed, or 0 for none.</summary>
+    private int _keyPressed;
+
+    /// <summary>KY1: "?" is being pressed (slow down).</summary>
+    private bool _keySlowDown;
+
+    /// <summary>KY2: Space is being pressed (speed up).</summary>
+    private bool _keySpeedUp;
+
+    /// <summary>KY3: "&lt;" is being pressed (roll left).</summary>
+    private bool _keyRollLeft;
+
+    /// <summary>KY4: "&gt;" is being pressed (roll right).</summary>
+    private bool _keyRollRight;
+
+    /// <summary>KY5: "X" is being pressed (pull up, or climb).</summary>
+    private bool _keyClimb;
+
+    /// <summary>KY6: "S" is being pressed (pitch down, or dive).</summary>
+    private bool _keyDive;
+
+    /// <summary>KY7: "A" is being pressed (fire lasers).</summary>
+    private bool _keyFireLaser;
+
+    /// <summary>KY12: Tab is being pressed (energy bomb).</summary>
+    private bool _keyEnergyBomb;
+
+    /// <summary>KY13: Escape is being pressed (launch the escape pod).</summary>
+    private bool _keyEscapePod;
+
+    /// <summary>KY14: "T" is being pressed (target a missile).</summary>
+    private bool _keyTargetMissile;
+
+    /// <summary>KY15: "U" is being pressed (unarm the missile).</summary>
+    private bool _keyUnarmMissile;
+
+    /// <summary>KY16: "M" is being pressed (fire the missile).</summary>
+    private bool _keyFireMissile;
+
+    /// <summary>KY17: "E" is being pressed (fire the E.C.M.).</summary>
+    private bool _keyEcm;
+
+    /// <summary>KY18: "J" is being pressed (in-system jump).</summary>
+    private bool _keyJump;
+
+    /// <summary>KY19: "C" is being pressed (turn on the docking computer).</summary>
+    private bool _keyDockingComputerOn;
+
+    /// <summary>KY20: "P" is being pressed (turn off the docking computer).</summary>
+    private bool _keyDockingComputerOff;
+
+    // The stardust particles (index 1 to _stardustCount). The coordinates are
+    // stored as in the original: a sign-magnitude high byte (so the particle
+    // positions are -127 to +127 from the centre), with a separate low byte
+
+    /// <summary>SX: the x-coordinate high byte (sign-magnitude) of each stardust particle.</summary>
+    private readonly int[] _dustX = new int[NormalStardustCount + 1];
+
+    /// <summary>SY: the y-coordinate high byte (sign-magnitude) of each stardust particle.</summary>
+    private readonly int[] _dustY = new int[NormalStardustCount + 1];
+
+    /// <summary>SZ: the distance of each stardust particle.</summary>
+    private readonly int[] _dustZ = new int[NormalStardustCount + 1];
+
+    /// <summary>SXL: the x-coordinate low byte of each stardust particle.</summary>
+    private readonly int[] _dustXLow = new int[NormalStardustCount + 1];
+
+    /// <summary>SYL: the y-coordinate low byte of each stardust particle.</summary>
+    private readonly int[] _dustYLow = new int[NormalStardustCount + 1];
+
+    /// <summary>SZL: the distance low byte of each stardust particle.</summary>
+    private readonly int[] _dustZLow = new int[NormalStardustCount + 1];
 
     // ------------------------------------------------------------------------
     // Universe and commander state
@@ -330,85 +502,88 @@ public sealed partial class EliteGame
     private string CommanderName = "JAMESON";
 
     /// <summary>TP: the mission status.</summary>
-    private int TP;
+    private int _missionStatus;
 
     /// <summary>QQ0 and QQ1: our current galactic coordinates.</summary>
-    private int QQ0, QQ1;
+    private int _currentSystemX, _currentSystemY;
 
     /// <summary>QQ21: the three 16-bit seeds for the current galaxy.</summary>
-    private readonly int[] QQ21 = new int[6];
+    private readonly int[] _galaxySeeds = new int[6];
 
     /// <summary>CASH: our cash in Cr * 10.</summary>
-    private uint CASH;
+    private uint _cash;
 
     /// <summary>QQ14: our fuel level in light years * 10.</summary>
-    private int QQ14;
+    private int _fuel;
 
     /// <summary>COK: the competition flags.</summary>
-    private int COK;
+    private int _competitionFlags;
 
     /// <summary>GCNT: the current galaxy number (0-7).</summary>
-    private int GCNT;
+    private int _galaxyNumber;
 
     /// <summary>LASER: the laser power for each of the four views (0 = none).</summary>
-    private readonly int[] LASER = new int[4];
+    private readonly int[] _lasers = new int[4];
 
     /// <summary>CRGO: our cargo capacity.</summary>
-    private int CRGO;
+    private int _cargoCapacity;
 
     /// <summary>QQ20: the contents of the cargo hold.</summary>
-    private readonly int[] QQ20 = new int[17];
+    private readonly int[] _cargo = new int[17];
 
     /// <summary>Equipment flags.</summary>
-    private int ECM, BST, BOMB, ENGY, DKCMP, GHYP, ESCP;
+    private int _ecm, _fuelScoops, _energyBomb, _energyUnit, _dockingComputer, _galacticHyperdrive, _escapePod;
 
     /// <summary>TALLYL: the fractional part of the kill tally.</summary>
-    private int TALLYL;
+    private int _killTallyFraction;
 
     /// <summary>NOMSL: the number of missiles we have.</summary>
-    private int NOMSL;
+    private int _missiles;
 
     /// <summary>FIST: our legal status.</summary>
-    private int FIST;
+    private int _legalStatus;
 
     /// <summary>AVL: the market availability for each item.</summary>
-    private readonly int[] AVL = new int[17];
+    private readonly int[] _marketAvailability = new int[17];
 
     /// <summary>QQ26: the random byte that changes the market on each visit.</summary>
-    private int QQ26;
+    private int _marketRandom;
 
     /// <summary>TALLY: the number of kills.</summary>
-    private int TALLY;
+    private int _killTally;
 
     /// <summary>SVC: the save count.</summary>
-    private int SVC;
+    private int _saveCount;
 
     /// <summary>QQ2: the seeds of the current system.</summary>
-    private readonly int[] QQ2 = new int[6];
+    private readonly int[] _currentSystemSeeds = new int[6];
 
     /// <summary>safehouse: the seeds of the system we are jumping to.</summary>
-    private readonly int[] safehouse = new int[6];
+    private readonly int[] _destinationSeeds = new int[6];
 
     /// <summary>QQ3, QQ4, QQ5, QQ6, QQ7: the economy, government, tech level, population and productivity of the selected system.</summary>
-    private int QQ3, QQ4, QQ5, QQ6, QQ7;
+    private int _selectedEconomy, _selectedGovernment, _selectedTechLevel, _selectedPopulation, _selectedProductivity;
 
     /// <summary>QQ8: the distance to the selected system in light years * 10.</summary>
-    private int QQ8;
+    private int _selectedDistance;
 
     /// <summary>QQ9 and QQ10: the galactic coordinates of the crosshairs on the charts.</summary>
-    private int QQ9, QQ10;
+    private int _crosshairX, _crosshairY;
 
     /// <summary>QQ15: the three 16-bit seeds of the selected system.</summary>
-    private readonly int[] QQ15 = new int[6];
+    private readonly int[] _selectedSeeds = new int[6];
 
     /// <summary>QQ19: temporary storage (used for seeds and crosshair coordinates).</summary>
-    private readonly int[] QQ19 = new int[6];
+    private readonly int[] _scratch = new int[6];
 
     /// <summary>QQ24, QQ25, QQ28, QQ29: market price, availability, current economy and item number.</summary>
-    private int QQ24, QQ25, QQ28, QQ29;
+    private int _itemPrice, _itemAvailability, _currentEconomy, _itemNumber;
 
-    /// <summary>gov and tek: the current system's government and tech level.</summary>
-    private int gov, tek;
+    /// <summary>gov: the current system's government type (0-7).</summary>
+    private int _government;
+
+    /// <summary>tek: the current system's tech level (0-14).</summary>
+    private int _techLevel;
 
     // ------------------------------------------------------------------------
     // Configuration options (toggled while paused)
@@ -417,19 +592,29 @@ public sealed partial class EliteGame
     /// <summary>DAMP, DJD, PATG, FLH, JSTGY, JSTE, JSTK, UPTOG, DISK: the toggle options, indexed as in TGINT.</summary>
     private readonly int[] ToggleOptions = new int[9];
 
-    private int DAMP => ToggleOptions[0];
-    private int DJD => ToggleOptions[1];
-    private int PATG => ToggleOptions[2];
-    private int FLH => ToggleOptions[3];
+    /// <summary>DAMP: non-zero if keyboard damping is disabled (toggled with Caps Lock while paused).</summary>
+    private int DampingDisabled => ToggleOptions[0];
+
+    /// <summary>DJD: non-zero if keyboard auto-recentre is disabled (toggled with "A" while paused).</summary>
+    private int AutoRecentreDisabled => ToggleOptions[1];
+
+    /// <summary>
+    /// PATG: non-zero to show the authors' names on the title screen and allow
+    /// manual mis-jumps into witchspace (toggled with "X" while paused).
+    /// </summary>
+    private int AuthorNamesShown => ToggleOptions[2];
+
+    /// <summary>FLH: non-zero if the dashboard bars flash when in danger (toggled with "F" while paused).</summary>
+    private int FlashingBars => ToggleOptions[3];
 
     /// <summary>DNOIZ: non-zero if sound is disabled.</summary>
-    private int DNOIZ;
+    private int _soundDisabled;
 
     /// <summary>VOL: the sound volume (0-7).</summary>
-    private int VOL = 7;
+    private int _volume = 7;
 
     /// <summary>DISK: toggled with "T" while paused (selects which file system name is shown).</summary>
-    private int DISK
+    private int FilingSystemToggle
     {
         get => ToggleOptions[8] != 0 ? 1 : 0;
         set => ToggleOptions[8] = value != 0 ? 0xFF : 0;
@@ -439,7 +624,7 @@ public sealed partial class EliteGame
     /// JSTK: non-zero if the joystick is configured (toggled with "K" while
     /// paused), in which case the controller's left stick is always in control.
     /// </summary>
-    private int JSTK
+    private int JoystickEnabled
     {
         get => ToggleOptions[6];
         set => ToggleOptions[6] = value & 0xFF;
@@ -454,9 +639,9 @@ public sealed partial class EliteGame
     {
         try
         {
-            _sound?.SetVolumeSource(() => DNOIZ != 0 ? -1 : VOL);
-            BEGIN();
-            GameJump next = GameJump.TT170;
+            _sound?.SetVolumeSource(() => _soundDisabled != 0 ? -1 : _volume);
+            Begin();
+            GameJump next = GameJump.StartGame;
             int key = 0;
             while (true)
             {
@@ -464,14 +649,14 @@ public sealed partial class EliteGame
                 {
                     switch (next)
                     {
-                        case GameJump.TT170:
-                            TT170();
+                        case GameJump.StartGame:
+                            StartGame();
                             break;
-                        case GameJump.Death2:
-                            DEATH2();
+                        case GameJump.RestartAfterDeath:
+                            RestartAfterDeath();
                             break;
-                        case GameJump.QU5:
-                            QU5();
+                        case GameJump.LoadDefaultCommander:
+                            LoadDefaultCommander();
                             break;
                         case GameJump.ForceKey:
                             MainLoop(key);
@@ -497,6 +682,7 @@ public sealed partial class EliteGame
     // Timing
     // ------------------------------------------------------------------------
 
+    /// <summary>The time between vertical syncs (the BBC's screen refreshes at 50 Hz).</summary>
     private static readonly long VsyncTicks = Stopwatch.Frequency / 50;
 
     /// <summary>Send the current screen contents to the renderer.</summary>
@@ -507,12 +693,12 @@ public sealed partial class EliteGame
             throw new QuitException();
         }
 
-        _screen.EscapePodFitted = ESCP != 0;
+        _screen.EscapePodFitted = _escapePod != 0;
         _screen.Present();
     }
 
     /// <summary>WSCAN: wait for the vertical sync (the original runs at 50 Hz).</summary>
-    private void WSCAN()
+    private void WaitForVsync()
     {
         Present();
         long now = _clock.ElapsedTicks;
@@ -526,11 +712,11 @@ public sealed partial class EliteGame
     }
 
     /// <summary>DELAY: wait for Y vertical syncs.</summary>
-    private void DELAY(int y)
+    private void Delay(int y)
     {
         do
         {
-            WSCAN();
+            WaitForVsync();
             y = (y - 1) & 0xFF;
         }
         while (y != 0);
@@ -594,7 +780,7 @@ public sealed partial class EliteGame
     /// generator is also stirred by the state of the C flag on entry to DORND,
     /// so we seed it randomly (an all-zero seed would never change).
     /// </summary>
-    private readonly int[] RAND = [.. Enumerable.Range(0, 4).Select(_ => Random.Shared.Next(1, 256))];
+    private readonly int[] _randomSeeds = [.. Enumerable.Range(0, 4).Select(_ => Random.Shared.Next(1, 256))];
 
     /// <summary>The C flag as left by DORND, which feeds into the next call.</summary>
     private bool _carry;
@@ -603,41 +789,41 @@ public sealed partial class EliteGame
     private bool _overflow;
 
     /// <summary>The value returned in X by the last call to DORND.</summary>
-    private int _randX;
+    private int _randomX;
 
     /// <summary>
-    /// DORND: generate a random number in A (returned) and X (in <see cref="_randX"/>),
+    /// DORND: generate a random number in A (returned) and X (in <see cref="_randomX"/>),
     /// setting the C and V flags. The C flag on entry feeds into the result, as in
     /// the original.
     /// </summary>
-    private int DORND()
+    private int NextRandom()
     {
-        int a = RAND[0];
+        int seed = _randomSeeds[0];
         int carryIn = _carry ? 1 : 0;
-        int rolled = ((a << 1) | carryIn) & 0xFF;
-        int carry = (a >> 7) & 1;
-        int x = rolled;
-        int sum = rolled + RAND[2] + carry;
-        RAND[0] = sum & 0xFF;
-        RAND[2] = x;
+        int rolled = ((seed << 1) | carryIn) & 0xFF;
+        int carry = (seed >> 7) & 1;
+        int previousSeed = rolled;
+        int sum = rolled + _randomSeeds[2] + carry;
+        _randomSeeds[0] = sum & 0xFF;
+        _randomSeeds[2] = previousSeed;
         carry = sum > 0xFF ? 1 : 0;
 
-        a = RAND[1];
-        x = a;
-        sum = a + RAND[3] + carry;
+        seed = _randomSeeds[1];
+        previousSeed = seed;
+        sum = seed + _randomSeeds[3] + carry;
         int result = sum & 0xFF;
-        _overflow = ((~(a ^ RAND[3]) & (a ^ result)) & 0x80) != 0;
+        _overflow = ((~(seed ^ _randomSeeds[3]) & (seed ^ result)) & 0x80) != 0;
         _carry = sum > 0xFF;
-        RAND[1] = result;
-        RAND[3] = x;
-        _randX = x;
+        _randomSeeds[1] = result;
+        _randomSeeds[3] = previousSeed;
+        _randomX = previousSeed;
         return result;
     }
 
     /// <summary>DORND2: DORND with the C flag cleared first, so the sequence is repeatable.</summary>
-    private int DORND2()
+    private int NextRandomRepeatable()
     {
         _carry = false;
-        return DORND();
+        return NextRandom();
     }
 }

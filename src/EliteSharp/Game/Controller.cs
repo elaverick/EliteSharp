@@ -26,6 +26,7 @@ namespace EliteSharp.Game;
 /// </summary>
 public sealed partial class EliteGame
 {
+    /// <summary>The game controller, or null if controllers aren't being used.</summary>
     private readonly Gamepad? _gamepad;
 
     /// <summary>Overrides the controller context (for the title screens and the pause loop).</summary>
@@ -37,8 +38,14 @@ public sealed partial class EliteGame
     /// <summary>The pulse-width modulation accumulators for the triggers.</summary>
     private float _accelerateCycle, _decelerateCycle;
 
-    private int JSTGY => ToggleOptions[4];
-    private int JSTE => ToggleOptions[5];
+    /// <summary>
+    /// JSTGY: &amp;FF for the standard joystick y-channel (the default), or 0 if it
+    /// is reversed (toggled with "Y" while paused).
+    /// </summary>
+    private int JoystickYStandard => ToggleOptions[4];
+
+    /// <summary>JSTE: &amp;FF if both joystick channels are reversed (toggled with "J" while paused).</summary>
+    private int JoystickReversed => ToggleOptions[5];
 
     /// <summary>Whether a controller is connected.</summary>
     private bool PadConnected => _gamepad?.Connected == true;
@@ -51,8 +58,8 @@ public sealed partial class EliteGame
             return;
         }
 
-        _gamepad.Mapper.Context = _padContextOverride ?? (QQ11 == 0 ? PadContext.SpaceView : PadContext.Screen);
-        _gamepad.Mapper.DockingComputerOn = Auto != 0;
+        _gamepad.Mapper.Context = _padContextOverride ?? (_viewType == 0 ? PadContext.SpaceView : PadContext.Screen);
+        _gamepad.Mapper.DockingComputerOn = _autoDocking != 0;
     }
 
     /// <summary>
@@ -68,10 +75,10 @@ public sealed partial class EliteGame
     private static int AdcY(float y) => Math.Clamp(128 - (int)MathF.Round(y * 127), 0, 255);
 
     /// <summary>DK15: the roll rate from the joystick's x-channel.</summary>
-    private int StickJSTX(float x) => ((AdcX(x) ^ JSTE) | 1) & 0xFF;
+    private int StickRollRate(float x) => ((AdcX(x) ^ JoystickReversed) | 1) & 0xFF;
 
     /// <summary>DK15: the pitch rate from the joystick's y-channel.</summary>
-    private int StickJSTY(float y) => (AdcY(y) ^ 0xFF ^ JSTE ^ JSTGY) & 0xFF;
+    private int StickPitchRate(float y) => (AdcY(y) ^ 0xFF ^ JoystickReversed ^ JoystickYStandard) & 0xFF;
 
     /// <summary>
     /// Apply the controller's triggers to the speed keys (KY2 is Space, speed
@@ -87,12 +94,12 @@ public sealed partial class EliteGame
         var axes = _gamepad!.Axes;
         if (Pulse(ref _accelerateCycle, axes.RightTrigger))
         {
-            KY2 = true;
+            _keySpeedUp = true;
         }
 
         if (Pulse(ref _decelerateCycle, axes.LeftTrigger))
         {
-            KY1 = true;
+            _keySlowDown = true;
         }
     }
 
@@ -146,10 +153,10 @@ public sealed partial class EliteGame
         }
 
         var axes = _gamepad!.Axes;
-        if (JSTK != 0 || axes.LeftStickActive)
+        if (JoystickEnabled != 0 || axes.LeftStickActive)
         {
-            JSTX = StickJSTX(axes.LeftX);
-            JSTY = StickJSTY(axes.LeftY);
+            _rollRate = StickRollRate(axes.LeftX);
+            _pitchRate = StickPitchRate(axes.LeftY);
             _padFlying = true;
             return true;
         }
@@ -158,8 +165,8 @@ public sealed partial class EliteGame
         {
             // The stick has sprung back to the centre, so centre the controls
             // and hand them back to the keyboard
-            JSTX = 128;
-            JSTY = 128;
+            _rollRate = 128;
+            _pitchRate = 128;
             _padFlying = false;
         }
 
@@ -171,35 +178,35 @@ public sealed partial class EliteGame
     /// returning false if no stick is being used. Either stick can be used
     /// (the right stick takes priority).
     /// </summary>
-    private bool ReadPadCursor(out int x, out int y)
+    private bool ReadPadCursor(out int deltaX, out int deltaY)
     {
-        x = 0;
-        y = 0;
+        deltaX = 0;
+        deltaY = 0;
         if (!PadConnected)
         {
             return false;
         }
 
         var axes = _gamepad!.Axes;
-        float sx, sy;
+        float stickX, stickY;
         if (axes.RightStickActive)
         {
-            (sx, sy) = (axes.RightX, axes.RightY);
+            (stickX, stickY) = (axes.RightX, axes.RightY);
         }
-        else if (axes.LeftStickActive || JSTK != 0)
+        else if (axes.LeftStickActive || JoystickEnabled != 0)
         {
-            (sx, sy) = (axes.LeftX, axes.LeftY);
+            (stickX, stickY) = (axes.LeftX, axes.LeftY);
         }
         else
         {
             return false;
         }
 
-        y = TJS1(StickJSTY(sy));
-        x = TJS1(StickJSTX(sx) ^ 0xFF);
+        deltaY = JoystickToCursorStep(StickPitchRate(stickY));
+        deltaX = JoystickToCursorStep(StickRollRate(stickX) ^ 0xFF);
         return true;
     }
 
     /// <summary>TJS1: A = round(A / 32) - 4, turning a joystick value into a cursor movement of -4 to +4.</summary>
-    private static int TJS1(int a) => (a >> 5) + ((a >> 4) & 1) - 4;
+    private static int JoystickToCursorStep(int value) => (value >> 5) + ((value >> 4) & 1) - 4;
 }

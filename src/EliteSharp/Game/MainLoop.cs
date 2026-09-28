@@ -8,76 +8,76 @@ namespace EliteSharp.Game;
 public sealed partial class EliteGame
 {
     /// <summary>BEGIN: initialise the configuration variables and the commander, and start the game.</summary>
-    private void BEGIN()
+    private void Begin()
     {
         // Zero the configuration variables from COMC to DISK
         Array.Clear(ToggleOptions);
-        DNOIZ = 0;
-        DISK = 0;
-        JSTK = 0;
-        COMC = 0;
-        Array.Clear(mscol);
+        _soundDisabled = 0;
+        FilingSystemToggle = 0;
+        JoystickEnabled = 0;
+        _compassColour = 0;
+        Array.Clear(_missileColours);
 
-        JAMESON();
+        RestoreDefaultCommander();
     }
 
     /// <summary>TT170: the entry point for the start of the game (and after pressing ESCAPE while paused).</summary>
-    private void TT170()
+    private void StartGame()
     {
-        RESET();
-        DEATH2();
+        ResetShipAndUniverse();
+        RestartAfterDeath();
     }
 
     /// <summary>DEATH2: reset most of the game and restart from the title screen.</summary>
-    private void DEATH2()
+    private void RestartAfterDeath()
     {
-        RES2();
-        BR1();
+        ResetFlight();
+        ShowLoadCommanderTitle();
     }
 
     /// <summary>BR1 (part 1): show the "Load New Commander (Y/N)?" title screen.</summary>
-    private void BR1()
+    private void ShowLoadCommanderTitle()
     {
-        ZEKTRAN();
-        XC = 3;
-        int key = TITLE(6, ShipType.CobraMkIII, 200);
+        ClearKeyLogger();
+        _cursorX = 3;
+        int key = ShowTitleScreen(6, ShipType.CobraMkIII, 200);
         if (key == 'Y')
         {
-            DFAULT();
-            SVE();
+            ApplySavedCommander();
+            DiscAccessMenu();
         }
 
-        QU5();
+        LoadDefaultCommander();
     }
 
     /// <summary>QU5 and BR1 (part 2): show the "Press Fire or Space, Commander" title screen and start the game docked.</summary>
-    private void QU5()
+    private void LoadDefaultCommander()
     {
-        DFAULT();
-        msblob();
-        TITLE(7, ShipType.Cougar, 100);
-        ping();
-        TT111();
-        jmp();
+        ApplySavedCommander();
+        ResetMissileIndicators();
+        ShowTitleScreen(7, ShipType.Cougar, 100);
+        MoveCrosshairsHome();
+        SelectNearestSystem();
+        SetCurrentSystem();
 
         // likeTT112: copy the current system's seeds into QQ2
         for (int i = 5; i >= 0; i--)
         {
-            QQ2[i] = QQ15[i];
+            _currentSystemSeeds[i] = _selectedSeeds[i];
         }
 
-        EV = 0;
-        QQ28 = QQ3;
-        tek = QQ5;
-        gov = QQ4;
-        BAY();
+        _extraVesselsDelay = 0;
+        _currentEconomy = _selectedEconomy;
+        _techLevel = _selectedTechLevel;
+        _government = _selectedGovernment;
+        GoToDockingBay();
     }
 
     /// <summary>BAY: go to the docking bay (i.e. show the Status Mode screen).</summary>
-    private void BAY()
+    private void GoToDockingBay()
     {
-        QQ12 = 0xFF;
-        throw new GameJumpException(GameJump.ForceKey, f8);
+        _docked = 0xFF;
+        throw new GameJumpException(GameJump.ForceKey, FunctionKey8);
     }
 
     /// <summary>
@@ -99,52 +99,52 @@ public sealed partial class EliteGame
                 {
                     if (!startAtMloop)
                     {
-                        TT100();
+                        MainLoopIteration();
                     }
 
                     startAtMloop = false;
 
                     // MLOOP: cool the lasers and update the dashboard
-                    if (GNTMP != 0)
+                    if (_laserTemperature != 0)
                     {
-                        GNTMP--;
+                        _laserTemperature--;
                     }
 
-                    if (LASCT != 0)
+                    if (_laserPulseCounter != 0)
                     {
-                        int x = LASCT - 1;
-                        if (x != 0)
+                        int counter = _laserPulseCounter - 1;
+                        if (counter != 0)
                         {
-                            x--;
+                            counter--;
                         }
 
-                        LASCT = x;
+                        _laserPulseCounter = counter;
                     }
 
-                    DIALS();
+                    UpdateDashboard();
 
-                    if (QQ11 != 0 && ((QQ11 & PATG) & 1) == 0)
+                    if (_viewType != 0 && ((_viewType & AuthorNamesShown) & 1) == 0)
                     {
-                        DELAY(2);
+                        Delay(2);
                     }
-                    else if (QQ12 != 0)
+                    else if (_docked != 0)
                     {
                         // The docked loop doesn't go through TT100, so make
                         // sure it doesn't spin without sending frames
-                        WSCAN();
+                        WaitForVsync();
                     }
 
-                    key = TT17(out cursorX, out cursorY);
+                    key = ReadCursorKeys(out cursorX, out cursorY);
                 }
 
                 startAtFrce = false;
 
                 // FRCE: process the key
-                TT102(key, cursorX, cursorY);
+                ProcessKey(key, cursorX, cursorY);
                 cursorX = cursorY = 0;
 
                 // If we are docked, loop back to MLOOP, otherwise TT100
-                startAtMloop = QQ12 != 0;
+                startAtMloop = _docked != 0;
             }
             catch (GameJumpException jump) when (jump.Target == GameJump.ForceKey)
             {
@@ -164,26 +164,26 @@ public sealed partial class EliteGame
     /// TT100 (main game loop parts 1 to 4): call the main flight loop, remove
     /// in-flight messages, and potentially spawn new ships.
     /// </summary>
-    private void TT100()
+    private void MainLoopIteration()
     {
         ThrottleMainLoop();
         RunDebugCommands();
-        M();
+        MainFlightLoop();
 
         // Count down the in-flight message delay
-        DLY = (DLY - 1) & 0xFF;
-        if (DLY == 0)
+        _messageDelay = (_messageDelay - 1) & 0xFF;
+        if (_messageDelay == 0)
         {
-            me2();
+            RemoveMessage();
         }
-        else if ((DLY & 0x80) != 0)
+        else if ((_messageDelay & 0x80) != 0)
         {
-            DLY = (DLY + 1) & 0xFF;
+            _messageDelay = (_messageDelay + 1) & 0xFF;
         }
 
         // me3
-        MCNT = (MCNT - 1) & 0xFF;
-        if (MCNT != 0)
+        _mainLoopCounter = (_mainLoopCounter - 1) & 0xFF;
+        if (_mainLoopCounter != 0)
         {
             return;
         }
@@ -194,126 +194,126 @@ public sealed partial class EliteGame
     /// <summary>Main game loop parts 1 to 4: spawn traders, junk, cops, pirates, bounty hunters and Thargoids.</summary>
     private void SpawnShips()
     {
-        if (MJ != 0)
+        if (_inWitchspace != 0)
         {
             return;
         }
 
-        int a = DORND();
-        if (a < 35 && Junk < 3)
+        int random = NextRandom();
+        if (random < 35 && _junkCount < 3)
         {
             // Spawn a trader, asteroid or cargo canister
-            ZINF();
-            INWK.Z = 38 * 256;
-            a = DORND();
-            int x = _randX;
+            ResetWorkspace();
+            _currentShip.Z = 38 * 256;
+            random = NextRandom();
+            int randomX = _randomX;
 
             // ROL x_hi twice sets bit 1 of x_hi to the C flag
             int xHi = _carry ? 2 : 0;
-            INWK.X = ComposeCoordinate(a, xHi, a & 0x80);
-            INWK.Y = ComposeCoordinate(x, 0, x & 0x80);
+            _currentShip.X = ComposeCoordinate(random, xHi, random & 0x80);
+            _currentShip.Y = ComposeCoordinate(randomX, 0, randomX & 0x80);
 
-            a = DORND();
-            x = _randX;
+            random = NextRandom();
+            randomX = _randomX;
             if (_overflow)
             {
                 // MTT4: spawn a trader, and then fall through into TT100 to
                 // run the main flight loop again
-                MTT4();
-                TT100();
+                SpawnTrader();
+                MainLoopIteration();
                 return;
             }
 
-            INWK.RollCounter = a | 0b01101111;
-            if (SSPR != 0)
+            _currentShip.RollCounter = random | 0b01101111;
+            if (InSafeZone != 0)
             {
                 return;
             }
 
-            a = x;
+            random = randomX;
             if (_carry)
             {
                 // MTT2
-                INWK.PitchCounter = a | 0b01111111;
+                _currentShip.PitchCounter = random | 0b01111111;
             }
             else
             {
-                INWK.Speed = (a & 31) | 16;
+                _currentShip.Speed = (random & 31) | 16;
             }
 
             // MTT3
-            a = DORND();
+            random = NextRandom();
             int type;
-            if (a >= 252)
+            if (random >= 252)
             {
                 type = ShipType.RockHermit;
-                INWK.Ai = ShipType.RockHermit;
+                _currentShip.Ai = ShipType.RockHermit;
             }
             else
             {
                 // thongs: C is set if A >= 10
-                type = (a & 1) + ShipType.CargoCanister + (a >= 10 ? 1 : 0);
+                type = (random & 1) + ShipType.CargoCanister + (random >= 10 ? 1 : 0);
             }
 
-            NWSHP(type);
+            AddShip(type);
         }
 
         // MTT1 (part 3): potentially spawn a cop
-        if (SSPR != 0)
+        if (InSafeZone != 0)
         {
             return;
         }
 
-        int badness = (BAD() << 1) & 0xFF;
-        if (Many[ShipType.Viper] != 0)
+        int badness = (ContrabandBadness() << 1) & 0xFF;
+        if (_shipCounts[ShipType.Viper] != 0)
         {
-            badness |= FIST;
+            badness |= _legalStatus;
         }
 
-        a = Ze();
-        if (a == 136)
+        random = SetUpDistantShip();
+        if (random == 136)
         {
             // fothg: spawn a Thargoid, or very rarely a Cougar
             if ((Planet.ZLo & 0b00111110) == 0)
             {
-                INWK.Speed = 18;
-                INWK.Ai = 0b01111001;
-                NWSHP(ShipType.Cougar);
+                _currentShip.Speed = 18;
+                _currentShip.Ai = 0b01111001;
+                AddShip(ShipType.Cougar);
                 return;
             }
 
             // fothg2
-            GTHG();
+            SpawnThargoid();
             SpawnPiratesOrBountyHunter();
             return;
         }
 
-        if (a < badness)
+        if (random < badness)
         {
-            NWSHP(ShipType.Viper);
+            AddShip(ShipType.Viper);
         }
 
-        if (Many[ShipType.Viper] != 0)
+        if (_shipCounts[ShipType.Viper] != 0)
         {
             return;
         }
 
         // Part 4
-        EV = (EV - 1) & 0xFF;
-        if ((EV & 0x80) == 0)
+        _extraVesselsDelay = (_extraVesselsDelay - 1) & 0xFF;
+        if ((_extraVesselsDelay & 0x80) == 0)
         {
             return;
         }
 
-        EV = (EV + 1) & 0xFF;
+        _extraVesselsDelay = (_extraVesselsDelay + 1) & 0xFF;
 
-        if ((TP & 0b00001100) == 0b00001000)
+        if ((_missionStatus & 0b00001100) == 0b00001000)
         {
-            a = DORND();
-            if (a >= 220)
+            random = NextRandom();
+            if (random >= 220)
             {
                 // fothg2
-                GTHG();
+                SpawnThargoid();
             }
         }
 
@@ -324,26 +324,26 @@ public sealed partial class EliteGame
     /// MTT4: spawn a trader (a Cobra Mk III, Python, Boa or Anaconda) using the
     /// position already set up in INWK.
     /// </summary>
-    private void MTT4()
+    private void SpawnTrader()
     {
-        int a = DORND() >> 1;
-        INWK.Ai = a;
-        INWK.RollCounter = a;
-        INWK.Speed = (a & 31) | 16;
+        int random = NextRandom() >> 1;
+        _currentShip.Ai = random;
+        _currentShip.RollCounter = random;
+        _currentShip.Speed = (random & 31) | 16;
 
-        a = DORND();
-        if ((a & 0x80) == 0)
+        random = NextRandom();
+        if ((random & 0x80) == 0)
         {
             // Spawn a ship that is trying to dock
-            INWK.Ai |= 0b11000000;
-            INWK.Newb = 0b00010000;
+            _currentShip.Ai |= 0b11000000;
+            _currentShip.Behaviour = 0b00010000;
         }
 
         // nodo: A = 0 or 2, plus the C flag from DORND
-        int type = (a & 2) + (_carry ? 1 : 0) + ShipType.CobraMkIII;
+        int type = (random & 2) + (_carry ? 1 : 0) + ShipType.CobraMkIII;
         if (type != ShipType.RockHermit)
         {
-            NWSHP(type);
+            AddShip(type);
         }
     }
 
@@ -353,28 +353,28 @@ public sealed partial class EliteGame
     /// </summary>
     private void SpawnPiratesOrBountyHunter()
     {
-        int a = DORND();
-        if (gov != 0)
+        int random = NextRandom();
+        if (_government != 0)
         {
-            if (a >= 90 || (a & 7) < gov)
+            if (random >= 90 || (random & 7) < _government)
             {
                 return;
             }
         }
 
         // LABEL_2
-        a = Ze();
-        if (a >= 100)
+        random = SetUpDistantShip();
+        if (random >= 100)
         {
             // mt1: spawn a group of pirates
-            a &= 3;
-            EV = a;
-            int count = a;
+            random &= 3;
+            _extraVesselsDelay = random;
+            int count = random;
             do
             {
-                int t = DORND();
-                a = DORND() & t & 7;
-                NWSHP(a + ShipType.PackHunters + (_carry ? 1 : 0));
+                int mask = NextRandom();
+                random = NextRandom() & mask & 7;
+                AddShip(random + ShipType.PackHunters + (_carry ? 1 : 0));
                 count--;
             }
             while (count >= 0);
@@ -382,27 +382,27 @@ public sealed partial class EliteGame
             return;
         }
 
-        EV = (EV + 1) & 0xFF;
+        _extraVesselsDelay = (_extraVesselsDelay + 1) & 0xFF;
 
         // The C flag is clear here as we passed through the BCS above
-        int type = (a & 3) + ShipType.CobraMkIIIPirate;
-        if (THERE())
+        int type = (random & 3) + ShipType.CobraMkIIIPirate;
+        if (InConstrictorSystem())
         {
-            INWK.Ai = 0b11111001;
-            int tp = TP & 0b00000011;
-            if ((tp & 1) != 0 && ((tp >> 1) | Many[ShipType.Constrictor]) == 0)
+            _currentShip.Ai = 0b11111001;
+            int mission1Status = _missionStatus & 0b00000011;
+            if ((mission1Status & 1) != 0 && ((mission1Status >> 1) | _shipCounts[ShipType.Constrictor]) == 0)
             {
                 // YESCON: spawn the Constrictor
-                NWSHP(ShipType.Constrictor);
+                AddShip(ShipType.Constrictor);
                 return;
             }
         }
 
         // NOCON
-        INWK.Newb = 0b00000100;
-        a = DORND();
-        INWK.Ai = (((a << 1) | (a >= 200 ? 1 : 0)) & 0xFF) | 0b11000000;
-        NWSHP(type);
+        _currentShip.Behaviour = 0b00000100;
+        random = NextRandom();
+        _currentShip.Ai = (((random << 1) | (random >= 200 ? 1 : 0)) & 0xFF) | 0b11000000;
+        AddShip(type);
     }
 
     /// <summary>Compose a signed coordinate from sign-magnitude bytes.</summary>
@@ -416,63 +416,63 @@ public sealed partial class EliteGame
     /// TT102: process function keys, the save key, hyperspace and chart keys,
     /// and update the hyperspace countdown.
     /// </summary>
-    private void TT102(int key, int cursorX, int cursorY)
+    private void ProcessKey(int key, int cursorX, int cursorY)
     {
         switch (key)
         {
-            case f8:
-                STATUS();
+            case FunctionKey8:
+                ShowStatus();
                 return;
-            case f4:
-                TT22();
+            case FunctionKey4:
+                ShowLongRangeChart();
                 return;
-            case f5:
-                TT23();
+            case FunctionKey5:
+                ShowShortRangeChart();
                 return;
-            case f6:
-                TT111();
-                TT25();
+            case FunctionKey6:
+                SelectNearestSystem();
+                ShowSystemData();
                 return;
-            case f9:
-                TT213();
+            case FunctionKey9:
+                ShowInventory();
                 return;
-            case f7:
-                TT167();
+            case FunctionKey7:
+                ShowMarketPrices();
                 return;
-            case f0:
-                TT110();
+            case FunctionKey0:
+                Launch();
                 return;
         }
 
         // fvw
-        if ((QQ12 & 0x80) != 0)
+        if ((_docked & 0x80) != 0)
         {
             // We are docked
-            if (key == f3)
+            if (key == FunctionKey3)
             {
-                EQSHP();
+                ShowEquipShip();
                 return;
             }
 
-            if (key == f1)
+            if (key == FunctionKey1)
             {
-                TT219();
+                ShowBuyCargo();
                 return;
             }
 
             if (key == '@')
             {
-                if (SVE())
+                if (DiscAccessMenu())
                 {
-                    throw new GameJumpException(GameJump.QU5);
+                    throw new GameJumpException(GameJump.LoadDefaultCommander);
                 }
 
-                BAY();
+                GoToDockingBay();
             }
 
-            if (key == f2)
+            if (key == FunctionKey2)
             {
-                TT208();
+                ShowSellCargo();
                 return;
             }
         }
@@ -481,276 +481,276 @@ public sealed partial class EliteGame
             // INSP: change the space view
             switch (key)
             {
-                case f1:
-                    LOOK1(1);
+                case FunctionKey1:
+                    SwitchView(1);
                     return;
-                case f2:
-                    LOOK1(2);
+                case FunctionKey2:
+                    SwitchView(2);
                     return;
-                case f3:
-                    LOOK1(3);
+                case FunctionKey3:
+                    SwitchView(3);
                     return;
             }
         }
 
         // LABEL_3
-        if (KL == 'H')
+        if (_keyPressed == 'H')
         {
-            hyp();
+            StartHyperspace();
             return;
         }
 
-        if (KL == 'D')
+        if (_keyPressed == 'D')
         {
-            T95();
+            PrintDistanceToSystem();
             return;
         }
 
-        if (KL == 'F')
+        if (_keyPressed == 'F')
         {
-            if (QQ12 != 0 && (QQ11 & 0b11000000) != 0)
+            if (_docked != 0 && (_viewType & 0b11000000) != 0)
             {
-                HME2();
+                FindSystem();
             }
 
             return;
         }
 
         // HME1
-        if ((QQ11 & 0b11000000) != 0 && QQ22Hi == 0)
+        if ((_viewType & 0b11000000) != 0 && _hyperspaceCountdown == 0)
         {
-            if (KL == 'O')
+            if (_keyPressed == 'O')
             {
-                TT103();
-                ping();
-                TT103();
+                DrawSmallCrosshairs();
+                MoveCrosshairsHome();
+                DrawSmallCrosshairs();
                 return;
             }
 
             // ee2: move the crosshairs
-            TT16(cursorX, cursorY);
+            MoveCrosshairs(cursorX, cursorY);
         }
 
         // TT107: update the hyperspace countdown
-        if (QQ22Hi == 0)
+        if (_hyperspaceCountdown == 0)
         {
             return;
         }
 
-        QQ22 = (QQ22 - 1) & 0xFF;
-        if (QQ22 != 0)
+        _hyperspaceTicks = (_hyperspaceTicks - 1) & 0xFF;
+        if (_hyperspaceTicks != 0)
         {
             return;
         }
 
-        ee3(QQ22Hi - 1);
-        QQ22 = 5;
-        ee3(QQ22Hi);
-        QQ22Hi--;
-        if (QQ22Hi != 0)
+        PrintHyperspaceCountdown(_hyperspaceCountdown - 1);
+        _hyperspaceTicks = 5;
+        PrintHyperspaceCountdown(_hyperspaceCountdown);
+        _hyperspaceCountdown--;
+        if (_hyperspaceCountdown != 0)
         {
             return;
         }
 
-        TT18();
+        Hyperspace();
     }
 
     /// <summary>T95: print the distance to the selected system.</summary>
-    private void T95()
+    private void PrintDistanceToSystem()
     {
-        if ((QQ11 & 0b11000000) == 0)
+        if ((_viewType & 0b11000000) == 0)
         {
             return;
         }
 
-        hm();
-        cpl();
-        QQ17 = 0x80;
-        TT26(12);
-        TT146();
+        MoveCrosshairsToNearestSystem();
+        PrintSystemName();
+        _textCase = 0x80;
+        PrintCharacter(12);
+        PrintDistance();
     }
 
     /// <summary>BAD: calculate how bad we have been from the amount of contraband in our hold.</summary>
-    private int BAD() => ((QQ20[3] + QQ20[6]) * 2 + QQ20[10]) & 0xFF;
+    private int ContrabandBadness() => ((_cargo[3] + _cargo[6]) * 2 + _cargo[10]) & 0xFF;
 
     /// <summary>
     /// FAROF2: returns true (C set) if INWK is within distance A of us in all
     /// three axes (i.e. x_hi, y_hi and z_hi are all less than or equal to A).
     /// </summary>
-    private bool FAROF2(int a) => a >= INWK.XHi && a >= INWK.YHi && a >= INWK.ZHi;
+    private bool IsWithinDistance(int distance) => distance >= _currentShip.XHi && distance >= _currentShip.YHi && distance >= _currentShip.ZHi;
 
     /// <summary>FAROF: FAROF2 with a distance of 224.</summary>
-    private bool FAROF() => FAROF2(224);
+    private bool IsNearby() => IsWithinDistance(224);
 
     /// <summary>MAS4: OR A with the high bytes of the ship's coordinates.</summary>
-    private int MAS4(int a) => a | INWK.XHi | INWK.YHi | INWK.ZHi;
+    private int OrCoordinateHighBytes(int value) => value | _currentShip.XHi | _currentShip.YHi | _currentShip.ZHi;
 
     /// <summary>DEATH: display the death screen.</summary>
-    private void DEATH()
+    private void ShowDeathScreen()
     {
-        NOISE(soexpl);
-        RES2();
-        DELTA = (DELTA << 2) & 0xFF;
-        DET1(24);
-        TT66(13);
-        QQ11 = 0;
-        BOX();
-        nWq();
-        COL = CYAN;
-        XC = 12;
-        YC = 12;
-        ex(146);
+        MakeSound(SoundExplosion);
+        ResetFlight();
+        _speed = (_speed << 2) & 0xFF;
+        SetDashboardRows(24);
+        ClearScreen(13);
+        _viewType = 0;
+        DrawBorderBox();
+        CreateStardust();
+        _colour = Cyan;
+        _cursorX = 12;
+        _cursorY = 12;
+        PrintRecursiveToken(146);
 
         do
         {
             // D1
-            int a = Ze();
-            int x = _randX;
-            a >>= 2;
-            int xLo = a;
-            MCNT = 0xFF;
-            int yLo = a ^ 0b00101010;
+            int random = SetUpDistantShip();
+            int randomX = _randomX;
+            random >>= 2;
+            int xLo = random;
+            _mainLoopCounter = 0xFF;
+            int yLo = random ^ 0b00101010;
             int zLo = yLo | 0b01010000;
-            INWK.X = ComposeCoordinate(xLo, 0, INWK.XSign & 0x80);
-            INWK.Y = ComposeCoordinate(yLo, 0, INWK.YSign & 0x80);
-            INWK.Z = zLo;
-            INWK.Ai = 0;
-            int roll = x & 0b10001111;
-            INWK.RollCounter = roll;
-            LASCT = 64;
+            _currentShip.X = ComposeCoordinate(xLo, 0, _currentShip.XSign & 0x80);
+            _currentShip.Y = ComposeCoordinate(yLo, 0, _currentShip.YSign & 0x80);
+            _currentShip.Z = zLo;
+            _currentShip.Ai = 0;
+            int roll = randomX & 0b10001111;
+            _currentShip.RollCounter = roll;
+            _laserPulseCounter = 64;
 
             // SEC, ROR A
-            INWK.PitchCounter = ((roll >> 1) | 0x80) & 0b10000111;
+            _currentShip.PitchCounter = ((roll >> 1) | 0x80) & 0b10000111;
 
             // The byte at XX21 + 7 is always non-zero, so this depends on
             // the C flag, which was set by the ROR above to bit 0 of the roll
             int type = (roll & 1) != 0 ? ShipType.AlloyPlate : ShipType.CargoCanister;
-            fq1(type);
+            LaunchFromShip(type);
 
-            int killed = DORND() & 0x80;
-            if (INF != null)
+            int killed = NextRandom() & 0x80;
+            if (_slotShip != null)
             {
-                INF.Flags = killed;
+                _slotShip.Flags = killed;
             }
         }
         while (Slots[4] == null);
 
-        DELTA = 0;
+        _speed = 0;
         ThrottleMainLoop();
-        M();
+        MainFlightLoop();
 
         do
         {
             ThrottleMainLoop();
-            M();
-            LASCT = (LASCT - 1) & 0xFF;
+            MainFlightLoop();
+            _laserPulseCounter = (_laserPulseCounter - 1) & 0xFF;
         }
-        while (LASCT != 0);
+        while (_laserPulseCounter != 0);
 
-        DET1(31);
-        throw new GameJumpException(GameJump.Death2);
+        SetDashboardRows(31);
+        throw new GameJumpException(GameJump.RestartAfterDeath);
     }
 
     /// <summary>DOENTRY: dock at the space station, show the ship hangar and work out any mission progression.</summary>
-    private void DOENTRY()
+    private void DockAtStation()
     {
-        RES2();
-        LAUN();
-        DELTA = 0;
-        GNTMP = 0;
-        QQ22Hi = 0;
-        FSH = 0xFF;
-        ASH = 0xFF;
-        ENERGY = 0xFF;
-        HALL();
-        DELAY(44);
+        ResetFlight();
+        LaunchTunnel();
+        _speed = 0;
+        _laserTemperature = 0;
+        _hyperspaceCountdown = 0;
+        _forwardShield = 0xFF;
+        _aftShield = 0xFF;
+        _energy = 0xFF;
+        DrawHangar();
+        Delay(44);
 
-        int missionStatus = TP & 0b00000011;
+        int missionStatus = _missionStatus & 0b00000011;
         if (missionStatus == 0)
         {
-            if ((TALLY >> 8) != 0 && (GCNT >> 1) == 0)
+            if ((_killTally >> 8) != 0 && (_galaxyNumber >> 1) == 0)
             {
-                BRIEF();
+                StartMission1();
             }
 
-            BAY();
+            GoToDockingBay();
         }
 
         if (missionStatus == 0b00000011)
         {
-            DEBRIEF();
+            FinishMission1();
         }
 
         // EN2: mission 2
-        if (GCNT == 2)
+        if (_galaxyNumber == 2)
         {
-            int status = TP & 0b00001111;
+            int status = _missionStatus & 0b00001111;
             if (status == 0b00000010)
             {
-                if ((TALLY >> 8) >= 5)
+                if ((_killTally >> 8) >= 5)
                 {
-                    BRIEF2();
+                    StartMission2();
                 }
             }
             else if (status == 0b00000110)
             {
-                if (QQ0 == 215 && QQ1 == 84)
+                if (_currentSystemX == 215 && _currentSystemY == 84)
                 {
-                    BRIEF3();
+                    ShowMission2Briefing();
                 }
             }
             else if (status == 0b00001010)
             {
-                if (QQ0 == 63 && QQ1 == 72)
+                if (_currentSystemX == 63 && _currentSystemY == 72)
                 {
-                    DEBRIEF2();
+                    FinishMission2();
                 }
             }
         }
 
         // EN4
-        BAY();
+        GoToDockingBay();
     }
 
     /// <summary>
     /// ESCAPE: launch our escape pod, watch our Cobra fly off, and dock at the
     /// station with our cargo and legal status wiped.
     /// </summary>
-    private void ESCAPE()
+    private void LaunchEscapePod()
     {
-        RES2();
-        TYPE = ShipType.CobraMkIII;
-        if (!FRS1(ShipType.CobraMkIII))
+        ResetFlight();
+        _shipType = ShipType.CobraMkIII;
+        if (!LaunchFromUs(ShipType.CobraMkIII))
         {
-            FRS1(ShipType.CobraMkIIIPirate);
+            LaunchFromUs(ShipType.CobraMkIIIPirate);
         }
 
         // ES1: set up the Cobra that we just launched from (the new ship is
         // still in INWK)
-        INWK.Speed = 8;
-        INWK.PitchCounter = 194;
-        INWK.Ai = 194 >> 1;
+        _currentShip.Speed = 8;
+        _currentShip.PitchCounter = 194;
+        _currentShip.Ai = 194 >> 1;
 
         do
         {
             // ESL1
-            MVEIT();
-            if ((QQ11 | VIEW) == 0)
+            MoveShip();
+            if ((_viewType | _view) == 0)
             {
-                LL9();
+                DrawShip();
             }
 
-            INWK.Ai = (INWK.Ai - 1) & 0xFF;
+            _currentShip.Ai = (_currentShip.Ai - 1) & 0xFF;
             ThrottleMainLoop();
         }
-        while (INWK.Ai != 0);
+        while (_currentShip.Ai != 0);
 
-        SCAN();
+        DrawOnScanner();
 
-        Array.Clear(QQ20);
-        FIST = 0;
-        ESCP = 0;
-        QQ14 = 70;
-        DOENTRY();
+        Array.Clear(_cargo);
+        _legalStatus = 0;
+        _escapePod = 0;
+        _fuel = 70;
+        DockAtStation();
     }
 }

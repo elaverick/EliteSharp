@@ -6,9 +6,9 @@ namespace EliteSharp.Game;
 public sealed partial class EliteGame
 {
     /// <summary>NOISE: make a sound effect, unless sound is disabled.</summary>
-    private void NOISE(int y)
+    private void MakeSound(int y)
     {
-        if (DNOIZ != 0)
+        if (_soundDisabled != 0)
         {
             return;
         }
@@ -17,22 +17,22 @@ public sealed partial class EliteGame
     }
 
     /// <summary>BEEP: make a short, high beep.</summary>
-    private void BEEP() => NOISE(sobeep);
+    private void Beep() => MakeSound(SoundBeep);
 
     /// <summary>BOOP: make a long, low beep.</summary>
-    private void BOOP() => NOISE(soboop);
+    private void Boop() => MakeSound(SoundBoop);
 
     /// <summary>LASNO: make the sound of our laser firing.</summary>
-    private void LASNO()
+    private void LaserSound()
     {
-        NOISE(solaser);
-        NOISE(solas2);
+        MakeSound(SoundLaser);
+        MakeSound(SoundLaser2);
     }
 
     /// <summary>ELASNO: make the sound of us being hit by lasers.</summary>
-    private void ELASNO()
+    private void HitByLaserSound()
     {
-        NOISE(9);
-        NOISE(solas2);
+        MakeSound(9);
+        MakeSound(SoundLaser2);
     }
 }

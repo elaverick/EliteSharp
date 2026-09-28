@@ -13,34 +13,47 @@ namespace EliteSharp.Game;
 /// </summary>
 public sealed partial class EliteGame
 {
-    /// <summary>XX3: the screen coordinates of each vertex (16-bit x and y, as raw two's complement words).</summary>
-    private readonly int[] XX3X = new int[64];
-    private readonly int[] XX3Y = new int[64];
+    /// <summary>XX3: the screen x-coordinate of each vertex (a 16-bit two's complement word).</summary>
+    private readonly int[] _projectedX = new int[64];
 
-    /// <summary>The 3D coordinates of each vertex, relative to our ship, as calculated in LL9.</summary>
+    /// <summary>XX3: the screen y-coordinate of each vertex (a 16-bit two's complement word).</summary>
+    private readonly int[] _projectedY = new int[64];
+
+    /// <summary>The x-coordinate of each vertex, relative to our ship, as calculated in LL9.</summary>
     private readonly int[] VertexX = new int[64];
+
+    /// <summary>The y-coordinate of each vertex, relative to our ship, as calculated in LL9.</summary>
     private readonly int[] VertexY = new int[64];
+
+    /// <summary>The z-coordinate of each vertex, relative to our ship, as calculated in LL9.</summary>
     private readonly int[] VertexZ = new int[64];
 
-    /// <summary>XX2: the visibility of each face (shares memory with K3 in the original).</summary>
-    private int[] XX2 => K3Faces;
+    /// <summary>
+    /// XX2: the visibility of each face, which is zero if the face is hidden
+    /// (this shares memory with K3 in the original).
+    /// </summary>
+    private int[] FaceVisibility => _faceVisibility;
 
-    private readonly int[] K3Faces = new int[16];
+    /// <summary>The storage for <see cref="FaceVisibility"/>.</summary>
+    private readonly int[] _faceVisibility = new int[16];
 
     /// <summary>XX4: the distance of the ship, used for level of detail.</summary>
-    private int XX4;
+    private int _shipDistance;
 
     /// <summary>COL: the current colour byte.</summary>
-    private int COL;
+    private int _colour;
 
     // ------------------------------------------------------------------------
     // LL9: drawing ships
     // ------------------------------------------------------------------------
 
     /// <summary>A sign-magnitude byte pair used by the original's 8-bit vector maths.</summary>
-    private struct SmByte(int magnitude, bool negative)
+    private struct SignMagnitudeByte(int magnitude, bool negative)
     {
+        /// <summary>The magnitude (0-255).</summary>
         public int Magnitude = magnitude & 0xFF;
+
+        /// <summary>True if the value is negative (bit 7 of the sign byte).</summary>
         public bool Negative = negative;
     }
 
@@ -48,139 +61,139 @@ public sealed partial class EliteGame
     /// LL38: (S A) = (S R) + (A Q), adding two sign-magnitude bytes, returning
     /// the overflow in the C flag.
     /// </summary>
-    private static SmByte LL38(SmByte first, SmByte second, out bool overflow)
+    private static SignMagnitudeByte AddSignMagnitudeBytes(SignMagnitudeByte first, SignMagnitudeByte second, out bool overflow)
     {
         overflow = false;
         if (first.Negative == second.Negative)
         {
             int sum = first.Magnitude + second.Magnitude;
             overflow = sum > 0xFF;
-            return new SmByte(sum, first.Negative);
+            return new SignMagnitudeByte(sum, first.Negative);
         }
 
         int difference = first.Magnitude - second.Magnitude;
         if (difference >= 0)
         {
-            return new SmByte(difference, first.Negative);
+            return new SignMagnitudeByte(difference, first.Negative);
         }
 
-        return new SmByte(-difference, !first.Negative);
+        return new SignMagnitudeByte(-difference, !first.Negative);
     }
 
     /// <summary>
     /// LL51: calculate the dot products of a vector (three sign-magnitude
     /// bytes) with the three rows of the XX16 matrix.
     /// </summary>
-    private static void LL51(ReadOnlySpan<SmByte> vector, SmByte[] matrix, Span<SmByte> result)
+    private static void MultiplyByMatrix(ReadOnlySpan<SignMagnitudeByte> vector, SignMagnitudeByte[] matrix, Span<SignMagnitudeByte> result)
     {
         for (int row = 0; row < 3; row++)
         {
-            int m = row * 3;
-            var t = new SmByte(EliteMaths.Fmltu(vector[0].Magnitude, matrix[m].Magnitude), vector[0].Negative ^ matrix[m].Negative);
-            var q = new SmByte(EliteMaths.Fmltu(vector[1].Magnitude, matrix[m + 1].Magnitude), vector[1].Negative ^ matrix[m + 1].Negative);
-            t = LL38(t, q, out _);
-            q = new SmByte(EliteMaths.Fmltu(vector[2].Magnitude, matrix[m + 2].Magnitude), vector[2].Negative ^ matrix[m + 2].Negative);
-            result[row] = LL38(t, q, out _);
+            int rowStart = row * 3;
+            var sum = new SignMagnitudeByte(EliteMaths.MultiplyFraction(vector[0].Magnitude, matrix[rowStart].Magnitude), vector[0].Negative ^ matrix[rowStart].Negative);
+            var term = new SignMagnitudeByte(EliteMaths.MultiplyFraction(vector[1].Magnitude, matrix[rowStart + 1].Magnitude), vector[1].Negative ^ matrix[rowStart + 1].Negative);
+            sum = AddSignMagnitudeBytes(sum, term, out _);
+            term = new SignMagnitudeByte(EliteMaths.MultiplyFraction(vector[2].Magnitude, matrix[rowStart + 2].Magnitude), vector[2].Negative ^ matrix[rowStart + 2].Negative);
+            result[row] = AddSignMagnitudeBytes(sum, term, out _);
         }
     }
 
     /// <summary>XX16: the orientation matrix, scaled for use in LL51.</summary>
-    private readonly SmByte[] XX16 = new SmByte[9];
+    private readonly SignMagnitudeByte[] _orientationMatrix = new SignMagnitudeByte[9];
 
     /// <summary>LL9: draw the ship in INWK.</summary>
-    private void LL9()
+    private void DrawShip()
     {
-        if (TYPE >= 128)
+        if (_shipType >= 128)
         {
             // LL25
-            PLANET();
+            DrawPlanetOrSun();
             return;
         }
 
-        var owner = INWK.DisplayOwner;
-        COL = ShipCatalogue.Get(TYPE).Colour;
-        XX4 = 31;
+        var owner = _currentShip.DisplayOwner;
+        _colour = ShipCatalogue.Get(_shipType).Colour;
+        _shipDistance = 31;
 
-        if ((INWK.Newb & 0x80) != 0)
+        if ((_currentShip.Behaviour & 0x80) != 0)
         {
             // The ship has been scooped or has docked
-            EE51(owner);
+            RemoveShipFromScreen(owner);
             return;
         }
 
-        if ((INWK.Flags & Ship.FlagExploding) == 0 && (INWK.Flags & Ship.FlagKilled) != 0)
+        if ((_currentShip.Flags & Ship.FlagExploding) == 0 && (_currentShip.Flags & Ship.FlagKilled) != 0)
         {
             // The ship has just been killed, so start the explosion
-            INWK.Flags = (INWK.Flags | Ship.FlagExploding) & 0b00111111;
-            if (INF != null)
+            _currentShip.Flags = (_currentShip.Flags | Ship.FlagExploding) & 0b00111111;
+            if (_slotShip != null)
             {
-                INF.Acceleration = 0;
-                INF.PitchCounter = 0;
+                _slotShip.Acceleration = 0;
+                _slotShip.PitchCounter = 0;
             }
 
-            EE51(owner);
-            var cloud = INWK.Explosion;
+            RemoveShipFromScreen(owner);
+            var cloud = _currentShip.Explosion;
             cloud.Counter = 18;
-            cloud.CountByte = XX0!.ExplosionCountByte;
+            cloud.CountByte = _blueprint!.ExplosionCountByte;
             for (int i = 0; i < 4; i++)
             {
-                cloud.Seeds[i] = (byte)DORND();
+                cloud.Seeds[i] = (byte)NextRandom();
             }
         }
 
         // EE28
-        if (INWK.Z < 0)
+        if (_currentShip.Z < 0)
         {
-            LL14(owner);
+            DrawShipOutOfView(owner);
             return;
         }
 
         // LL10: check whether the ship is in the field of view
-        if (INWK.ZHi >= 192)
+        if (_currentShip.ZHi >= 192)
         {
-            LL14(owner);
+            DrawShipOutOfView(owner);
             return;
         }
 
-        int z16 = Math.Abs(INWK.Z) & 0xFFFF;
-        if ((Math.Abs(INWK.X) & 0xFFFF) >= z16 || (Math.Abs(INWK.Y) & 0xFFFF) >= z16)
+        int zMagnitude = Math.Abs(_currentShip.Z) & 0xFFFF;
+        if ((Math.Abs(_currentShip.X) & 0xFFFF) >= zMagnitude || (Math.Abs(_currentShip.Y) & 0xFFFF) >= zMagnitude)
         {
-            LL14(owner);
+            DrawShipOutOfView(owner);
             return;
         }
 
         // Mark the gun vertex as not yet projected
-        int gun = XX0!.GunVertex;
-        XX3X[gun] = 0xFFFF;
+        int gun = _blueprint!.GunVertex;
+        _projectedX[gun] = 0xFFFF;
 
         // Calculate the distance for the level of detail
-        if ((INWK.ZHi >> 4) == 0)
+        if ((_currentShip.ZHi >> 4) == 0)
         {
-            XX4 = (z16 >> 7) & 0x1F;
+            _shipDistance = (zMagnitude >> 7) & 0x1F;
         }
-        else if (XX0.VisibilityDistance < INWK.ZHi && (INWK.Flags & Ship.FlagExploding) == 0)
+        else if (_blueprint.VisibilityDistance < _currentShip.ZHi && (_currentShip.Flags & Ship.FlagExploding) == 0)
         {
             // LL13: the ship is too far away, so draw it as a dot
-            SHPPT(owner);
+            DrawShipAsDot(owner);
             return;
         }
 
         // LL17: set up the orientation matrix in XX16 (sidev, roofv, nosev as rows)
-        SetUpMatrixRow(0, INWK.Side);
-        SetUpMatrixRow(1, INWK.Roof);
-        SetUpMatrixRow(2, INWK.Nose);
+        SetUpMatrixRow(0, _currentShip.Side);
+        SetUpMatrixRow(1, _currentShip.Roof);
+        SetUpMatrixRow(2, _currentShip.Nose);
 
-        XX2[15] = 255;
-        var blueprint = XX0;
-        if ((INWK.Flags & Ship.FlagExploding) != 0)
+        FaceVisibility[15] = 255;
+        var blueprint = _blueprint;
+        if ((_currentShip.Flags & Ship.FlagExploding) != 0)
         {
             // All faces are visible when exploding
             for (int f = 0; f < blueprint.Faces.Count; f++)
             {
-                XX2[f] = 255;
+                FaceVisibility[f] = 255;
             }
 
-            XX4 = 0;
+            _shipDistance = 0;
         }
         else
         {
@@ -188,38 +201,38 @@ public sealed partial class EliteGame
         }
 
         // LL42: transpose the matrix so we can rotate the vertices into our frame
-        (XX16[1], XX16[3]) = (XX16[3], XX16[1]);
-        (XX16[2], XX16[6]) = (XX16[6], XX16[2]);
-        (XX16[5], XX16[7]) = (XX16[7], XX16[5]);
+        (_orientationMatrix[1], _orientationMatrix[3]) = (_orientationMatrix[3], _orientationMatrix[1]);
+        (_orientationMatrix[2], _orientationMatrix[6]) = (_orientationMatrix[6], _orientationMatrix[2]);
+        (_orientationMatrix[5], _orientationMatrix[7]) = (_orientationMatrix[7], _orientationMatrix[5]);
 
         ProjectVertices(blueprint);
 
         // LL72
-        if ((INWK.Flags & Ship.FlagExploding) != 0)
+        if ((_currentShip.Flags & Ship.FlagExploding) != 0)
         {
-            INWK.Flags |= Ship.FlagDrawn;
-            DOEXP(owner);
+            _currentShip.Flags |= Ship.FlagDrawn;
+            DrawExplosion(owner);
             return;
         }
 
-        INWK.Flags |= Ship.FlagDrawn;
+        _currentShip.Flags |= Ship.FlagDrawn;
         var image = new ObjectImage();
-        int lsnum = 1;
+        int lineHeapUsed = 1;
         int heapSize = blueprint.LineHeapSize;
 
-        if ((INWK.Flags & Ship.FlagFiring) != 0)
+        if ((_currentShip.Flags & Ship.FlagFiring) != 0)
         {
-            INWK.Flags &= ~Ship.FlagFiring;
-            int gx = XX3X[gun], gy = XX3Y[gun];
-            if ((gx & 0xFF) != 0xFF && ((gx >> 8) & 0xFF) != 0xFF)
+            _currentShip.Flags &= ~Ship.FlagFiring;
+            int gunX = _projectedX[gun], gunY = _projectedY[gun];
+            if ((gunX & 0xFF) != 0xFF && ((gunX >> 8) & 0xFF) != 0xFF)
             {
-                int x2 = INWK.X < 0 ? 255 : 0;
-                int y2 = INWK.ZLo;
-                int sx = ToSigned16(gx), sy = ToSigned16(gy);
-                if (LineOnScreen(sx, sy, x2, y2))
+                int x2 = _currentShip.X < 0 ? 255 : 0;
+                int y2 = _currentShip.ZLo;
+                int gunScreenX = ToSigned16(gunX), gunScreenY = ToSigned16(gunY);
+                if (LineOnScreen(gunScreenX, gunScreenY, x2, y2))
                 {
-                    image.Lines.Add(new ScreenLine(sx, sy, x2, y2, COL));
-                    lsnum += 4;
+                    image.Lines.Add(new ScreenLine(gunScreenX, gunScreenY, x2, y2, _colour));
+                    lineHeapUsed += 4;
                 }
             }
         }
@@ -227,29 +240,29 @@ public sealed partial class EliteGame
         // LL170: draw the visible edges
         foreach (var edge in blueprint.Edges)
         {
-            if (lsnum >= heapSize)
+            if (lineHeapUsed >= heapSize)
             {
                 break;
             }
 
-            if (edge.Visibility < XX4)
+            if (edge.Visibility < _shipDistance)
             {
                 continue;
             }
 
-            if (XX2[edge.Face1] == 0 && XX2[edge.Face2] == 0)
+            if (FaceVisibility[edge.Face1] == 0 && FaceVisibility[edge.Face2] == 0)
             {
                 continue;
             }
 
-            int v1 = edge.Vertex1, v2 = edge.Vertex2;
-            if (!LineOnScreen(ToSigned16(XX3X[v1]), ToSigned16(XX3Y[v1]), ToSigned16(XX3X[v2]), ToSigned16(XX3Y[v2])))
+            int vertex1 = edge.Vertex1, vertex2 = edge.Vertex2;
+            if (!LineOnScreen(ToSigned16(_projectedX[vertex1]), ToSigned16(_projectedY[vertex1]), ToSigned16(_projectedX[vertex2]), ToSigned16(_projectedY[vertex2])))
             {
                 continue;
             }
 
-            image.SpaceLines.Add(new SpaceLine(VertexX[v1], VertexY[v1], VertexZ[v1], VertexX[v2], VertexY[v2], VertexZ[v2], COL));
-            lsnum += 4;
+            image.SpaceLines.Add(new SpaceLine(VertexX[vertex1], VertexY[vertex1], VertexZ[vertex1], VertexX[vertex2], VertexY[vertex2], VertexZ[vertex2], _colour));
+            lineHeapUsed += 4;
         }
 
         _screen.SetImage(owner, image);
@@ -261,8 +274,8 @@ public sealed partial class EliteGame
         for (int axis = 0; axis < 3; axis++)
         {
             int value = v[axis];
-            int a = (Math.Abs(value) >> 7) & 0xFF;
-            XX16[row * 3 + axis] = new SmByte(EliteMaths.Ll28(a, 197), value < 0);
+            int magnitude = (Math.Abs(value) >> 7) & 0xFF;
+            _orientationMatrix[row * 3 + axis] = new SignMagnitudeByte(EliteMaths.DivideFraction(magnitude, 197), value < 0);
         }
     }
 
@@ -278,9 +291,9 @@ public sealed partial class EliteGame
         // Scale the ship's position down until z_hi is zero, counting the
         // number of shifts on top of the normal scale factor
         int shifts = blueprint.NormalScale;
-        int x = Math.Abs(INWK.X) & 0xFFFF;
-        int y = Math.Abs(INWK.Y) & 0xFFFF;
-        int z = Math.Abs(INWK.Z) & 0xFFFF;
+        int x = Math.Abs(_currentShip.X) & 0xFFFF;
+        int y = Math.Abs(_currentShip.Y) & 0xFFFF;
+        int z = Math.Abs(_currentShip.Z) & 0xFFFF;
         while ((z >> 8) != 0)
         {
             shifts++;
@@ -289,57 +302,57 @@ public sealed partial class EliteGame
             z >>= 1;
         }
 
-        int xx17 = shifts;
+        int scaleShifts = shifts;
 
         // Rotate the ship's position into the ship's own frame of reference
-        Span<SmByte> position = stackalloc SmByte[3];
-        Span<SmByte> vector = stackalloc SmByte[3];
-        vector[0] = new SmByte(x, INWK.X < 0);
-        vector[1] = new SmByte(y, INWK.Y < 0);
-        vector[2] = new SmByte(z, INWK.Z < 0);
-        LL51(vector, XX16, position);
+        Span<SignMagnitudeByte> position = stackalloc SignMagnitudeByte[3];
+        Span<SignMagnitudeByte> vector = stackalloc SignMagnitudeByte[3];
+        vector[0] = new SignMagnitudeByte(x, _currentShip.X < 0);
+        vector[1] = new SignMagnitudeByte(y, _currentShip.Y < 0);
+        vector[2] = new SignMagnitudeByte(z, _currentShip.Z < 0);
+        MultiplyByMatrix(vector, _orientationMatrix, position);
 
         for (int f = 0; f < faceCount; f++)
         {
             var face = blueprint.Faces[f];
-            if (face.Visibility < XX4)
+            if (face.Visibility < _shipDistance)
             {
                 // The face is always visible at this distance
-                XX2[f] = 255;
+                FaceVisibility[f] = 255;
                 continue;
             }
 
             // LL87
-            var normal0 = new SmByte(Math.Abs(face.NormalX), face.NormalX < 0);
-            var normal1 = new SmByte(Math.Abs(face.NormalY), face.NormalY < 0);
-            var normal2 = new SmByte(Math.Abs(face.NormalZ), face.NormalZ < 0);
+            var normalX = new SignMagnitudeByte(Math.Abs(face.NormalX), face.NormalX < 0);
+            var normalY = new SignMagnitudeByte(Math.Abs(face.NormalY), face.NormalY < 0);
+            var normalZ = new SignMagnitudeByte(Math.Abs(face.NormalZ), face.NormalZ < 0);
 
-            SmByte v0, v1, v2;
-            if (xx17 >= 4)
+            SignMagnitudeByte vectorX, vectorY, vectorZ;
+            if (scaleShifts >= 4)
             {
                 // LL143: the normal is insignificant compared to the distance
-                v0 = position[0];
-                v1 = position[1];
-                v2 = position[2];
+                vectorX = position[0];
+                vectorY = position[1];
+                vectorZ = position[2];
             }
             else
             {
-                int shift = xx17;
+                int shift = scaleShifts;
                 while (true)
                 {
                     // LL92
-                    int n0 = normal0.Magnitude >> shift;
-                    int n1 = normal1.Magnitude >> shift;
-                    int n2 = normal2.Magnitude >> shift;
+                    int scaledNormalX = normalX.Magnitude >> shift;
+                    int scaledNormalY = normalY.Magnitude >> shift;
+                    int scaledNormalZ = normalZ.Magnitude >> shift;
 
-                    v2 = LL38(new SmByte(n2, normal2.Negative), position[2], out bool o1);
-                    if (!o1)
+                    vectorZ = AddSignMagnitudeBytes(new SignMagnitudeByte(scaledNormalZ, normalZ.Negative), position[2], out bool overflowZ);
+                    if (!overflowZ)
                     {
-                        v0 = LL38(new SmByte(n0, normal0.Negative), position[0], out bool o2);
-                        if (!o2)
+                        vectorX = AddSignMagnitudeBytes(new SignMagnitudeByte(scaledNormalX, normalX.Negative), position[0], out bool overflowX);
+                        if (!overflowX)
                         {
-                            v1 = LL38(new SmByte(n1, normal1.Negative), position[1], out bool o3);
-                            if (!o3)
+                            vectorY = AddSignMagnitudeBytes(new SignMagnitudeByte(scaledNormalY, normalY.Negative), position[1], out bool overflowY);
+                            if (!overflowY)
                             {
                                 break;
                             }
@@ -347,54 +360,54 @@ public sealed partial class EliteGame
                     }
 
                     // ovflw: halve the position and try again
-                    position[0] = new SmByte(position[0].Magnitude >> 1, position[0].Negative);
-                    position[2] = new SmByte(position[2].Magnitude >> 1, position[2].Negative);
-                    position[1] = new SmByte(position[1].Magnitude >> 1, position[1].Negative);
+                    position[0] = new SignMagnitudeByte(position[0].Magnitude >> 1, position[0].Negative);
+                    position[2] = new SignMagnitudeByte(position[2].Magnitude >> 1, position[2].Negative);
+                    position[1] = new SignMagnitudeByte(position[1].Magnitude >> 1, position[1].Negative);
                     shift = 1;
                 }
             }
 
             // LL89: the dot product of the normal with the vector
-            var t = new SmByte(EliteMaths.Fmltu(v0.Magnitude, normal0.Magnitude), normal0.Negative ^ v0.Negative);
-            var q = new SmByte(EliteMaths.Fmltu(v1.Magnitude, normal1.Magnitude), normal1.Negative ^ v1.Negative);
-            t = LL38(t, q, out _);
-            q = new SmByte(EliteMaths.Fmltu(v2.Magnitude, normal2.Magnitude), v2.Negative ^ normal2.Negative);
-            var dot = LL38(t, q, out _);
-            XX2[f] = dot.Negative ? dot.Magnitude : 0;
+            var sum = new SignMagnitudeByte(EliteMaths.MultiplyFraction(vectorX.Magnitude, normalX.Magnitude), normalX.Negative ^ vectorX.Negative);
+            var term = new SignMagnitudeByte(EliteMaths.MultiplyFraction(vectorY.Magnitude, normalY.Magnitude), normalY.Negative ^ vectorY.Negative);
+            sum = AddSignMagnitudeBytes(sum, term, out _);
+            term = new SignMagnitudeByte(EliteMaths.MultiplyFraction(vectorZ.Magnitude, normalZ.Magnitude), vectorZ.Negative ^ normalZ.Negative);
+            var dot = AddSignMagnitudeBytes(sum, term, out _);
+            FaceVisibility[f] = dot.Negative ? dot.Magnitude : 0;
         }
     }
 
     /// <summary>LL9 parts 6 to 8: calculate the 3D and screen coordinates of each visible vertex.</summary>
     private void ProjectVertices(ShipBlueprint blueprint)
     {
-        Span<SmByte> vector = stackalloc SmByte[3];
-        Span<SmByte> rotated = stackalloc SmByte[3];
+        Span<SignMagnitudeByte> vector = stackalloc SignMagnitudeByte[3];
+        Span<SignMagnitudeByte> rotated = stackalloc SignMagnitudeByte[3];
 
         for (int i = 0; i < blueprint.Vertices.Count; i++)
         {
             var vertex = blueprint.Vertices[i];
-            if (vertex.Visibility < XX4)
+            if (vertex.Visibility < _shipDistance)
             {
                 continue;
             }
 
-            if (XX2[vertex.Face1] == 0 && XX2[vertex.Face2] == 0 && XX2[vertex.Face3] == 0 && XX2[vertex.Face4] == 0)
+            if (FaceVisibility[vertex.Face1] == 0 && FaceVisibility[vertex.Face2] == 0 && FaceVisibility[vertex.Face3] == 0 && FaceVisibility[vertex.Face4] == 0)
             {
                 continue;
             }
 
             // LL49: rotate the vertex into our frame of reference
-            vector[0] = new SmByte(Math.Abs(vertex.X), vertex.X < 0);
-            vector[1] = new SmByte(Math.Abs(vertex.Y), vertex.Y < 0);
-            vector[2] = new SmByte(Math.Abs(vertex.Z), vertex.Z < 0);
-            LL51(vector, XX16, rotated);
+            vector[0] = new SignMagnitudeByte(Math.Abs(vertex.X), vertex.X < 0);
+            vector[1] = new SignMagnitudeByte(Math.Abs(vertex.Y), vertex.Y < 0);
+            vector[2] = new SignMagnitudeByte(Math.Abs(vertex.Z), vertex.Z < 0);
+            MultiplyByMatrix(vector, _orientationMatrix, rotated);
 
             // Add the ship's position (as 16-bit sign-magnitude values)
-            int x = AddSigned16(INWK.X, rotated[0]);
-            int y = AddSigned16(INWK.Y, rotated[1]);
+            int x = AddSigned16(_currentShip.X, rotated[0]);
+            int y = AddSigned16(_currentShip.Y, rotated[1]);
 
             // LL55: z, which is clamped to a minimum of 4
-            int zPos = Math.Abs(INWK.Z) & 0xFFFF;
+            int zPos = Math.Abs(_currentShip.Z) & 0xFFFF;
             int z = rotated[2].Negative ? zPos - rotated[2].Magnitude : zPos + rotated[2].Magnitude;
             if (z < 4)
             {
@@ -406,69 +419,69 @@ public sealed partial class EliteGame
             VertexZ[i] = z;
 
             // LL57: scale down until everything fits into a byte
-            int xm = Math.Abs(x), ym = Math.Abs(y), zm = z;
-            while (((zm >> 8) | (xm >> 8) | (ym >> 8)) != 0)
+            int xScaled = Math.Abs(x), yScaled = Math.Abs(y), zScaled = z;
+            while (((zScaled >> 8) | (xScaled >> 8) | (yScaled >> 8)) != 0)
             {
-                xm >>= 1;
-                ym >>= 1;
-                zm >>= 1;
+                xScaled >>= 1;
+                yScaled >>= 1;
+                zScaled >>= 1;
             }
 
             // LL60: project onto the screen
-            int r = ProjectCoordinate(xm, zm, out int u);
-            int value = (r | (u << 8)) & 0xFFFF;
-            XX3X[i] = x < 0 ? (128 - value) & 0xFFFF : (128 + value) & 0xFFFF;
+            int low = ProjectCoordinate(xScaled, zScaled, out int high);
+            int value = (low | (high << 8)) & 0xFFFF;
+            _projectedX[i] = x < 0 ? (128 - value) & 0xFFFF : (128 + value) & 0xFFFF;
 
-            r = ProjectCoordinate(ym, zm, out u);
-            value = (r | (u << 8)) & 0xFFFF;
-            XX3Y[i] = y < 0 ? (CentreY + value) & 0xFFFF : (CentreY - value) & 0xFFFF;
+            low = ProjectCoordinate(yScaled, zScaled, out high);
+            value = (low | (high << 8)) & 0xFFFF;
+            _projectedY[i] = y < 0 ? (CentreY + value) & 0xFFFF : (CentreY - value) & 0xFFFF;
         }
     }
 
     /// <summary>(U R) = 256 * a / q, using LL28 if a &lt; q, or LL61 otherwise.</summary>
-    private static int ProjectCoordinate(int a, int q, out int u)
+    private static int ProjectCoordinate(int numerator, int denominator, out int high)
     {
-        u = 0;
-        if (a < q)
+        high = 0;
+        if (numerator < denominator)
         {
-            return EliteMaths.Ll28(a, q);
+            return EliteMaths.DivideFraction(numerator, denominator);
         }
 
         // LL61
-        if (q == 0)
+        if (denominator == 0)
         {
-            u = 50;
+            high = 50;
             return 50;
         }
 
         int shifts = 0;
         do
         {
-            a >>= 1;
+            numerator >>= 1;
             shifts++;
         }
-        while (a >= q);
+        while (numerator >= denominator);
 
-        int result = EliteMaths.Ll28(a, q);
-        int hi = 0;
+        int result = EliteMaths.DivideFraction(numerator, denominator);
+        int highByte = 0;
         for (int i = 0; i < shifts; i++)
         {
             int carry = (result >> 7) & 1;
             result = (result << 1) & 0xFF;
-            hi = ((hi << 1) | carry) & 0xFF;
-            if ((hi & 0x80) != 0)
+            highByte = ((highByte << 1) | carry) & 0xFF;
+            if ((highByte & 0x80) != 0)
             {
-                u = 50;
+                high = 50;
                 return 50;
             }
         }
 
-        u = hi;
+        high = highByte;
         return result;
     }
 
     /// <summary>Add a rotated vertex coordinate to a ship coordinate using 16-bit sign-magnitude arithmetic.</summary>
-    private static int AddSigned16(int coordinate, SmByte offset)
+    private static int AddSigned16(int coordinate, SignMagnitudeByte offset)
     {
         int magnitude = Math.Abs(coordinate) & 0xFFFF;
         bool negative = coordinate < 0;
@@ -489,6 +502,7 @@ public sealed partial class EliteGame
         return negative ? -magnitude : magnitude;
     }
 
+    /// <summary>Convert a 16-bit two's complement word to a signed value.</summary>
     private static int ToSigned16(int value) => (short)(value & 0xFFFF);
 
     /// <summary>
@@ -497,39 +511,39 @@ public sealed partial class EliteGame
     /// </summary>
     private static bool LineOnScreen(int x1, int y1, int x2, int y2)
     {
-        double t0 = 0, t1 = 1;
+        double entry = 0, exit = 1;
         double dx = x2 - x1, dy = y2 - y1;
 
-        bool Clip(double p, double q)
+        bool Clip(double direction, double distance)
         {
-            if (p == 0)
+            if (direction == 0)
             {
-                return q >= 0;
+                return distance >= 0;
             }
 
-            double r = q / p;
-            if (p < 0)
+            double ratio = distance / direction;
+            if (direction < 0)
             {
-                if (r > t1)
+                if (ratio > exit)
                 {
                     return false;
                 }
 
-                if (r > t0)
+                if (ratio > entry)
                 {
-                    t0 = r;
+                    entry = ratio;
                 }
             }
             else
             {
-                if (r < t0)
+                if (ratio < entry)
                 {
                     return false;
                 }
 
-                if (r < t1)
+                if (ratio < exit)
                 {
-                    t1 = r;
+                    exit = ratio;
                 }
             }
 
@@ -540,45 +554,45 @@ public sealed partial class EliteGame
     }
 
     /// <summary>LL14: the ship is not in view, so draw the explosion cloud if it's exploding, or erase it.</summary>
-    private void LL14(object owner)
+    private void DrawShipOutOfView(object owner)
     {
-        if ((INWK.Flags & Ship.FlagExploding) == 0)
+        if ((_currentShip.Flags & Ship.FlagExploding) == 0)
         {
-            EE51(owner);
+            RemoveShipFromScreen(owner);
             return;
         }
 
-        INWK.Flags &= ~Ship.FlagDrawn;
-        DOEXP(owner);
+        _currentShip.Flags &= ~Ship.FlagDrawn;
+        DrawExplosion(owner);
     }
 
     /// <summary>EE51: remove the ship from the screen if it is on-screen.</summary>
-    private void EE51(object owner)
+    private void RemoveShipFromScreen(object owner)
     {
-        if ((INWK.Flags & Ship.FlagDrawn) != 0)
+        if ((_currentShip.Flags & Ship.FlagDrawn) != 0)
         {
-            INWK.Flags &= ~Ship.FlagDrawn;
+            _currentShip.Flags &= ~Ship.FlagDrawn;
         }
 
         _screen.RemoveImage(owner);
     }
 
     /// <summary>SHPPT: draw a distant ship as a dot.</summary>
-    private void SHPPT(object owner)
+    private void DrawShipAsDot(object owner)
     {
         var image = new ObjectImage();
-        if (PROJ(out int x, out int y) && (x >> 8) == 0 && (y >> 8) == 0 && y < 2 * CentreY - 2)
+        if (ProjectToScreen(out int x, out int y) && (x >> 8) == 0 && (y >> 8) == 0 && y < 2 * CentreY - 2)
         {
             // Shpt: draw a four-pixel dash on two rows
             int x2 = Math.Min(x + 3, 255);
-            image.Lines.Add(new ScreenLine(x, y, x2, y, COL));
-            image.Lines.Add(new ScreenLine(x, y + 1, x2, y + 1, COL));
-            INWK.Flags |= Ship.FlagDrawn;
+            image.Lines.Add(new ScreenLine(x, y, x2, y, _colour));
+            image.Lines.Add(new ScreenLine(x, y + 1, x2, y + 1, _colour));
+            _currentShip.Flags |= Ship.FlagDrawn;
         }
         else
         {
             // nono
-            INWK.Flags &= ~Ship.FlagDrawn;
+            _currentShip.Flags &= ~Ship.FlagDrawn;
         }
 
         _screen.SetImage(owner, image);
@@ -589,36 +603,36 @@ public sealed partial class EliteGame
     /// if it's too far off-screen. The results are K3 (x) and K4 (y) as 16-bit
     /// two's complement values.
     /// </summary>
-    private bool PROJ(out int k3, out int k4)
+    private bool ProjectToScreen(out int screenX, out int screenY)
     {
-        k3 = 0;
-        k4 = 0;
-        if (!PLS6(INWK.X, out int x))
+        screenX = 0;
+        screenY = 0;
+        if (!DivideByDistance(_currentShip.X, out int x))
         {
             return false;
         }
 
-        k3 = (x + CentreX) & 0xFFFF;
-        if (!PLS6(-INWK.Y, out int y))
+        screenX = (x + CentreX) & 0xFFFF;
+        if (!DivideByDistance(-_currentShip.Y, out int y))
         {
             return false;
         }
 
-        k4 = (y + CentreY) & 0xFFFF;
+        screenY = (y + CentreY) & 0xFFFF;
         return true;
     }
 
     /// <summary>PLS6: calculate 256 * value / z, returning false if the result is 1024 or more.</summary>
-    private bool PLS6(int value, out int result)
+    private bool DivideByDistance(int value, out int result)
     {
-        int k = EliteMaths.Dvid3B2(value, INWK.Z);
+        int scaled = EliteMaths.DivideScaled(value, _currentShip.Z);
         result = 0;
-        if (Math.Abs(k) >= 1024)
+        if (Math.Abs(scaled) >= 1024)
         {
             return false;
         }
 
-        result = k;
+        result = scaled;
         return true;
     }
 
@@ -627,28 +641,28 @@ public sealed partial class EliteGame
     // ------------------------------------------------------------------------
 
     /// <summary>DOEXP: draw an exploding ship.</summary>
-    private void DOEXP(object owner)
+    private void DrawExplosion(object owner)
     {
-        var cloud = INWK.Explosion;
-        if ((INWK.Flags & Ship.FlagOnScreenCloud) != 0)
+        var cloud = _currentShip.Explosion;
+        if ((_currentShip.Flags & Ship.FlagOnScreenCloud) != 0)
         {
             // Erase the existing cloud (which, as in the original, reseeds the
             // random number generator)
-            PTCLS(null);
+            DrawExplosionCloud(null);
             _screen.RemoveImage(owner);
         }
 
         // Work out the cloud's size from its distance and counter
-        int zHi = INWK.ZHi;
-        int q;
+        int zHi = _currentShip.ZHi;
+        int distanceFactor;
         if (zHi >= 32)
         {
-            q = 0xFE;
+            distanceFactor = 0xFE;
         }
         else
         {
-            int z = ((zHi << 8) | INWK.ZLo) >> 6;
-            q = ((z << 1) | 1) & 0xFF;
+            int z = ((zHi << 8) | _currentShip.ZLo) >> 6;
+            distanceFactor = ((z << 1) | 1) & 0xFF;
         }
 
         // The ADC #4 includes the C flag, which is set if z_hi >= 32 (from the
@@ -657,26 +671,26 @@ public sealed partial class EliteGame
         if (counter > 0xFF)
         {
             // EX2: the explosion has finished
-            INWK.Flags |= 0b10100000;
+            _currentShip.Flags |= 0b10100000;
             return;
         }
 
         cloud.Counter = counter;
-        EliteMaths.Dvid4(counter, q, out int p, out int r);
+        EliteMaths.DivideWithRemainder(counter, distanceFactor, out int sizeInteger, out int sizeFraction);
         int size;
-        if (p >= 0x1C)
+        if (sizeInteger >= 0x1C)
         {
             size = 0xFE;
         }
         else
         {
-            size = ((p << 3) | (r >> 5)) & 0xFF;
+            size = ((sizeInteger << 3) | (sizeFraction >> 5)) & 0xFF;
         }
 
         cloud.Size = size;
-        INWK.Flags &= ~Ship.FlagOnScreenCloud;
+        _currentShip.Flags &= ~Ship.FlagOnScreenCloud;
 
-        if ((INWK.Flags & Ship.FlagDrawn) == 0)
+        if ((_currentShip.Flags & Ship.FlagDrawn) == 0)
         {
             return;
         }
@@ -686,12 +700,12 @@ public sealed partial class EliteGame
         int vertices = (cloud.CountByte - 6) / 4;
         for (int i = 0; i < vertices; i++)
         {
-            cloud.Origins.Add((XX3X[i], XX3Y[i]));
+            cloud.Origins.Add((_projectedX[i], _projectedY[i]));
         }
 
-        INWK.Flags |= Ship.FlagOnScreenCloud;
+        _currentShip.Flags |= Ship.FlagOnScreenCloud;
         var image = new ObjectImage();
-        PTCLS(image);
+        DrawExplosionCloud(image);
         _screen.SetImage(owner, image);
     }
 
@@ -699,9 +713,9 @@ public sealed partial class EliteGame
     /// PTCLS: draw (or erase) the explosion cloud. The random number generator
     /// is seeded from the cloud data so the same cloud is produced each time.
     /// </summary>
-    private void PTCLS(ObjectImage? image)
+    private void DrawExplosionCloud(ObjectImage? image)
     {
-        var cloud = INWK.Explosion;
+        var cloud = _currentShip.Explosion;
         int counter = cloud.Counter;
         if ((counter & 0x80) != 0)
         {
@@ -709,25 +723,25 @@ public sealed partial class EliteGame
         }
 
         int particles = (counter >> 4) | 1;
-        int savedRand1 = RAND[1];
+        int savedSeed1 = _randomSeeds[1];
 
         for (int v = 0; v < cloud.Origins.Count; v++)
         {
-            var (ox, oy) = cloud.Origins[v];
-            int cnt = 6 + 4 * (v + 1);
+            var (originX, originY) = cloud.Origins[v];
+            int heapOffset = 6 + 4 * (v + 1);
 
             // Seed the random number generator from the cloud's seeds
             for (int i = 0; i < 4; i++)
             {
-                RAND[i] = cloud.Seeds[i] ^ cnt;
+                _randomSeeds[i] = cloud.Seeds[i] ^ heapOffset;
             }
 
             for (int n = particles; n >= 0; n--)
             {
-                int zz = NextCloudRandom();
-                COL = GameData.ExplosionColours[zz & 3];
+                int random = NextCloudRandom();
+                _colour = GameData.ExplosionColours[random & 3];
 
-                int y = EXS1(oy, cloud.Size);
+                int y = RandomCloudCoordinate(originY, cloud.Size);
                 if ((y >> 8) != 0 || (y & 0xFF) >= 2 * CentreY - 1)
                 {
                     // EX11
@@ -735,50 +749,50 @@ public sealed partial class EliteGame
                     continue;
                 }
 
-                int x = EXS1(ox, cloud.Size);
+                int x = RandomCloudCoordinate(originX, cloud.Size);
                 if ((x >> 8) != 0)
                 {
                     continue;
                 }
 
-                image?.Rects.AddRange(PixelRects(x, y, zz, COL));
+                image?.Rects.AddRange(PixelRects(x, y, random, _colour));
             }
         }
 
-        RAND[1] = savedRand1;
-        RAND[3] = Planet.ZLo;
+        _randomSeeds[1] = savedSeed1;
+        _randomSeeds[3] = Planet.ZLo;
     }
 
     /// <summary>The inline random number generator used by PTCLS (DORND with the C flag clear).</summary>
     private int NextCloudRandom()
     {
         _carry = false;
-        return DORND();
+        return NextRandom();
     }
 
     /// <summary>
     /// EXS1: return a random coordinate within the cloud's size of the given
     /// origin coordinate (a 16-bit word), as a 16-bit value.
     /// </summary>
-    private int EXS1(int origin, int size)
+    private int RandomCloudCoordinate(int origin, int size)
     {
-        int s = (origin >> 8) & 0xFF;
-        int r = origin & 0xFF;
-        int a = NextCloudRandom();
-        bool negative = (a & 0x80) != 0;
-        a = (a << 1) & 0xFF;
-        int product = EliteMaths.Fmltu(a, size, out bool carry);
+        int originHigh = (origin >> 8) & 0xFF;
+        int originLow = origin & 0xFF;
+        int random = NextCloudRandom();
+        bool negative = (random & 0x80) != 0;
+        random = (random << 1) & 0xFF;
+        int product = EliteMaths.MultiplyFraction(random, size, out bool carry);
         if (!negative)
         {
-            int sum = r + product + (carry ? 1 : 0);
+            int sum = originLow + product + (carry ? 1 : 0);
             int lo = sum & 0xFF;
-            int hi = (s + (sum > 0xFF ? 1 : 0)) & 0xFF;
+            int hi = (originHigh + (sum > 0xFF ? 1 : 0)) & 0xFF;
             return (hi << 8) | lo;
         }
 
-        int difference = r - product - (carry ? 0 : 1);
+        int difference = originLow - product - (carry ? 0 : 1);
         int low = difference & 0xFF;
-        int high = (s - (difference < 0 ? 1 : 0)) & 0xFF;
+        int high = (originHigh - (difference < 0 ? 1 : 0)) & 0xFF;
         return (high << 8) | low;
     }
 
@@ -786,11 +800,11 @@ public sealed partial class EliteGame
     /// PIXEL: the rectangles for a dot at (x, y), which is two pixels wide and
     /// one or two pixels high depending on the distance in zz.
     /// </summary>
-    private static IEnumerable<ScreenRect> PixelRects(int x, int y, int zz, int colour)
+    private static IEnumerable<ScreenRect> PixelRects(int x, int y, int distance, int colour)
     {
         // TWOS2 keeps the two pixels within the byte
         int left = (x & 3) == 3 ? x - 1 : x;
-        if (zz >= 80)
+        if (distance >= 80)
         {
             yield return new ScreenRect(left, y, 2, 1, colour);
             yield break;
@@ -806,154 +820,153 @@ public sealed partial class EliteGame
     // Planets
     // ------------------------------------------------------------------------
 
-    /// <summary>LSX2: true if the ball line heap is empty (no planet on-screen).</summary>
-    private bool LSX2Empty = true;
-
-    /// <summary>LSP: the ball line heap pointer.</summary>
-    private int LSP;
-
     /// <summary>STP: the step size for drawing circles.</summary>
-    private int STP;
+    private int _circleStep;
 
     /// <summary>K: the radius of the circle being drawn.</summary>
-    private int KRadius;
+    private int _circleRadius;
 
     /// <summary>K3 and K4 for circles: the centre of the circle (16-bit two's complement).</summary>
-    private int CircleX, CircleY;
+    private int _circleX, _circleY;
 
-    /// <summary>K2 and XX16+0..3: the ellipse axes (magnitudes and signs).</summary>
-    private readonly int[] K2 = new int[4];
-    private readonly bool[] K2Negative = new bool[4];
+    /// <summary>K2 and XX16+0..3: the magnitudes of the ellipse axes (x and y of the first axis, then x and y of the second).</summary>
+    private readonly int[] _ellipseAxes = new int[4];
+
+    /// <summary>The signs of the ellipse axes in <see cref="_ellipseAxes"/>.</summary>
+    private readonly bool[] _ellipseAxisNegative = new bool[4];
 
     /// <summary>CNT2: the angle counter for ellipses.</summary>
-    private int PlanetAngle;
+    private int _ellipseAngle;
 
-    /// <summary>The segments being collected by BLINE.</summary>
-    private readonly List<ScreenLine> _ballLines = [];
-    private bool _ballFirst;
-    private int _ballPrevX, _ballPrevY;
+    /// <summary>The line segments of the planet being collected by BLINE (the ball line heap).</summary>
+    private readonly List<ScreenLine> _planetLines = [];
+
+    /// <summary>True if the next point is the start of a new line (FLAG in the original).</summary>
+    private bool _planetLineFirst;
+
+    /// <summary>The previous point in the planet line being drawn.</summary>
+    private int _planetLinePreviousX, _planetLinePreviousY;
 
     /// <summary>PLANET: draw the planet or sun in INWK.</summary>
-    private void PLANET()
+    private void DrawPlanetOrSun()
     {
-        COL = GREEN;
-        int zSign = INWK.ZSign;
-        if (zSign >= 48 || (zSign | INWK.ZHi) == 0)
+        _colour = Green;
+        int zSign = _currentShip.ZSign;
+        if (zSign >= 48 || (zSign | _currentShip.ZHi) == 0)
         {
-            PL2();
+            RemovePlanetOrSun();
             return;
         }
 
-        if (!PROJ(out CircleX, out CircleY))
+        if (!ProjectToScreen(out _circleX, out _circleY))
         {
-            PL2();
+            RemovePlanetOrSun();
             return;
         }
 
         // The planet's radius is 96 * 256 * 256 / z
-        int k = EliteMaths.Dvid3B2(96 << 8, INWK.Z);
-        bool large = (k >> 8) != 0;
-        KRadius = large ? 248 : k & 0xFF;
+        int radius = EliteMaths.DivideScaled(96 << 8, _currentShip.Z);
+        bool large = (radius >> 8) != 0;
+        _circleRadius = large ? 248 : radius & 0xFF;
 
-        if ((TYPE & 1) != 0)
+        if ((_shipType & 1) != 0)
         {
-            SUN();
+            DrawSun();
             return;
         }
 
-        PL9(large);
+        DrawPlanet(large);
     }
 
     /// <summary>PL2: remove the planet or sun from the screen.</summary>
-    private void PL2()
+    private void RemovePlanetOrSun()
     {
-        if ((TYPE & 1) == 0)
+        if ((_shipType & 1) == 0)
         {
-            WPLS2();
+            RemovePlanet();
         }
         else
         {
-            WPLS();
+            RemoveSun();
         }
     }
 
     /// <summary>PL9: draw the planet with its meridians and equator, or its crater.</summary>
-    private void PL9(bool large)
+    private void DrawPlanet(bool large)
     {
-        WPLS2();
-        _ballLines.Clear();
-        if (!CIRCLE())
+        RemovePlanet();
+        _planetLines.Clear();
+        if (!DrawPlanetCircle())
         {
             return;
         }
 
         if (!large)
         {
-            if (TYPE == ShipType.Planet)
+            if (_shipType == ShipType.Planet)
             {
                 // PL9 part 2: the meridian and equator
-                if (KRadius >= 6)
+                if (_circleRadius >= 6)
                 {
-                    PLS4(INWK.Roof.Z);
-                    PLS1(INWK.Nose.X, 0);
-                    PLS1(INWK.Nose.Y, 1);
-                    PLS1(INWK.Roof.X, 2);
-                    PLS1(INWK.Roof.Y, 3);
-                    PLS2();
+                    CalculateEllipseStartAngle(_currentShip.Roof.Z);
+                    CalculateEllipseAxis(_currentShip.Nose.X, 0);
+                    CalculateEllipseAxis(_currentShip.Nose.Y, 1);
+                    CalculateEllipseAxis(_currentShip.Roof.X, 2);
+                    CalculateEllipseAxis(_currentShip.Roof.Y, 3);
+                    DrawHalfEllipse();
 
-                    PLS4(INWK.Side.Z);
-                    PLS1(INWK.Side.X, 2);
-                    PLS1(INWK.Side.Y, 3);
-                    PLS2();
+                    CalculateEllipseStartAngle(_currentShip.Side.Z);
+                    CalculateEllipseAxis(_currentShip.Side.X, 2);
+                    CalculateEllipseAxis(_currentShip.Side.Y, 3);
+                    DrawHalfEllipse();
                 }
             }
-            else if (INWK.Roof.Z >= 0)
+            else if (_currentShip.Roof.Z >= 0)
             {
                 // PL26: the crater
-                CircleX = (CircleX + PLS3(INWK.Roof.X)) & 0xFFFF;
-                CircleY = (CircleY - PLS3(INWK.Roof.Y)) & 0xFFFF;
-                PLS1(INWK.Nose.X, 0, halve: true);
-                PLS1(INWK.Nose.Y, 1, halve: true);
-                PLS1(INWK.Side.X, 2, halve: true);
-                PLS1(INWK.Side.Y, 3, halve: true);
-                PlanetAngle = 0;
-                PLS22(64);
+                _circleX = (_circleX + CalculateCraterOffset(_currentShip.Roof.X)) & 0xFFFF;
+                _circleY = (_circleY - CalculateCraterOffset(_currentShip.Roof.Y)) & 0xFFFF;
+                CalculateEllipseAxis(_currentShip.Nose.X, 0, halve: true);
+                CalculateEllipseAxis(_currentShip.Nose.Y, 1, halve: true);
+                CalculateEllipseAxis(_currentShip.Side.X, 2, halve: true);
+                CalculateEllipseAxis(_currentShip.Side.Y, 3, halve: true);
+                _ellipseAngle = 0;
+                DrawEllipse(64);
             }
         }
 
         var image = new ObjectImage();
-        image.Lines.AddRange(_ballLines);
-        _screen.SetImage(INWK.DisplayOwner, image);
-        LSX2Empty = false;
+        image.Lines.AddRange(_planetLines);
+        _screen.SetImage(_currentShip.DisplayOwner, image);
     }
 
     /// <summary>
     /// PLS1: calculate a vector coordinate * 256 / z (clamped to 254) into one
     /// of the K2 slots, with its sign.
     /// </summary>
-    private void PLS1(int vector, int index, bool halve = false)
+    private void CalculateEllipseAxis(int vector, int index, bool halve = false)
     {
-        int k = EliteMaths.Dvid3B2(vector, INWK.Z);
-        int a = Math.Abs(k) >= 256 ? 254 : Math.Abs(k) & 0xFF;
+        int scaled = EliteMaths.DivideScaled(vector, _currentShip.Z);
+        int magnitude = Math.Abs(scaled) >= 256 ? 254 : Math.Abs(scaled) & 0xFF;
         if (halve)
         {
-            a >>= 1;
+            magnitude >>= 1;
         }
 
-        K2[index] = a;
-        K2Negative[index] = k < 0 || (k == 0 && vector < 0);
+        _ellipseAxes[index] = magnitude;
+        _ellipseAxisNegative[index] = scaled < 0 || (scaled == 0 && vector < 0);
     }
 
     /// <summary>
     /// PLS3: calculate 222 * roofv * 256 / z / 256 as a signed 16-bit value,
     /// used to offset the crater from the planet's centre.
     /// </summary>
-    private int PLS3(int vector)
+    private int CalculateCraterOffset(int vector)
     {
-        int k = EliteMaths.Dvid3B2(vector, INWK.Z);
-        int a = Math.Abs(k) >= 256 ? 254 : Math.Abs(k) & 0xFF;
-        int product = (a * 222) >> 8;
-        bool negative = k < 0 || (k == 0 && vector < 0);
+        int scaled = EliteMaths.DivideScaled(vector, _currentShip.Z);
+        int magnitude = Math.Abs(scaled) >= 256 ? 254 : Math.Abs(scaled) & 0xFF;
+        int product = (magnitude * 222) >> 8;
+        bool negative = scaled < 0 || (scaled == 0 && vector < 0);
         if (negative && product != 0)
         {
             return -product;
@@ -963,113 +976,113 @@ public sealed partial class EliteGame
     }
 
     /// <summary>PLS4: CNT2 = arctan(-nosev_z / vector_z) / 4, for the starting angle of the ellipse.</summary>
-    private void PLS4(int vectorZ)
+    private void CalculateEllipseStartAngle(int vectorZ)
     {
-        int p = -Ship.VectorHi(INWK.Nose.Z);
-        int q = Ship.VectorHi(vectorZ);
-        int a = EliteMaths.Arctan(p, q);
-        if (INWK.Nose.Z >= 0)
+        int numerator = -Ship.VectorHi(_currentShip.Nose.Z);
+        int denominator = Ship.VectorHi(vectorZ);
+        int angle = EliteMaths.Arctan(numerator, denominator);
+        if (_currentShip.Nose.Z >= 0)
         {
-            a ^= 0x80;
+            angle ^= 0x80;
         }
 
-        PlanetAngle = (a >> 2) & 0xFF;
+        _ellipseAngle = (angle >> 2) & 0xFF;
     }
 
     /// <summary>PLS2: draw a half ellipse.</summary>
-    private void PLS2() => PLS22(31);
+    private void DrawHalfEllipse() => DrawEllipse(31);
 
     /// <summary>
     /// PLS22: draw an ellipse (or part of one) with axes in K2, centred on
     /// K3/K4, starting at angle CNT2 and continuing until the counter reaches
     /// the target.
     /// </summary>
-    private void PLS22(int target)
+    private void DrawEllipse(int target)
     {
         int count = 0;
-        _ballFirst = true;
+        _planetLineFirst = true;
         while (true)
         {
-            int angle = PlanetAngle;
+            int angle = _ellipseAngle;
             int sine = GameData.Sine[angle & 31];
-            int r = EliteMaths.Fmltu(K2[2], sine);
-            int k = EliteMaths.Fmltu(K2[3], sine);
+            int roofXTerm = EliteMaths.MultiplyFraction(_ellipseAxes[2], sine);
+            int roofYTerm = EliteMaths.MultiplyFraction(_ellipseAxes[3], sine);
             bool sinNegative = angle >= 33;
 
             int cosine = GameData.Sine[(angle + 16) & 31];
-            int k2 = EliteMaths.Fmltu(K2[1], cosine);
-            int p = EliteMaths.Fmltu(K2[0], cosine, out bool carry);
+            int noseYTerm = EliteMaths.MultiplyFraction(_ellipseAxes[1], cosine);
+            int noseXTerm = EliteMaths.MultiplyFraction(_ellipseAxes[0], cosine, out bool carry);
 
             // The ADC #15 includes the C flag from the last FMLTU
             bool cosNegative = ((angle + 15 + (carry ? 1 : 0)) & 63) >= 33;
 
             // x = nosev_x * cos + roofv_x * sin
-            int xs = EliteMaths.Add16(Signed16(p, cosNegative ^ K2Negative[0]), Signed16(r, sinNegative ^ K2Negative[2]));
-            int ys = -EliteMaths.Add16(Signed16(k2, cosNegative ^ K2Negative[1]), Signed16(k, sinNegative ^ K2Negative[3]));
+            int offsetX = EliteMaths.Add16(Signed16(noseXTerm, cosNegative ^ _ellipseAxisNegative[0]), Signed16(roofXTerm, sinNegative ^ _ellipseAxisNegative[2]));
+            int offsetY = -EliteMaths.Add16(Signed16(noseYTerm, cosNegative ^ _ellipseAxisNegative[1]), Signed16(roofYTerm, sinNegative ^ _ellipseAxisNegative[3]));
 
-            count = BLINE(CircleX + xs, CircleY + ys, count);
+            count = AddPlanetLineSegment(_circleX + offsetX, _circleY + offsetY, count);
             if (count > target)
             {
                 return;
             }
 
-            PlanetAngle = (PlanetAngle + STP) & 63;
+            _ellipseAngle = (_ellipseAngle + _circleStep) & 63;
         }
     }
 
+    /// <summary>Apply a sign to a magnitude.</summary>
     private static int Signed16(int magnitude, bool negative) => negative ? -magnitude : magnitude;
 
     /// <summary>
     /// BLINE: add a segment from the previous point to (x, y) to the ball line
     /// list, returning the updated segment counter (CNT + STP).
     /// </summary>
-    private int BLINE(int x, int y, int count)
+    private int AddPlanetLineSegment(int x, int y, int count)
     {
         x = ToSigned16(x);
         y = ToSigned16(y);
-        if (_ballFirst)
+        if (_planetLineFirst)
         {
-            _ballFirst = false;
+            _planetLineFirst = false;
         }
-        else if (LineOnScreen(_ballPrevX, _ballPrevY, x, y))
+        else if (LineOnScreen(_planetLinePreviousX, _planetLinePreviousY, x, y))
         {
-            _ballLines.Add(new ScreenLine(_ballPrevX, _ballPrevY, x, y, COL));
+            _planetLines.Add(new ScreenLine(_planetLinePreviousX, _planetLinePreviousY, x, y, _colour));
         }
 
-        _ballPrevX = x;
-        _ballPrevY = y;
-        return count + STP;
+        _planetLinePreviousX = x;
+        _planetLinePreviousY = y;
+        return count + _circleStep;
     }
 
     /// <summary>CIRCLE: draw a circle for the planet, returning false (C set) if it's off-screen.</summary>
-    private bool CIRCLE()
+    private bool DrawPlanetCircle()
     {
-        if (!CHKON(out _, out _))
+        if (!IsCircleOnScreen(out _, out _))
         {
             return false;
         }
 
-        LSX2Empty = false;
-        int k = KRadius;
-        STP = k < 8 ? 8 : k < 60 ? 4 : 2;
-        CIRCLE2();
+        int radius = _circleRadius;
+        _circleStep = radius < 8 ? 8 : radius < 60 ? 4 : 2;
+        DrawCircle();
         return true;
     }
 
     /// <summary>CIRCLE2: draw a circle of radius K centred on K3/K4, with step size STP.</summary>
-    private void CIRCLE2()
+    private void DrawCircle()
     {
-        _ballFirst = true;
+        _planetLineFirst = true;
         int count = 0;
         while (true)
         {
-            int x = EliteMaths.Fmltu(KRadius, GameData.Sine[count & 31]);
+            int x = EliteMaths.MultiplyFraction(_circleRadius, GameData.Sine[count & 31]);
             if (count >= 33)
             {
                 x = -x;
             }
 
-            int y = EliteMaths.Fmltu(KRadius, GameData.Sine[(count + 16) & 31], out bool carry);
+            int y = EliteMaths.MultiplyFraction(_circleRadius, GameData.Sine[(count + 16) & 31], out bool carry);
 
             // The ADC #15 includes the C flag from FMLTU2
             if (((count + 15 + (carry ? 1 : 0)) & 63) >= 33)
@@ -1077,7 +1090,7 @@ public sealed partial class EliteGame
                 y = -y;
             }
 
-            int next = BLINE(CircleX + x, CircleY + y, count);
+            int next = AddPlanetLineSegment(_circleX + x, _circleY + y, count);
             if (next >= 65)
             {
                 return;
@@ -1092,17 +1105,17 @@ public sealed partial class EliteGame
     /// screen, returning false (C set) if it isn't. Also returns the bottom of
     /// the circle in P+1/P+2.
     /// </summary>
-    private bool CHKON(out int bottom, out int top)
+    private bool IsCircleOnScreen(out int bottom, out int top)
     {
-        int cx = ToSigned16(CircleX), cy = ToSigned16(CircleY);
-        bottom = cy + KRadius;
-        top = cy - KRadius;
-        if (cx + KRadius < 0)
+        int centreX = ToSigned16(_circleX), centreY = ToSigned16(_circleY);
+        bottom = centreY + _circleRadius;
+        top = centreY - _circleRadius;
+        if (centreX + _circleRadius < 0)
         {
             return false;
         }
 
-        int left = cx - KRadius;
+        int left = centreX - _circleRadius;
         if (left >= 256)
         {
             return false;
@@ -1127,11 +1140,9 @@ public sealed partial class EliteGame
     }
 
     /// <summary>WPLS2: remove the planet from the screen.</summary>
-    private void WPLS2()
+    private void RemovePlanet()
     {
-        _screen.RemoveImage(INWK.DisplayOwner);
-        LSX2Empty = true;
-        LSP = 1;
+        _screen.RemoveImage(_currentShip.DisplayOwner);
     }
 
     // ------------------------------------------------------------------------
@@ -1139,97 +1150,100 @@ public sealed partial class EliteGame
     // ------------------------------------------------------------------------
 
     /// <summary>LSO: the sun line heap (the half-width of the sun on each pixel row).</summary>
-    private readonly int[] LSO = new int[2 * CentreY + 8];
+    private readonly int[] _sunHalfWidths = new int[2 * CentreY + 8];
 
     /// <summary>LSX: &amp;FF if the sun is not on-screen.</summary>
-    private int LSX = 0xFF;
+    private int _sunHidden = 0xFF;
 
     /// <summary>SUNX: the x-coordinate of the centre of the sun on-screen.</summary>
-    private int SUNX;
+    private int _sunCentreX;
 
+    /// <summary>The owner of the sun's image on the screen.</summary>
     private readonly object _sunOwner = new();
+
+    /// <summary>The sun's image on the screen, or null if the sun isn't shown.</summary>
     private ObjectImage? _sunImage;
 
     /// <summary>The orange colours for each pixel row of the sun.</summary>
     private static readonly int[] Orange = [0b10100101, 0b10100101, 0b01011010, 0b01011010];
 
     /// <summary>SUN: draw the sun, with its fringe of random widths.</summary>
-    private void SUN()
+    private void DrawSun()
     {
-        COL = RED;
-        LSX = 1;
-        if (!CHKON(out int bottom, out _))
+        _colour = Red;
+        _sunHidden = 1;
+        if (!IsCircleOnScreen(out int bottom, out _))
         {
-            WPLS();
+            RemoveSun();
             return;
         }
 
-        int k = KRadius;
-        int cnt = (k >= 96 ? 4 : 0) | (k >= 40 ? 2 : 0) | (k >= 16 ? 1 : 0);
+        int radius = _circleRadius;
+        int fringeMask = (radius >= 96 ? 4 : 0) | (radius >= 40 ? 2 : 0) | (radius >= 16 ? 1 : 0);
 
         // Work out the bottom row of the sun (TGT)
         int yMax = 2 * CentreY - 1;
-        int tgt;
+        int bottomRow;
         if ((bottom >> 8) != 0 || yMax < (bottom & 0xFF))
         {
-            tgt = yMax;
+            bottomRow = yMax;
         }
         else
         {
-            tgt = (bottom & 0xFF) != 0 ? bottom & 0xFF : 1;
+            bottomRow = (bottom & 0xFF) != 0 ? bottom & 0xFF : 1;
         }
 
         // Work out V, the vertical distance from row Yx2M1 to the centre
-        int cy = ToSigned16(CircleY);
-        int v, vHi;
-        int distance = yMax - cy;
+        int centreY = ToSigned16(_circleY);
+        int verticalDistance, verticalDistanceHigh;
+        int distance = yMax - centreY;
         if (distance < 0)
         {
-            v = -distance & 0xFF;
-            vHi = 0xFF;
+            verticalDistance = -distance & 0xFF;
+            verticalDistanceHigh = 0xFF;
         }
-        else if (distance >= 256 || distance >= k)
+        else if (distance >= 256 || distance >= radius)
         {
-            v = k;
-            vHi = 0;
+            verticalDistance = radius;
+            verticalDistanceHigh = 0;
         }
         else if (distance == 0)
         {
-            v = 0;
-            vHi = 0xFF;
+            verticalDistance = 0;
+            verticalDistanceHigh = 0xFF;
         }
         else
         {
-            v = distance;
-            vHi = 0;
+            verticalDistance = distance;
+            verticalDistanceHigh = 0;
         }
 
-        int k2 = k * k;
+        int radiusSquared = radius * radius;
 
         // Rows below the sun no longer have any sun lines
-        for (int row = yMax; row > tgt; row--)
+        for (int row = yMax; row > bottomRow; row--)
         {
-            LSO[row] = 0;
+            _sunHalfWidths[row] = 0;
         }
 
-        int centre = ToSigned16(CircleX);
-        int y = tgt;
+        int centre = ToSigned16(_circleX);
+        int y = bottomRow;
         bool finished = false;
         while (!finished)
         {
             // PLFL: the half-width of this row
-            int rq = k2 - v * v;
-            int q = EliteMaths.Ll5(rq & 0xFFFF);
-            int width = (DORND() & cnt) + q;
+            int halfWidthSquared = radiusSquared - verticalDistance * verticalDistance;
+            int halfWidth = EliteMaths.SquareRoot(halfWidthSquared & 0xFFFF);
+            int width = (NextRandom() & fringeMask) + halfWidth;
             if (width > 255)
             {
                 width = 255;
             }
 
-            LSO[y] = width;
+            _sunHalfWidths[y] = width;
             if (!SunEdges(centre, width, out _, out _))
             {
-                LSO[y] = 0;
+                _sunHalfWidths[y] = 0;
             }
 
             // PLF6
@@ -1239,16 +1253,16 @@ public sealed partial class EliteGame
                 break;
             }
 
-            if (vHi != 0)
+            if (verticalDistanceHigh != 0)
             {
                 // PLF10: we are in the top half, moving away from the centre
-                v++;
-                if (v > k)
+                verticalDistance++;
+                if (verticalDistance > radius)
                 {
                     // Remove any old sun lines above the new sun
                     for (int row = y; row > 0; row--)
                     {
-                        LSO[row] = 0;
+                        _sunHalfWidths[row] = 0;
                     }
 
                     finished = true;
@@ -1256,20 +1270,20 @@ public sealed partial class EliteGame
             }
             else
             {
-                v--;
-                if (v == 0)
+                verticalDistance--;
+                if (verticalDistance == 0)
                 {
-                    vHi = 0xFF;
+                    verticalDistanceHigh = 0xFF;
                 }
             }
         }
 
         // PLF8
-        SUNX = CircleX;
+        _sunCentreX = _circleX;
         var image = new ObjectImage();
         for (int row = 1; row <= yMax; row++)
         {
-            if (LSO[row] != 0 && SunEdges(centre, LSO[row], out int x1, out int x2) && x2 > x1)
+            if (_sunHalfWidths[row] != 0 && SunEdges(centre, _sunHalfWidths[row], out int x1, out int x2) && x2 > x1)
             {
                 image.Rects.Add(new ScreenRect(x1, row, x2 - x1, 1, Orange[row & 3]));
             }
@@ -1307,17 +1321,17 @@ public sealed partial class EliteGame
     }
 
     /// <summary>WPLS: remove the sun from the screen.</summary>
-    private void WPLS()
+    private void RemoveSun()
     {
-        if ((LSX & 0x80) != 0)
+        if ((_sunHidden & 0x80) != 0)
         {
             return;
         }
 
         _screen.RemoveImage(_sunOwner);
         _sunImage = null;
-        Array.Clear(LSO);
-        LSX = 0xFF;
+        Array.Clear(_sunHalfWidths);
+        _sunHidden = 0xFF;
     }
 
     // ------------------------------------------------------------------------
@@ -1325,46 +1339,45 @@ public sealed partial class EliteGame
     // ------------------------------------------------------------------------
 
     /// <summary>HFS2: clear the screen and draw the launch or hyperspace tunnel with the given step size.</summary>
-    private void HFS2(int step)
+    private void DrawTunnel(int step)
     {
-        STP = step;
-        int view = QQ11;
-        TT66(0);
-        QQ11 = view;
-        HFS1();
+        _circleStep = step;
+        int view = _viewType;
+        ClearScreen(0);
+        _viewType = view;
+        DrawTunnelCircles();
     }
 
     /// <summary>HFS1: draw the tunnel as eight sets of concentric circles.</summary>
-    private void HFS1()
+    private void DrawTunnelCircles()
     {
-        CircleX = CentreX;
-        CircleY = CentreY;
+        _circleX = CentreX;
+        _circleY = CentreY;
         for (int i = 0; i < 8; i++)
         {
             // HFL1
-            KRadius = (i & 7) + 8;
+            _circleRadius = (i & 7) + 8;
             while (true)
             {
-                LSP = 1;
-                _ballLines.Clear();
-                CIRCLE2();
-                foreach (var line in _ballLines)
+                _planetLines.Clear();
+                DrawCircle();
+                foreach (var line in _planetLines)
                 {
-                    _screen.DrawLine(line.X1, line.Y1, line.X2, line.Y2, COL);
+                    _screen.DrawLine(line.X1, line.Y1, line.X2, line.Y2, _colour);
                 }
 
                 // The original draws the circles slowly enough for them to be
                 // seen appearing, so we pause briefly after each one
                 PresentAndPause(8);
 
-                int doubled = KRadius << 1;
+                int doubled = _circleRadius << 1;
                 if (doubled > 0xFF)
                 {
                     break;
                 }
 
-                KRadius = doubled;
-                if (KRadius >= 160)
+                _circleRadius = doubled;
+                if (_circleRadius >= 160)
                 {
                     break;
                 }

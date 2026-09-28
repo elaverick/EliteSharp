@@ -12,8 +12,9 @@ public sealed partial class EliteGame
     /// TRTB%: the translation table from internal key numbers to ASCII (and
     /// the codes used for the function and cursor keys).
     /// </summary>
-    private static readonly byte[] TRTB = BuildKeyTranslationTable();
+    private static readonly byte[] KeyTranslationTable = BuildKeyTranslationTable();
 
+    /// <summary>Build the TRTB% table from its rows in the original (one row of ten keys per internal key number row).</summary>
     private static byte[] BuildKeyTranslationTable()
     {
         var table = new byte[128];
@@ -44,7 +45,7 @@ public sealed partial class EliteGame
     /// key logger (KY17, KY14, KY15, KY20, KY7, KY5, KY18, KY6, KY19, KY12,
     /// KY2, KY16, KY3, KY4, KY1, KY13).
     /// </summary>
-    private static readonly int[] IKNS =
+    private static readonly int[] FlightKeyNumbers =
     [
         BbcKeyboard.E, BbcKeyboard.T, BbcKeyboard.U, BbcKeyboard.P, BbcKeyboard.A, BbcKeyboard.X,
         BbcKeyboard.J, BbcKeyboard.S, BbcKeyboard.C, BbcKeyboard.Tab, BbcKeyboard.Space, BbcKeyboard.M,
@@ -52,22 +53,22 @@ public sealed partial class EliteGame
     ];
 
     /// <summary>ZEKTRAN: clear the key logger.</summary>
-    private void ZEKTRAN()
+    private void ClearKeyLogger()
     {
-        KL = 0;
-        KY17 = KY14 = KY15 = KY20 = KY7 = KY5 = KY18 = KY6 = false;
-        KY19 = KY12 = KY2 = KY16 = KY3 = KY4 = KY1 = KY13 = false;
+        _keyPressed = 0;
+        _keyEcm = _keyTargetMissile = _keyUnarmMissile = _keyDockingComputerOff = _keyFireLaser = _keyClimb = _keyJump = _keyDive = false;
+        _keyDockingComputerOn = _keyEnergyBomb = _keySpeedUp = _keyFireMissile = _keyRollLeft = _keyRollRight = _keySlowDown = _keyEscapePod = false;
     }
 
     /// <summary>
     /// FILLKL: scan the keyboard and update the key logger, returning the
     /// internal key number of the highest key pressed in KL (or 0).
     /// </summary>
-    private int FILLKL()
+    private int ScanKeyboard()
     {
         UpdatePadContext();
-        ZEKTRAN();
-        int kl = 0;
+        ClearKeyLogger();
+        int highestKey = 0;
         for (int key = 16; key < 128; key++)
         {
             if (!_keyboard.IsPressed(key))
@@ -75,8 +76,8 @@ public sealed partial class EliteGame
                 continue;
             }
 
-            kl = key;
-            int index = Array.IndexOf(IKNS, key);
+            highestKey = key;
+            int index = Array.IndexOf(FlightKeyNumbers, key);
             if (index >= 0)
             {
                 SetFlightKey(index);
@@ -84,13 +85,13 @@ public sealed partial class EliteGame
         }
 
         // If "S" is being pressed, ignore "C" (the docking computer)
-        if (KY6)
+        if (_keyDive)
         {
-            KY19 = false;
+            _keyDockingComputerOn = false;
         }
 
-        KL = kl;
-        return kl;
+        _keyPressed = highestKey;
+        return highestKey;
     }
 
     /// <summary>Set the flight key flag at the given position in the key logger.</summary>
@@ -98,31 +99,31 @@ public sealed partial class EliteGame
     {
         switch (index)
         {
-            case 0: KY17 = true; break;
-            case 1: KY14 = true; break;
-            case 2: KY15 = true; break;
-            case 3: KY20 = true; break;
-            case 4: KY7 = true; break;
-            case 5: KY5 = true; break;
-            case 6: KY18 = true; break;
-            case 7: KY6 = true; break;
-            case 8: KY19 = true; break;
-            case 9: KY12 = true; break;
-            case 10: KY2 = true; break;
-            case 11: KY16 = true; break;
-            case 12: KY3 = true; break;
-            case 13: KY4 = true; break;
-            case 14: KY1 = true; break;
-            case 15: KY13 = true; break;
+            case 0: _keyEcm = true; break;
+            case 1: _keyTargetMissile = true; break;
+            case 2: _keyUnarmMissile = true; break;
+            case 3: _keyDockingComputerOff = true; break;
+            case 4: _keyFireLaser = true; break;
+            case 5: _keyClimb = true; break;
+            case 6: _keyJump = true; break;
+            case 7: _keyDive = true; break;
+            case 8: _keyDockingComputerOn = true; break;
+            case 9: _keyEnergyBomb = true; break;
+            case 10: _keySpeedUp = true; break;
+            case 11: _keyFireMissile = true; break;
+            case 12: _keyRollLeft = true; break;
+            case 13: _keyRollRight = true; break;
+            case 14: _keySlowDown = true; break;
+            case 15: _keyEscapePod = true; break;
         }
     }
 
     /// <summary>RDKEY: scan the keyboard, returning the ASCII code of the key pressed (or 0).</summary>
-    private int RDKEY()
+    private int ReadKey()
     {
-        int key = FILLKL();
-        KL = TRTB[key];
-        return KL;
+        int key = ScanKeyboard();
+        _keyPressed = KeyTranslationTable[key];
+        return _keyPressed;
     }
 
     /// <summary>CTRL: return &amp;80 if CTRL is being pressed.</summary>
@@ -136,44 +137,44 @@ public sealed partial class EliteGame
     /// on, update the roll and pitch rates, and check for the pause key.
     /// Returns the ASCII code of the key pressed.
     /// </summary>
-    private int DOKEY()
+    private int ReadFlightKeys()
     {
-        RDKEY();
+        ReadKey();
         ApplyPadTriggers();
 
-        if (Auto != 0)
+        if (_autoDocking != 0)
         {
             // The docking computer "presses" the flight keys
-            var saved = INWK;
-            ZINF();
-            INWK.Nose.Z = 96 << 8;
-            INWK.Side.X = -(96 << 8);
-            int savedType = TYPE;
-            TYPE = 0x80 | 96;
-            INWK.Speed = DELTA;
-            DOCKIT();
+            var saved = _currentShip;
+            ResetWorkspace();
+            _currentShip.Nose.Z = 96 << 8;
+            _currentShip.Side.X = -(96 << 8);
+            int savedType = _shipType;
+            _shipType = 0x80 | 96;
+            _currentShip.Speed = _speed;
+            ApplyDockingManoeuvres();
 
-            DELTA = Math.Min(INWK.Speed, 22);
+            _speed = Math.Min(_currentShip.Speed, 22);
 
-            int acceleration = INWK.Acceleration;
+            int acceleration = _currentShip.Acceleration;
             if (acceleration != 0)
             {
                 if ((acceleration & 0x80) != 0)
                 {
-                    KY1 = true;
+                    _keySlowDown = true;
                 }
                 else
                 {
-                    KY2 = true;
+                    _keySpeedUp = true;
                 }
             }
 
             // DK11: roll
-            int roll = INWK.RollCounter;
+            int roll = _currentShip.RollCounter;
             int rollMagnitude = (roll << 1) & 0xFF;
             if (rollMagnitude == 0)
             {
-                JSTX = 128;
+                _rollRate = 128;
             }
             else
             {
@@ -184,134 +185,134 @@ public sealed partial class EliteGame
                 bool press = (rollMagnitude & 0x80) == 0;
                 if (!press)
                 {
-                    JSTX = 64;
+                    _rollRate = 64;
                 }
 
                 if (positive)
                 {
-                    KY3 = press;
+                    _keyRollLeft = press;
                 }
                 else
                 {
-                    KY4 = press;
+                    _keyRollRight = press;
                 }
             }
 
             // Pitch
-            int pitch = INWK.PitchCounter;
+            int pitch = _currentShip.PitchCounter;
             int pitchMagnitude = (pitch << 1) & 0xFF;
             if (pitchMagnitude == 0)
             {
-                JSTY = 128;
+                _pitchRate = 128;
             }
             else if ((pitch & 0x80) != 0)
             {
-                KY5 = true;
+                _keyClimb = true;
             }
             else
             {
-                KY6 = true;
+                _keyDive = true;
             }
 
-            TYPE = savedType;
-            INWK = saved;
+            _shipType = savedType;
+            _currentShip = saved;
         }
 
         // DK15: read the joystick (the controller's left stick), and if it
         // isn't in control, DK152: apply the roll and pitch keys
         if (ReadPadStick())
         {
-            DK4();
-            return KL;
+            CheckForPause();
+            return _keyPressed;
         }
 
-        int x = JSTX;
-        if (KY3)
+        int rate = _rollRate;
+        if (_keyRollLeft)
         {
-            x = BUMP2(x, 7);
+            rate = IncreaseRate(rate, 7);
         }
 
-        if (KY4)
+        if (_keyRollRight)
         {
-            x = REDU2(x, 7);
+            rate = DecreaseRate(rate, 7);
         }
 
-        JSTX = x;
+        _rollRate = rate;
 
-        x = JSTY;
-        if (KY5)
+        rate = _pitchRate;
+        if (_keyClimb)
         {
-            x = REDU2(x, 14);
+            rate = DecreaseRate(rate, 14);
         }
 
-        if (KY6)
+        if (_keyDive)
         {
-            x = BUMP2(x, 14);
+            rate = IncreaseRate(rate, 14);
         }
 
-        JSTY = x;
+        _pitchRate = rate;
 
-        DK4();
-        return KL;
+        CheckForPause();
+        return _keyPressed;
     }
 
     /// <summary>BUMP2: increase the roll or pitch rate, snapping to the centre if we pass it.</summary>
-    private int BUMP2(int x, int amount)
+    private int IncreaseRate(int rate, int amount)
     {
-        x += amount;
-        if (x > 0xFF)
+        rate += amount;
+        if (rate > 0xFF)
         {
-            x = 0xFF;
+            rate = 0xFF;
         }
 
         // RE2
-        return (x & 0x80) == 0 ? djd1(x) : x;
+        return (rate & 0x80) == 0 ? CentreRate(rate) : rate;
     }
 
     /// <summary>REDU2: decrease the roll or pitch rate, snapping to the centre if we pass it.</summary>
-    private int REDU2(int x, int amount)
+    private int DecreaseRate(int rate, int amount)
     {
-        x -= amount;
-        if (x < 0)
+        rate -= amount;
+        if (rate < 0)
         {
-            x = 1;
+            rate = 1;
         }
 
         // RE3
-        return (x & 0x80) != 0 ? djd1(x) : x;
+        return (rate & 0x80) != 0 ? CentreRate(rate) : rate;
     }
 
     /// <summary>djd1: snap the roll or pitch rate to the centre, unless keyboard damping is disabled.</summary>
-    private int djd1(int x) => DJD != 0 ? x : 128;
+    private int CentreRate(int rate) => AutoRecentreDisabled != 0 ? rate : 128;
 
     /// <summary>cntr: apply keyboard damping, moving the roll or pitch rate towards the centre.</summary>
-    private int cntr(int x)
+    private int DampRate(int rate)
     {
-        if (Auto == 0 && DAMP != 0)
+        if (_autoDocking == 0 && DampingDisabled != 0)
         {
-            return x;
+            return rate;
         }
 
         // cnt2
-        if ((x & 0x80) == 0)
+        if ((rate & 0x80) == 0)
         {
             // BUMP
-            return x + 1;
+            return rate + 1;
         }
 
-        x--;
-        if ((x & 0x80) != 0)
+        rate--;
+        if ((rate & 0x80) != 0)
         {
-            return x;
+            return rate;
         }
 
-        return x + 1;
+        return rate + 1;
     }
 
     /// <summary>DK4: check for the pause key (COPY) and process the options while paused.</summary>
-    private void DK4()
+    private void CheckForPause()
     {
-        if (KL != 0x8B)
+        if (_keyPressed != 0x8B)
         {
             return;
         }
@@ -320,7 +321,7 @@ public sealed partial class EliteGame
         _padContextOverride = PadContext.Paused;
         try
         {
-            FREEZE();
+            PauseLoop();
         }
         finally
         {
@@ -329,47 +330,47 @@ public sealed partial class EliteGame
     }
 
     /// <summary>FREEZE: the pause loop, where the configuration options can be changed.</summary>
-    private void FREEZE()
+    private void PauseLoop()
     {
         while (true)
         {
-            WSCAN();
-            int x = RDKEY();
-            if (x == 'Q')
+            WaitForVsync();
+            int key = ReadKey();
+            if (key == 'Q')
             {
-                DNOIZ = 0xFF;
+                _soundDisabled = 0xFF;
             }
 
             // DK6: toggle the configuration options
-            for (int y = 0; y < 9; y++)
+            for (int option = 0; option < 9; option++)
             {
-                DKS3(x, y);
+                ToggleOption(key, option);
             }
 
-            int volume = VOL;
-            if (x == '.' || x == ',')
+            int volume = _volume;
+            if (key == '.' || key == ',')
             {
-                volume += x == '.' ? 1 : -1;
+                volume += key == '.' ? 1 : -1;
                 if ((volume & 0xF8) == 0)
                 {
-                    VOL = volume;
+                    _volume = volume;
                 }
 
-                BEEP();
-                DELAY(10);
+                Beep();
+                Delay(10);
             }
 
-            if (x == 'S')
+            if (key == 'S')
             {
-                DNOIZ = 0;
+                _soundDisabled = 0;
             }
 
-            if (x == 0x1B)
+            if (key == 0x1B)
             {
-                throw new GameJumpException(GameJump.Death2);
+                throw new GameJumpException(GameJump.RestartAfterDeath);
             }
 
-            if (x == 0x7F)
+            if (key == 0x7F)
             {
                 return;
             }
@@ -377,96 +378,96 @@ public sealed partial class EliteGame
     }
 
     /// <summary>DKS3: toggle a configuration option if its key is being pressed.</summary>
-    private void DKS3(int key, int y)
+    private void ToggleOption(int key, int option)
     {
-        if (key != GameData.PauseToggleKeys[y])
+        if (key != GameData.PauseToggleKeys[option])
         {
             return;
         }
 
-        ToggleOptions[y] ^= 0xFF;
+        ToggleOptions[option] ^= 0xFF;
 
-        if ((ToggleOptions[y] & 0x80) != 0)
+        if ((ToggleOptions[option] & 0x80) != 0)
         {
-            BELL();
+            Bell();
         }
 
-        BELL();
-        DELAY(20);
+        Bell();
+        Delay(20);
     }
 
     /// <summary>
     /// TT17: scan the keyboard for cursor key presses, returning the key
     /// pressed, and the cursor movements in x and y.
     /// </summary>
-    private int TT17(out int x, out int y)
+    private int ReadCursorKeys(out int deltaX, out int deltaY)
     {
-        x = 0;
-        y = 0;
-        if (QQ11 == 0)
+        deltaX = 0;
+        deltaY = 0;
+        if (_viewType == 0)
         {
-            return DOKEY();
+            return ReadFlightKeys();
         }
 
         // TT17afterall
-        DOKEY();
-        if (ReadPadCursor(out x, out y))
+        ReadFlightKeys();
+        if (ReadPadCursor(out deltaX, out deltaY))
         {
-            return KL;
+            return _keyPressed;
         }
 
         // TJ1
-        int kl = KL;
-        if (kl == 0x8C)
+        int key = _keyPressed;
+        if (key == 0x8C)
         {
-            x--;
+            deltaX--;
         }
 
-        if (kl == 0x8D)
+        if (key == 0x8D)
         {
-            x++;
+            deltaX++;
         }
 
-        if (kl == 0x8E)
+        if (key == 0x8E)
         {
-            y--;
+            deltaY--;
         }
 
-        if (kl == 0x8F)
+        if (key == 0x8F)
         {
-            y++;
+            deltaY++;
         }
 
         if (ShiftPressed())
         {
             // speedup
-            x *= 4;
-            y *= 4;
+            deltaX *= 4;
+            deltaY *= 4;
         }
 
-        return kl;
+        return key;
     }
 
     /// <summary>TT217: wait until a key is pressed (after any current key is released), and return its ASCII code.</summary>
-    private int TT217()
+    private int WaitForKey()
     {
         // t: wait for all keys to be released
         do
         {
-            DELAY(2);
+            Delay(2);
         }
         while (AnyKeyHeld());
 
         // t2: wait for a key press
         while (true)
         {
-            int a = RDKEY();
-            if (a != 0)
+            int key = ReadKey();
+            if (key != 0)
             {
-                return a;
+                return key;
             }
 
-            WSCAN();
+            WaitForVsync();
         }
     }
 
@@ -475,7 +476,7 @@ public sealed partial class EliteGame
     {
         for (int key = 16; key < 128; key++)
         {
-            if (_keyboard.IsHeld(key) && TRTB[key] != 0)
+            if (_keyboard.IsHeld(key) && KeyTranslationTable[key] != 0)
             {
                 return true;
             }

@@ -11,18 +11,40 @@ namespace EliteSharp.Sound;
 /// </summary>
 public sealed unsafe class SoundEngine : IDisposable
 {
+    /// <summary>The output sample rate.</summary>
     private const int SampleRate = 44100;
+
+    /// <summary>The number of samples between each run of the sound interrupt (which runs at 50 Hz).</summary>
     private const int SamplesPerTick = SampleRate / 50;
+
+    /// <summary>The number of OpenAL buffers queued at once.</summary>
     private const int BufferCount = 4;
+
+    /// <summary>The number of samples in each OpenAL buffer.</summary>
     private const int BufferSamples = SamplesPerTick * 2;
 
-    // The sound buffer from the original (SOFLG, SOCNT, SOVOL, SOVCH, SOPR, SOFRCH, SOFRQ)
+    // The sound buffer from the original, with one entry for each of the
+    // three voices
+
+    /// <summary>SOFLG: the flags for each voice (bit 7 set for a new sound, bits 0-5 the sound number + 1).</summary>
     private readonly int[] _flags = new int[3];
+
+    /// <summary>SOCNT: the number of ticks left in each voice's sound.</summary>
     private readonly int[] _count = new int[3];
+
+    /// <summary>SOVOL: the volume of each voice.</summary>
     private readonly int[] _volume = new int[3];
+
+    /// <summary>SOVCH: the volume change rate for each voice (the volume drops every SOVCH ticks).</summary>
     private readonly int[] _volumeChange = new int[3];
+
+    /// <summary>SOPR: the priority of the sound on each voice.</summary>
     private readonly int[] _priority = new int[3];
+
+    /// <summary>SOFRCH: the frequency change for each voice, added to the frequency each tick.</summary>
     private readonly int[] _frequencyChange = new int[3];
+
+    /// <summary>SOFRQ: the frequency of each voice.</summary>
     private readonly int[] _frequency = new int[3];
 
     /// <summary>SOFH: the sound chip latch bytes for each voice's frequency.</summary>
@@ -31,19 +53,42 @@ public sealed unsafe class SoundEngine : IDisposable
     /// <summary>SOOFF: the sound chip bytes that silence each voice (plus the noise control byte).</summary>
     private static readonly int[] VolumeLatch = [0b11111111, 0b10111111, 0b10011111, 0b11011111, 0b11101111];
 
+    /// <summary>Guards the sound buffer, which is written by the game thread and read by the audio thread.</summary>
     private readonly object _lock = new();
+
+    /// <summary>Where to get the game's volume setting (VOL, 0-7).</summary>
     private Func<int> _volumeSource = () => 7;
 
-    // The SN76489 registers and state
+    // The emulated SN76489 sound chip's registers and state
+
+    /// <summary>The 10-bit tone period register for each tone channel.</summary>
     private readonly int[] _tonePeriod = [1024, 1024, 1024];
+
+    /// <summary>The 4-bit attenuation register for each channel (three tones and the noise), where 15 is silent.</summary>
     private readonly int[] _attenuation = [15, 15, 15, 15];
+
+    /// <summary>The noise control register (bit 2 for white noise, bits 0-1 for the noise rate).</summary>
     private int _noiseControl;
+
+    /// <summary>The register selected by the last latch byte, for any following data byte.</summary>
     private int _latchedRegister;
+
+    /// <summary>The countdown to the next output flip for each tone channel.</summary>
     private readonly double[] _toneCounter = new double[3];
+
+    /// <summary>The current output level (high or low) of each tone channel.</summary>
     private readonly bool[] _toneOutput = new bool[3];
+
+    /// <summary>The countdown to the next shift of the noise generator.</summary>
     private double _noiseCounter;
+
+    /// <summary>The noise generator's 15-bit linear feedback shift register.</summary>
     private int _lfsr = 0x4000;
+
+    /// <summary>The noise generator's current output level.</summary>
     private bool _noiseOutput;
+
+    /// <summary>The output level for each attenuation value (2 dB steps).</summary>
     private static readonly float[] VolumeTable = BuildVolumeTable();
 
     private AL? _al;
@@ -167,7 +212,7 @@ public sealed unsafe class SoundEngine : IDisposable
             {
                 if (_samplesUntilTick <= 0)
                 {
-                    SOINT();
+                    ProcessSoundBuffer();
                     _samplesUntilTick = SamplesPerTick;
                 }
 
@@ -291,7 +336,7 @@ public sealed unsafe class SoundEngine : IDisposable
     }
 
     /// <summary>SOINT: process the sound buffer and send the results to the sound chip.</summary>
-    private void SOINT()
+    private void ProcessSoundBuffer()
     {
         int vol = Math.Clamp(_volumeSource(), 0, 7);
         for (int y = 2; y >= 0; y--)

@@ -114,7 +114,7 @@ public sealed class Ship
     public int Energy;
 
     /// <summary>Byte #36: the NEWB flags (trader, bounty hunter, hostile, pirate, docking, innocent, cop, scooped).</summary>
-    public int Newb;
+    public int Behaviour;
 
     /// <summary>The explosion cloud data (the start of the ship line heap in the original).</summary>
     public ExplosionCloud Explosion { get; private set; } = new();
@@ -126,15 +126,28 @@ public sealed class Ship
     /// </summary>
     public Ship DisplayOwner { get; private set; }
 
+    // The bits in byte #31 (Flags), which also holds the number of missiles in
+    // bits 0-2
+
+    /// <summary>Bit 3 of byte #31: the ship is being drawn on-screen.</summary>
     public const int FlagDrawn = 0x08;
+
+    /// <summary>Bit 4 of byte #31: the ship is being shown on the scanner.</summary>
     public const int FlagScanner = 0x10;
+
+    /// <summary>Bit 5 of byte #31: the ship is exploding.</summary>
     public const int FlagExploding = 0x20;
+
+    /// <summary>Bit 6 of byte #31: the ship is firing its lasers at us.</summary>
     public const int FlagFiring = 0x40;
 
     /// <summary>Bit 6 of byte #31 means the explosion cloud is on-screen when the ship is exploding.</summary>
     public const int FlagOnScreenCloud = 0x40;
+
+    /// <summary>Bit 7 of byte #31: the ship has been killed.</summary>
     public const int FlagKilled = 0x80;
 
+    /// <summary>Bits 0-2 of byte #31: the number of missiles the ship has.</summary>
     public int MissileCount
     {
         get => Flags & 7;
@@ -150,14 +163,31 @@ public sealed class Ship
     /// <summary>The sign byte of a 24-bit sign-magnitude coordinate, e.g. x_sign (bit 7 = sign).</summary>
     public static int SignByte(int value) => ((Math.Abs(value) >> 16) & 0x7F) | (value < 0 ? 0x80 : 0);
 
+    /// <summary>Byte #0: x_lo, the low byte of the x-coordinate's magnitude.</summary>
     public int XLo => Lo(X);
+
+    /// <summary>Byte #1: x_hi, the high byte of the x-coordinate's magnitude.</summary>
     public int XHi => Hi(X);
+
+    /// <summary>Byte #3: y_lo, the low byte of the y-coordinate's magnitude.</summary>
     public int YLo => Lo(Y);
+
+    /// <summary>Byte #4: y_hi, the high byte of the y-coordinate's magnitude.</summary>
     public int YHi => Hi(Y);
+
+    /// <summary>Byte #6: z_lo, the low byte of the z-coordinate's magnitude.</summary>
     public int ZLo => Lo(Z);
+
+    /// <summary>Byte #7: z_hi, the high byte of the z-coordinate's magnitude.</summary>
     public int ZHi => Hi(Z);
+
+    /// <summary>Byte #2: x_sign, the sign byte of the x-coordinate.</summary>
     public int XSign => SignByte(X);
+
+    /// <summary>Byte #5: y_sign, the sign byte of the y-coordinate.</summary>
     public int YSign => SignByte(Y);
+
+    /// <summary>Byte #8: z_sign, the sign byte of the z-coordinate.</summary>
     public int ZSign => SignByte(Z);
 
     /// <summary>
@@ -197,7 +227,7 @@ public sealed class Ship
         Flags = other.Flags;
         Ai = other.Ai;
         Energy = other.Energy;
-        Newb = other.Newb;
+        Behaviour = other.Behaviour;
     }
 
     /// <summary>Give this ship its own explosion heap and display, rather than sharing another ship's.</summary>
@@ -224,7 +254,7 @@ public sealed class Ship
         Flags = 0;
         Ai = 0;
         Energy = 0;
-        Newb = 0;
+        Behaviour = 0;
     }
 
     public override string ToString() => $"{Blueprint?.Name ?? TypeName(Type)} (type {Type}) at ({X}, {Y}, {Z})";

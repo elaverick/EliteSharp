@@ -10,209 +10,209 @@ namespace EliteSharp.Game;
 public sealed partial class EliteGame
 {
     /// <summary>M%: the main flight loop.</summary>
-    private void M()
+    private void MainFlightLoop()
     {
         // Part 1: seed the random number generator
-        RAND[0] = Planet.XLo;
+        _randomSeeds[0] = Planet.XLo;
 
         // Part 2: calculate the alpha and beta angles from the current pitch
         // and roll of our ship
-        int x = JSTX;
-        x = cntr(x);
-        x = cntr(x);
-        int a = x ^ 0x80;
-        int y = a;
-        ALP2 = a & 0x80;
-        JSTX = x;
-        ALP2Flipped = ALP2 ^ 0x80;
-        a = y;
-        if ((a & 0x80) != 0)
+        int rate = _rollRate;
+        rate = DampRate(rate);
+        rate = DampRate(rate);
+        int angle = rate ^ 0x80;
+        int signedRate = angle;
+        _rollSign = angle & 0x80;
+        _rollRate = rate;
+        _rollSignFlipped = _rollSign ^ 0x80;
+        angle = signedRate;
+        if ((angle & 0x80) != 0)
         {
-            a = (-a) & 0xFF;
+            angle = (-angle) & 0xFF;
         }
 
-        a >>= 2;
+        angle >>= 2;
         bool carry;
-        if (a >= 8)
+        if (angle >= 8)
         {
             carry = true;
         }
         else
         {
-            carry = (a & 1) != 0;
-            a >>= 1;
+            carry = (angle & 1) != 0;
+            angle >>= 1;
         }
 
-        ALP1 = a;
-        ALPHA = a | ALP2;
+        _rollMagnitude = angle;
+        _rollAngle = angle | _rollSign;
 
-        x = JSTY;
-        x = cntr(x);
-        a = x ^ 0x80;
-        y = a;
-        a &= 0x80;
-        JSTY = x;
-        BET2Flipped = a;
-        BET2 = a ^ 0x80;
-        a = y;
-        if ((a & 0x80) != 0)
+        rate = _pitchRate;
+        rate = DampRate(rate);
+        angle = rate ^ 0x80;
+        signedRate = angle;
+        angle &= 0x80;
+        _pitchRate = rate;
+        _pitchSignFlipped = angle;
+        _pitchSign = angle ^ 0x80;
+        angle = signedRate;
+        if ((angle & 0x80) != 0)
         {
-            a ^= 0xFF;
+            angle ^= 0xFF;
         }
 
-        a = (a + 4 + (carry ? 1 : 0)) & 0xFF;
-        a >>= 4;
-        if (a < 3)
+        angle = (angle + 4 + (carry ? 1 : 0)) & 0xFF;
+        angle >>= 4;
+        if (angle < 3)
         {
-            a >>= 1;
+            angle >>= 1;
         }
 
-        BET1 = a;
-        BETA = a | BET2;
+        _pitchMagnitude = angle;
+        _pitchAngle = angle | _pitchSign;
 
         // Part 3: scan for flight keys and process the results
         // BS2 (the Bitstik isn't supported)
-        if (KY2 && DELTA < 40)
+        if (_keySpeedUp && _speed < 40)
         {
-            DELTA++;
+            _speed++;
         }
 
         // MA17
-        if (KY1)
+        if (_keySlowDown)
         {
-            DELTA--;
-            if (DELTA == 0)
+            _speed--;
+            if (_speed == 0)
             {
-                DELTA++;
+                _speed++;
             }
         }
 
         // MA4
-        if (KY15 && NOMSL != 0)
+        if (_keyUnarmMissile && _missiles != 0)
         {
-            ABORT(GREEN2);
-            BOOP();
-            MSAR = 0;
+            DisarmMissile(DashboardGreen);
+            Boop();
+            _missileArmed = 0;
         }
 
         // MA20
-        if ((MSTG & 0x80) != 0 && KY14 && NOMSL != 0)
+        if ((_missileTarget & 0x80) != 0 && _keyTargetMissile && _missiles != 0)
         {
-            MSAR = 0xFF;
-            MSBAR(NOMSL, YELLOW2);
+            _missileArmed = 0xFF;
+            SetMissileIndicator(_missiles, DashboardYellow);
         }
 
         // MA25
-        bool skipToMA64 = false;
-        if (KY16)
+        bool skipRemainingKeys = false;
+        if (_keyFireMissile)
         {
-            if ((MSTG & 0x80) != 0)
+            if ((_missileTarget & 0x80) != 0)
             {
-                skipToMA64 = true;
+                skipRemainingKeys = true;
             }
             else
             {
-                FRMIS();
+                FireMissile();
             }
         }
 
-        if (!skipToMA64)
+        if (!skipRemainingKeys)
         {
             // MA24
-            if (KY12 && (BOMB & 0x80) == 0)
+            if (_keyEnergyBomb && (_energyBomb & 0x80) == 0)
             {
-                BOMB = (BOMB << 1) & 0xFF;
-                if (BOMB != 0)
+                _energyBomb = (_energyBomb << 1) & 0xFF;
+                if (_energyBomb != 0)
                 {
-                    BOMBON();
+                    RandomiseBombBolt();
                 }
             }
 
             // MA76
-            if (KY20)
+            if (_keyDockingComputerOff)
             {
-                Auto = 0;
+                _autoDocking = 0;
             }
 
             // MA78
-            if (KY13 && ESCP != 0 && MJ == 0)
+            if (_keyEscapePod && _escapePod != 0 && _inWitchspace == 0)
             {
-                ESCAPE();
+                LaunchEscapePod();
             }
 
             // noescp
-            if (KY18)
+            if (_keyJump)
             {
-                WARP();
+                InSystemJump();
             }
 
-            if (KY17 && ECM != 0 && ECMA == 0)
+            if (_keyEcm && _ecm != 0 && _ecmCounter == 0)
             {
-                ECMP = (ECMP - 1) & 0xFF;
-                ECBLB2();
+                _ourEcmActive = (_ourEcmActive - 1) & 0xFF;
+                StartEcm();
             }
         }
 
         // MA64
-        if (KY19 && DKCMP != 0)
+        if (_keyDockingComputerOn && _dockingComputer != 0)
         {
-            Auto = 0xFF;
+            _autoDocking = 0xFF;
         }
 
         // MA68
-        LAS = 0;
-        DELT4 = DELTA << 6;
+        _firingLaserPower = 0;
+        _speedTimes64 = _speed << 6;
 
-        if (LASCT == 0 && KY7 && GNTMP < 242)
+        if (_laserPulseCounter == 0 && _keyFireLaser && _laserTemperature < 242)
         {
-            int laser = LASER[VIEW];
+            int laser = _lasers[_view];
             if (laser != 0)
             {
-                LAS = laser & 0x7F;
-                LAS2 = LAS;
-                LASNO();
-                LASLI();
+                _firingLaserPower = laser & 0x7F;
+                _laserBeamPower = _firingLaserPower;
+                LaserSound();
+                DrawLaserBeams();
                 int count = (laser & 0x80) != 0 ? 0 : laser;
-                LASCT = count & 0b11111010;
+                _laserPulseCounter = count & 0b11111010;
             }
         }
 
         if (_trace != null)
         {
-            Trace($"MCNT={MCNT} QQ11={QQ11} NOSTM={NOSTM} MJ={MJ} delta={DELTA} slots=" + string.Join(" ", Slots.Where(s => s != null).Select(s => $"{s!.Type}:({s.X},{s.Y},{s.Z})")) + " dust=" + string.Join(",", Enumerable.Range(1, NOSTM).Select(i => $"{SX[i]:X2}/{SY[i]:X2}/{SZ[i]:X2}")));
+            Trace($"MCNT={_mainLoopCounter} QQ11={_viewType} NOSTM={_stardustCount} MJ={_inWitchspace} delta={_speed} slots=" + string.Join(" ", Slots.Where(s => s != null).Select(s => $"{s!.Type}:({s.X},{s.Y},{s.Z})")) + " dust=" + string.Join(",", Enumerable.Range(1, _stardustCount).Select(i => $"{_dustX[i]:X2}/{_dustY[i]:X2}/{_dustZ[i]:X2}")));
         }
 
         // Part 4: start looping through all the ships in the local bubble
-        XSAV = 0;
+        _currentSlot = 0;
         while (true)
         {
             // MAL1
-            var ship = Slots[XSAV];
+            var ship = Slots[_currentSlot];
             if (ship == null)
             {
                 break;
             }
 
             // MAL2: copy the ship's data block into INWK
-            TYPE = ship.Type;
-            INF = ship;
-            INWK = ship.CloneBlock();
-            XX0 = ship.Blueprint;
+            _shipType = ship.Type;
+            _slotShip = ship;
+            _currentShip = ship.CloneBlock();
+            _blueprint = ship.Blueprint;
 
             // Part 5: if an energy bomb has been set off, potentially kill
             // this ship
-            if (TYPE < 128 && (BOMB & 0x80) != 0
-                && TYPE != ShipType.SpaceStation && TYPE != ShipType.Thargoid && TYPE < ShipType.Constrictor
-                && (INWK.Flags & Ship.FlagExploding) == 0)
+            if (_shipType < 128 && (_energyBomb & 0x80) != 0
+                && _shipType != ShipType.SpaceStation && _shipType != ShipType.Thargoid && _shipType < ShipType.Constrictor
+                && (_currentShip.Flags & Ship.FlagExploding) == 0)
             {
-                INWK.Flags |= Ship.FlagKilled;
-                EXNO2(TYPE);
+                _currentShip.Flags |= Ship.FlagKilled;
+                RecordKill(_shipType);
             }
 
             // Part 6: move the ship in space and copy the updated INWK data
             // block back to K% (MAL3)
-            MVEIT();
-            ship.CopyStateFrom(INWK);
+            MoveShip();
+            ship.CopyStateFrom(_currentShip);
 
             // From here on, INWK is a working copy of the ship data, and only
             // bytes #31 and #35 get copied back to K%
@@ -220,84 +220,84 @@ public sealed partial class EliteGame
             if (!ProcessShipInteractions(ship))
             {
                 // KS1: remove the ship from the bubble
-                KILLSHP(XSAV);
+                RemoveShip(_currentSlot);
                 continue;
             }
 
             // MA27
-            ship.Flags = INWK.Flags;
-            XSAV++;
+            ship.Flags = _currentShip.Flags;
+            _currentSlot++;
         }
 
         // Part 13 (MA18): show the energy bomb effect and charge shields and energy banks
-        if ((BOMB & 0x80) != 0)
+        if ((_energyBomb & 0x80) != 0)
         {
-            BOMBEFF2();
-            BOMB = (BOMB << 1) & 0xFF;
-            if ((BOMB & 0x80) == 0)
+            AnimateEnergyBomb();
+            _energyBomb = (_energyBomb << 1) & 0xFF;
+            if ((_energyBomb & 0x80) == 0)
             {
-                BOMBOFF();
+                ToggleBombBolt();
             }
         }
 
         // MA77
-        if ((MCNT & 7) == 0)
+        if ((_mainLoopCounter & 7) == 0)
         {
-            if ((ENERGY & 0x80) != 0)
+            if ((_energy & 0x80) != 0)
             {
-                ASH = SHD(ASH);
-                FSH = SHD(FSH);
+                _aftShield = ChargeShield(_aftShield);
+                _forwardShield = ChargeShield(_forwardShield);
             }
 
             // b
-            int sum = ENGY + ENERGY + 1;
+            int sum = _energyUnit + _energy + 1;
             if (sum <= 0xFF)
             {
-                ENERGY = sum;
+                _energy = sum;
             }
 
             // Part 14: spawn a space station if we are close enough to the planet
-            if (MJ == 0)
+            if (_inWitchspace == 0)
             {
-                if ((MCNT & 31) == 0)
+                if ((_mainLoopCounter & 31) == 0)
                 {
                     SpawnStationIfClose();
                 }
                 else
                 {
-                    AltitudeChecks(MCNT & 31);
+                    AltitudeChecks(_mainLoopCounter & 31);
                 }
             }
         }
-        else if (MJ == 0)
+        else if (_inWitchspace == 0)
         {
             // MA22
-            AltitudeChecks(MCNT & 31);
+            AltitudeChecks(_mainLoopCounter & 31);
         }
 
         // Part 16 (MA23): process laser pulsing, E.C.M. energy drain and the stardust
-        if (LAS2 != 0 && LASCT < 8)
+        if (_laserBeamPower != 0 && _laserPulseCounter < 8)
         {
-            LASLI2();
-            LAS2 = 0;
+            ToggleLaserBeams();
+            _laserBeamPower = 0;
         }
 
         // MA16
         bool ecmOff = false;
-        if (ECMP != 0)
+        if (_ourEcmActive != 0)
         {
-            if (DENGY())
+            if (DrainEcmEnergy())
             {
                 ecmOff = true;
             }
         }
 
-        if (!ecmOff && ECMA != 0)
+        if (!ecmOff && _ecmCounter != 0)
         {
             // MA69
-            NOISE(soecm);
-            ECMA = (ECMA - 1) & 0xFF;
-            if (ECMA == 0)
+            MakeSound(SoundEcm);
+            _ecmCounter = (_ecmCounter - 1) & 0xFF;
+            if (_ecmCounter == 0)
             {
                 ecmOff = true;
             }
@@ -306,13 +306,13 @@ public sealed partial class EliteGame
         if (ecmOff)
         {
             // MA70
-            ECMOF();
+            StopEcm();
         }
 
         // MA66
-        if (QQ11 == 0)
+        if (_viewType == 0)
         {
-            STARS();
+            MoveStardust();
         }
     }
 
@@ -324,40 +324,40 @@ public sealed partial class EliteGame
     private bool ProcessShipInteractions(Ship ship)
     {
         // Part 7: check whether we are docking, scooping or colliding with it
-        bool skipToMA26 = false;
-        if (MAS4(INWK.Flags & 0b10100000) != 0)
+        bool skipToDrawing = false;
+        if (OrCoordinateHighBytes(_currentShip.Flags & 0b10100000) != 0)
         {
-            skipToMA26 = true;
+            skipToDrawing = true;
         }
-        else if (((INWK.XLo | INWK.YLo | INWK.ZLo) & 0x80) != 0 || TYPE >= 128)
+        else if (((_currentShip.XLo | _currentShip.YLo | _currentShip.ZLo) & 0x80) != 0 || _shipType >= 128)
         {
-            skipToMA26 = true;
+            skipToDrawing = true;
         }
-        else if (TYPE == ShipType.SpaceStation)
+        else if (_shipType == ShipType.SpaceStation)
         {
             // ISDK: check whether we are docking
             if (CheckDocking())
             {
                 // GOIN
-                DOENTRY();
+                DockAtStation();
             }
 
             // MA62: docking failed
-            if (DELTA >= 5)
+            if (_speed >= 5)
             {
-                DEATH();
+                ShowDeathScreen();
             }
 
             // MA67 (the C flag is clear from the CMP #5)
-            DELTA = 1;
-            OOPS(5, false);
-            EXNO3();
+            _speed = 1;
+            TakeDamage(5, false);
+            ExplosionSound();
         }
-        else if (((INWK.XLo | INWK.YLo | INWK.ZLo) & 0b11000000) != 0 || TYPE == ShipType.Missile)
+        else if (((_currentShip.XLo | _currentShip.YLo | _currentShip.ZLo) & 0b11000000) != 0 || _shipType == ShipType.Missile)
         {
-            skipToMA26 = true;
+            skipToDrawing = true;
         }
-        else if ((BST & INWK.YSign & 0x80) == 0)
+        else if ((_fuelScoops & _currentShip.YSign & 0x80) == 0)
         {
             // MA58: a potentially fatal collision
             Collide();
@@ -366,15 +366,15 @@ public sealed partial class EliteGame
         {
             // Part 8: potentially scoop this item
             int item;
-            if (TYPE == ShipType.CargoCanister)
+            if (_shipType == ShipType.CargoCanister)
             {
                 // oily
-                item = DORND() & 7;
+                item = NextRandom() & 7;
             }
             else
             {
-                int byte0 = XX0!.Byte0;
-                item = byte0 >> 4;
+                int canisterAndScoopByte = _blueprint!.CanisterAndScoopByte;
+                item = canisterAndScoopByte >> 4;
                 if (item == 0)
                 {
                     Collide();
@@ -382,55 +382,55 @@ public sealed partial class EliteGame
                 }
 
                 // ADC #1 with the C flag set to bit 3 of byte #0 from the LSRs
-                item = item + 1 + ((byte0 >> 3) & 1);
+                item = item + 1 + ((canisterAndScoopByte >> 3) & 1);
             }
 
             // slvy2
-            QQ29 = item;
-            if (tnpr1(item))
+            _itemNumber = item;
+            if (HasRoomForOne(item))
             {
                 // MA59: no room in the hold
-                EXNO3();
-                INWK.Flags |= Ship.FlagKilled;
+                ExplosionSound();
+                _currentShip.Flags |= Ship.FlagKilled;
             }
             else
             {
-                QQ20[QQ29] = (QQ20[QQ29] + 1) & 0xFF;
-                MESS(QQ29 + 208);
-                INWK.Newb |= 0x80;
+                _cargo[_itemNumber] = (_cargo[_itemNumber] + 1) & 0xFF;
+                ShowMessage(_itemNumber + 208);
+                _currentShip.Behaviour |= 0x80;
             }
 
-            skipToMA26 = true;
+            skipToDrawing = true;
         }
 
-        _ = skipToMA26;
+        _ = skipToDrawing;
         return ProcessMissileLockAndDrawing(ship);
     }
 
     /// <summary>MA58: we have collided with the ship in INWK in a potentially fatal way.</summary>
     private void Collide()
     {
-        INWK.Flags |= Ship.FlagKilled;
-        int damage = 0x80 | (INWK.Energy >> 1);
+        _currentShip.Flags |= Ship.FlagKilled;
+        int damage = 0x80 | (_currentShip.Energy >> 1);
 
         // MA63 (the C flag is bit 0 of the energy, from the ROR)
-        OOPS(damage, (INWK.Energy & 1) != 0);
-        EXNO3();
+        TakeDamage(damage, (_currentShip.Energy & 1) != 0);
+        ExplosionSound();
     }
 
     /// <summary>ISDK: returns true if the conditions for docking with the station in INWK are met.</summary>
     private bool CheckDocking()
     {
-        SPS1();
-        if (_trace != null) Trace($"ISDK newb={Slots[1]!.Newb:X2} nosez={Ship.VectorHiByte(INWK.Nose.Z)} xx15z={XX15[2]} roofx={Ship.VectorHiByte(INWK.Roof.X) & 0x7F} delta={DELTA}");
+        CalculatePlanetVector();
+        if (_trace != null) Trace($"ISDK newb={Slots[1]!.Behaviour:X2} nosez={Ship.VectorHiByte(_currentShip.Nose.Z)} xx15z={_unitVector[2]} roofx={Ship.VectorHiByte(_currentShip.Roof.X) & 0x7F} delta={_speed}");
         // 1. The station must not be hostile
-        if ((Slots[1]!.Newb & 0b00000100) != 0)
+        if ((Slots[1]!.Behaviour & 0b00000100) != 0)
         {
             return false;
         }
 
         // 2. The angle of approach must be less than 26 degrees
-        if (Ship.VectorHiByte(INWK.Nose.Z) < 214)
+        if (Ship.VectorHiByte(_currentShip.Nose.Z) < 214)
         {
             return false;
         }
@@ -438,14 +438,14 @@ public sealed partial class EliteGame
         // 4. We must be within the 22 degree safe cone of approach (this
         // compares the raw sign-magnitude byte, as the original omits the
         // sign check)
-        SPS1();
-        if (ToByte(XX15[2]) < 89)
+        CalculatePlanetVector();
+        if (ToByte(_unitVector[2]) < 89)
         {
             return false;
         }
 
         // 5. The slot must be horizontal to within 36.6 degrees
-        if ((Ship.VectorHiByte(INWK.Roof.X) & 0x7F) < 80)
+        if ((Ship.VectorHiByte(_currentShip.Roof.X) & 0x7F) < 80)
         {
             return false;
         }
@@ -461,95 +461,95 @@ public sealed partial class EliteGame
     private bool ProcessMissileLockAndDrawing(Ship ship)
     {
         // MA26
-        if ((INWK.Newb & 0x80) != 0)
+        if ((_currentShip.Behaviour & 0x80) != 0)
         {
-            SCAN();
+            DrawOnScanner();
         }
 
-        if (QQ11 == 0)
+        if (_viewType == 0)
         {
-            PLUT();
-            if (HITCH())
+            TransformForView();
+            if (IsInCrosshairs())
             {
-                if (MSAR != 0)
+                if (_missileArmed != 0)
                 {
-                    BEEP();
-                    ABORT2(XSAV, RED2);
+                    Beep();
+                    SetMissileTarget(_currentSlot, DashboardRed);
                 }
 
                 // MA47
-                if (LAS != 0)
+                if (_firingLaserPower != 0)
                 {
-                    EXNO();
+                    LaserStrikeSound();
                     bool damage = true;
-                    if (TYPE == ShipType.SpaceStation)
+                    if (_shipType == ShipType.SpaceStation)
                     {
                         damage = false;
                     }
-                    else if (TYPE >= ShipType.Constrictor)
+                    else if (_shipType >= ShipType.Constrictor)
                     {
-                        if (LAS != (Armlas & 127))
+                        if (_firingLaserPower != (MilitaryLaserPower & 127))
                         {
                             damage = false;
                         }
                         else
                         {
-                            LAS >>= 2;
+                            _firingLaserPower >>= 2;
                         }
                     }
 
                     if (damage)
                     {
                         // BURN
-                        int energy = INWK.Energy - LAS;
+                        int energy = _currentShip.Energy - _firingLaserPower;
                         if (energy >= 0)
                         {
-                            INWK.Energy = energy;
+                            _currentShip.Energy = energy;
                         }
                         else
                         {
-                            INWK.Flags |= Ship.FlagKilled;
-                            if (TYPE == ShipType.Asteroid && LAS == Mlas)
+                            _currentShip.Flags |= Ship.FlagKilled;
+                            if (_shipType == ShipType.Asteroid && _firingLaserPower == MiningLaserPower)
                             {
-                                int count = DORND() & 3;
-                                SPIN2(ShipType.Splinter, count);
+                                int count = NextRandom() & 3;
+                                SpawnWreckagePieces(ShipType.Splinter, count);
                             }
 
                             // nosp
-                            SPIN(ShipType.AlloyPlate);
-                            SPIN(ShipType.CargoCanister);
-                            EXNO2(TYPE);
+                            SpawnWreckage(ShipType.AlloyPlate);
+                            SpawnWreckage(ShipType.CargoCanister);
+                            RecordKill(_shipType);
                         }
                     }
 
-                    ANGRY(TYPE, INF!);
+                    MakeHostile(_shipType, _slotShip!);
                 }
             }
 
             // MA8
-            LL9();
+            DrawShip();
         }
 
         // MA15: copy the energy back to the ship data block
-        ship.Energy = INWK.Energy;
+        ship.Energy = _currentShip.Energy;
 
-        if ((INWK.Newb & 0x80) != 0)
+        if ((_currentShip.Behaviour & 0x80) != 0)
         {
             return false;
         }
 
-        if ((INWK.Flags & Ship.FlagKilled) != 0 && (INWK.Flags & Ship.FlagExploding) != 0)
+        if ((_currentShip.Flags & Ship.FlagKilled) != 0 && (_currentShip.Flags & Ship.FlagExploding) != 0)
         {
             // The ship has finished exploding, so we get the bounty
-            FIST |= INWK.Newb & 0b01000000;
-            if ((DLY | MJ) == 0)
+            _legalStatus |= _currentShip.Behaviour & 0b01000000;
+            if ((_messageDelay | _inWitchspace) == 0)
             {
                 // Only the low byte of the bounty is checked for zero
-                int bounty = XX0?.Bounty ?? 0;
+                int bounty = _blueprint?.Bounty ?? 0;
                 if ((bounty & 0xFF) != 0)
                 {
-                    MCASH(bounty);
-                    MESS(0);
+                    AddCash(bounty);
+                    ShowMessage(0);
                 }
             }
 
@@ -557,7 +557,7 @@ public sealed partial class EliteGame
         }
 
         // MAC1: remove the ship if it is too far away
-        if (TYPE < 128 && !FAROF())
+        if (_shipType < 128 && !IsNearby())
         {
             return false;
         }
@@ -568,63 +568,63 @@ public sealed partial class EliteGame
     /// <summary>Main flight loop part 14: spawn a space station if we are close enough to the planet.</summary>
     private void SpawnStationIfClose()
     {
-        if (SSPR != 0)
+        if (InSafeZone != 0)
         {
             return;
         }
 
-        if (MAS2(Planet) != 0)
+        if (CombinedSignBytes(Planet) != 0)
         {
             return;
         }
 
         // Copy the planet's position and orientation into INWK
-        var saved = INWK;
-        INWK = _workspace;
-        INWK.ResetOrientationAndPosition();
-        INWK.X = Planet.X;
-        INWK.Y = Planet.Y;
-        INWK.Z = Planet.Z;
-        INWK.Nose = Planet.Nose;
-        INWK.Roof = Planet.Roof;
-        INWK.Side = Planet.Side;
-        INWK.Speed = Planet.Speed;
-        INWK.Acceleration = Planet.Acceleration;
+        var saved = _currentShip;
+        _currentShip = _workspace;
+        _currentShip.ResetOrientationAndPosition();
+        _currentShip.X = Planet.X;
+        _currentShip.Y = Planet.Y;
+        _currentShip.Z = Planet.Z;
+        _currentShip.Nose = Planet.Nose;
+        _currentShip.Roof = Planet.Roof;
+        _currentShip.Side = Planet.Side;
+        _currentShip.Speed = Planet.Speed;
+        _currentShip.Acceleration = Planet.Acceleration;
 
-        INWK.X = MAS1(INWK.X, INWK.Nose.X, out int xs);
-        if (xs == 0)
+        _currentShip.X = AddVectorToCoordinate(_currentShip.X, _currentShip.Nose.X, out int xSign);
+        if (xSign == 0)
         {
-            INWK.Y = MAS1(INWK.Y, INWK.Nose.Y, out int ys);
-            if (ys == 0)
+            _currentShip.Y = AddVectorToCoordinate(_currentShip.Y, _currentShip.Nose.Y, out int ySign);
+            if (ySign == 0)
             {
-                INWK.Z = MAS1(INWK.Z, INWK.Nose.Z, out int zs);
-                if (zs == 0 && FAROF2(192))
+                _currentShip.Z = AddVectorToCoordinate(_currentShip.Z, _currentShip.Nose.Z, out int zSign);
+                if (zSign == 0 && IsWithinDistance(192))
                 {
-                    WPLS();
-                    NWSPS();
+                    RemoveSun();
+                    AddStation();
                 }
             }
         }
 
-        INWK = saved;
+        _currentShip = saved;
     }
 
     /// <summary>
     /// MAS1: add 2 * a vector coordinate to a position coordinate, returning the
     /// new coordinate and |sign byte| in signMagnitude.
     /// </summary>
-    private static int MAS1(int coordinate, int vector, out int signMagnitude)
+    private static int AddVectorToCoordinate(int coordinate, int vector, out int signMagnitude)
     {
-        int result = MVT3(coordinate, vector * 2);
+        int result = AddToCoordinate24(coordinate, vector * 2);
         signMagnitude = Ship.SignByte(result) & 0x7F;
         return result;
     }
 
     /// <summary>MAS2: the OR of the sign bytes (without the sign bits) of a ship's coordinates.</summary>
-    private static int MAS2(Ship ship, int a = 0) => (a | ship.XSign | ship.YSign | ship.ZSign) & 0x7F;
+    private static int CombinedSignBytes(Ship ship, int initial = 0) => (initial | ship.XSign | ship.YSign | ship.ZSign) & 0x7F;
 
     /// <summary>MAS3: A = x_hi^2 + y_hi^2 + z_hi^2 (high bytes only), returning 255 and C set on overflow.</summary>
-    private static int MAS3(Ship ship, out bool overflow)
+    private static int DistanceSquared(Ship ship, out bool overflow)
     {
         overflow = false;
         int sum = (ship.XHi * ship.XHi) >> 8;
@@ -646,23 +646,23 @@ public sealed partial class EliteGame
     }
 
     /// <summary>Main flight loop part 15: altitude checks with the planet and sun, and fuel scooping.</summary>
-    private void AltitudeChecks(int a)
+    private void AltitudeChecks(int loopCounter)
     {
         // MA93
-        if (a == 10)
+        if (loopCounter == 10)
         {
-            if (ENERGY <= 50)
+            if (_energy <= 50)
             {
-                MESS(100);
+                ShowMessage(100);
             }
 
-            ALTIT = 0xFF;
-            if (MAS2(Planet) != 0)
+            _altitude = 0xFF;
+            if (CombinedSignBytes(Planet) != 0)
             {
                 return;
             }
 
-            int squared = MAS3(Planet, out bool overflow);
+            int squared = DistanceSquared(Planet, out bool overflow);
             if (overflow)
             {
                 return;
@@ -671,95 +671,95 @@ public sealed partial class EliteGame
             squared -= 37;
             if (squared < 0)
             {
-                DEATH();
+                ShowDeathScreen();
             }
 
             // LL5 with R = A and Q left over from earlier (assumed to be 0)
-            ALTIT = EliteMaths.Ll5(squared << 8);
-            if (ALTIT == 0)
+            _altitude = EliteMaths.SquareRoot(squared << 8);
+            if (_altitude == 0)
             {
-                DEATH();
+                ShowDeathScreen();
             }
 
             return;
         }
 
         // MA29
-        if (a == 15)
+        if (loopCounter == 15)
         {
-            if (Auto != 0)
+            if (_autoDocking != 0)
             {
-                MESS(123);
+                ShowMessage(123);
             }
 
             return;
         }
 
         // MA33
-        if (a != 20)
+        if (loopCounter != 20)
         {
             return;
         }
 
-        CABTMP = 30;
-        if (SSPR != 0)
+        _cabinTemperature = 30;
+        if (InSafeZone != 0)
         {
             return;
         }
 
         var sun = Slots[1];
-        if (sun == null || MAS2(sun) != 0)
+        if (sun == null || CombinedSignBytes(sun) != 0)
         {
             return;
         }
 
-        int value = MAS3(sun, out bool sunOverflow);
+        int value = DistanceSquared(sun, out bool sunOverflow);
         int temperature = (value ^ 0xFF) + 30 + (sunOverflow ? 1 : 0);
-        CABTMP = temperature & 0xFF;
+        _cabinTemperature = temperature & 0xFF;
         if (temperature > 0xFF)
         {
-            DEATH();
+            ShowDeathScreen();
         }
 
-        if (CABTMP < 224 || BST == 0)
+        if (_cabinTemperature < 224 || _fuelScoops == 0)
         {
             return;
         }
 
         // Fuel scooping (the C flag is clear here)
-        int fuel = ((DELT4 >> 8) >> 1) + QQ14;
+        int fuel = ((_speedTimes64 >> 8) >> 1) + _fuel;
         if (fuel >= 70)
         {
             fuel = 70;
         }
 
-        QQ14 = fuel;
+        _fuel = fuel;
 
         // MA34
-        MESS(160);
+        ShowMessage(160);
     }
 
     /// <summary>SHD: charge a shield by one unless it is already at 255.</summary>
-    private static int SHD(int x) => x == 0xFF ? 0xFF : x + 1;
+    private static int ChargeShield(int x) => x == 0xFF ? 0xFF : x + 1;
 
     /// <summary>DENGY: drain one point of energy for the E.C.M., returning true if the energy is now zero.</summary>
-    private bool DENGY()
+    private bool DrainEcmEnergy()
     {
-        ENERGY = (ENERGY - 1) & 0xFF;
-        bool zero = ENERGY == 0;
+        _energy = (_energy - 1) & 0xFF;
+        bool zero = _energy == 0;
         if (zero)
         {
-            ENERGY++;
+            _energy++;
         }
 
         return zero;
     }
 
     /// <summary>SPIN: randomly spawn a cargo canister or alloy plate from the ship in INWK.</summary>
-    private void SPIN(int type)
+    private void SpawnWreckage(int type)
     {
-        int a = DORND();
-        if ((a & 0x80) == 0)
+        int random = NextRandom();
+        if ((random & 0x80) == 0)
         {
             return;
         }
@@ -767,16 +767,16 @@ public sealed partial class EliteGame
         // The original copies the cargo type from Y into A before the AND,
         // so the number of canisters is the cargo type AND bits 0-3 of the
         // blueprint's byte #0, rather than a random number
-        int count = type & (XX0?.Byte0 ?? 0) & 15;
-        SPIN2(type, count);
+        int count = type & (_blueprint?.CanisterAndScoopByte ?? 0) & 15;
+        SpawnWreckagePieces(type, count);
     }
 
     /// <summary>SPIN2: spawn a number of ships of the given type from the ship in INWK.</summary>
-    private void SPIN2(int type, int count)
+    private void SpawnWreckagePieces(int type, int count)
     {
         while (count != 0)
         {
-            SFS1(type, 0);
+            SpawnChildShip(type, 0);
             count--;
         }
     }
@@ -786,65 +786,65 @@ public sealed partial class EliteGame
     /// SBC in the original uses the C flag from the caller, so that is passed
     /// in too.
     /// </summary>
-    private void OOPS(int damage, bool carry = true)
+    private void TakeDamage(int damage, bool carry = true)
     {
         // Work out which shield is hit from the z_sign of the ship in K%
-        bool behind = INF != null && INF.Z < 0;
+        bool behind = _slotShip != null && _slotShip.Z < 0;
         int borrow = carry ? 0 : 1;
-        int a;
+        int shield;
         if (!behind)
         {
-            a = FSH - damage - borrow;
-            if (a >= 0)
+            shield = _forwardShield - damage - borrow;
+            if (shield >= 0)
             {
-                FSH = a;
+                _forwardShield = shield;
                 return;
             }
 
-            FSH = 0;
+            _forwardShield = 0;
         }
         else
         {
-            a = ASH - damage - borrow;
-            if (a >= 0)
+            shield = _aftShield - damage - borrow;
+            if (shield >= 0)
             {
-                ASH = a;
+                _aftShield = shield;
                 return;
             }
 
-            ASH = 0;
+            _aftShield = 0;
         }
 
         // OO3: the damage has got through the shield, so reduce our energy
         // (the C flag is clear)
-        int energy = (a & 0xFF) + ENERGY;
-        ENERGY = energy & 0xFF;
-        if (ENERGY == 0 || energy <= 0xFF)
+        int energy = (shield & 0xFF) + _energy;
+        _energy = energy & 0xFF;
+        if (_energy == 0 || energy <= 0xFF)
         {
-            DEATH();
+            ShowDeathScreen();
         }
 
-        EXNO3();
-        OUCH();
+        ExplosionSound();
+        LoseCargoOrEquipment();
     }
 
     /// <summary>WARP: perform an in-system jump (the "J" key).</summary>
-    private void WARP()
+    private void InSystemJump()
     {
-        int x = Junk;
-        int a = SlotType(2 + x) | SSPR | MJ;
-        if (a != 0)
+        int junk = _junkCount;
+        int blocked = SlotType(2 + junk) | InSafeZone | _inWitchspace;
+        if (blocked != 0)
         {
             // WA1
-            BOOP();
+            Boop();
             return;
         }
 
         if (Planet.Z >= 0)
         {
-            if (MAS2(Planet) < 2)
+            if (CombinedSignBytes(Planet) < 2)
             {
-                BOOP();
+                Boop();
                 return;
             }
         }
@@ -853,9 +853,9 @@ public sealed partial class EliteGame
         var sun = Slots[1]!;
         if (sun.Z >= 0)
         {
-            if (MAS2(sun) < 2)
+            if (CombinedSignBytes(sun) < 2)
             {
-                BOOP();
+                Boop();
                 return;
             }
         }
@@ -865,10 +865,10 @@ public sealed partial class EliteGame
         Planet.Z = WarpZ(Planet.Z);
         sun.Z = WarpZ(sun.Z);
 
-        QQ11 = 1;
-        MCNT = 1;
-        EV = 0;
-        LOOK1(VIEW);
+        _viewType = 1;
+        _mainLoopCounter = 1;
+        _extraVesselsDelay = 0;
+        SwitchView(_view);
     }
 
     /// <summary>
@@ -879,101 +879,103 @@ public sealed partial class EliteGame
     private static int WarpZ(int coordinate)
     {
         int sign = Ship.SignByte(coordinate);
-        int ap = ((sign & 0x7F) << 8) | 0x81;
+        int value = ((sign & 0x7F) << 8) | 0x81;
         if ((sign & 0x80) != 0)
         {
-            ap = -ap;
+            value = -value;
         }
 
-        int result = EliteMaths.Add16(ap, -0x181);
+        int result = EliteMaths.Add16(value, -0x181);
         int newSign = ((Math.Abs(result) >> 8) & 0x7F) | (result < 0 ? 0x80 : 0);
         int magnitude = (Math.Abs(coordinate) & 0xFFFF) | ((newSign & 0x7F) << 16);
         return (newSign & 0x80) != 0 ? -magnitude : magnitude;
     }
 
     /// <summary>LASLI: draw the laser lines for when we fire our laser.</summary>
-    private void LASLI()
+    private void DrawLaserBeams()
     {
-        LASY = ((DORND() & 7) + CentreY - 4 + (_carry ? 1 : 0)) & 0xFF;
-        LASX = ((DORND() & 7) + CentreX - 4 + (_carry ? 1 : 0)) & 0xFF;
+        _laserEndY = ((NextRandom() & 7) + CentreY - 4 + (_carry ? 1 : 0)) & 0xFF;
+        _laserEndX = ((NextRandom() & 7) + CentreX - 4 + (_carry ? 1 : 0)) & 0xFF;
 
         // The C flag is clear after the addition above
-        GNTMP = (GNTMP + 8) & 0xFF;
-        DENGY();
-        LASLI2();
+        _laserTemperature = (_laserTemperature + 8) & 0xFF;
+        DrainEcmEnergy();
+        ToggleLaserBeams();
     }
 
     /// <summary>LASLI2: draw (or erase) the laser lines.</summary>
-    private void LASLI2()
+    private void ToggleLaserBeams()
     {
-        if (QQ11 != 0)
+        if (_viewType != 0)
         {
             return;
         }
 
-        LASY -= 2;
+        _laserEndY -= 2;
         DrawLaserLines(32, 224);
-        LASY += 2;
+        _laserEndY += 2;
         DrawLaserLines(48, 208);
     }
 
     /// <summary>las: draw a pair of laser lines from the bottom corners of the space view to (LASX, LASY).</summary>
     private void DrawLaserLines(int left, int right)
     {
-        _screen.DrawLine(LASX, LASY, left, 2 * CentreY - 1, RED);
-        _screen.DrawLine(LASX, LASY, right, 2 * CentreY - 1, RED);
+        _screen.DrawLine(_laserEndX, _laserEndY, left, 2 * CentreY - 1, Red);
+        _screen.DrawLine(_laserEndX, _laserEndY, right, 2 * CentreY - 1, Red);
     }
 
     // ------------------------------------------------------------------------
     // The energy bomb
     // ------------------------------------------------------------------------
 
-    private readonly int[] BOMBTBX = new int[10];
-    private readonly int[] BOMBTBY = new int[10];
+    /// <summary>BOMBTBX: the x-coordinates of the points in the energy bomb's lightning bolt.</summary>
+    private readonly int[] _bombBoltX = new int[10];
+    /// <summary>BOMBTBY: the y-coordinates of the points in the energy bomb's lightning bolt.</summary>
+    private readonly int[] _bombBoltY = new int[10];
 
     /// <summary>BOMBOFF: draw (or erase) the zig-zag lightning bolt of the energy bomb.</summary>
-    private void BOMBOFF()
+    private void ToggleBombBolt()
     {
-        if (QQ11 != 0)
+        if (_viewType != 0)
         {
             return;
         }
 
         for (int y = 1; y < 10; y++)
         {
-            _screen.DrawLine(BOMBTBX[y - 1], BOMBTBY[y - 1], BOMBTBX[y], BOMBTBY[y], CYAN);
+            _screen.DrawLine(_bombBoltX[y - 1], _bombBoltY[y - 1], _bombBoltX[y], _bombBoltY[y], Cyan);
         }
     }
 
     /// <summary>BOMBEFF2: erase the energy bomb's lightning bolt and draw a new one, four times.</summary>
-    private void BOMBEFF2()
+    private void AnimateEnergyBomb()
     {
         for (int i = 0; i < 4; i++)
         {
-            BOMBEFF();
+            EnergyBombEffect();
         }
     }
 
     /// <summary>BOMBEFF: make the energy bomb sound, erase the bolt and draw a new one.</summary>
-    private void BOMBEFF()
+    private void EnergyBombEffect()
     {
-        NOISE(sobomb);
-        BOMBOFF();
-        BOMBON();
+        MakeSound(SoundBomb);
+        ToggleBombBolt();
+        RandomiseBombBolt();
     }
 
     /// <summary>BOMBON: randomise and draw the energy bomb's lightning bolt.</summary>
-    private void BOMBON()
+    private void RandomiseBombBolt()
     {
-        for (int y = 0; y < 10; y++)
+        for (int point = 0; point < 10; point++)
         {
-            int a = DORND();
-            BOMBTBY[y] = ((a & 127) + 3 + (_carry ? 1 : 0)) & 0xFF;
-            BOMBTBX[y] = ((_randX & 31) + GameData.BombBaseX[y]) & 0xFF;
+            int random = NextRandom();
+            _bombBoltY[point] = ((random & 127) + 3 + (_carry ? 1 : 0)) & 0xFF;
+            _bombBoltX[point] = ((_randomX & 31) + GameData.BombBaseX[point]) & 0xFF;
         }
 
-        BOMBTBX[9] = 0;
-        BOMBTBX[0] = 255;
-        BOMBOFF();
+        _bombBoltX[9] = 0;
+        _bombBoltX[0] = 255;
+        ToggleBombBolt();
     }
 }

@@ -22,13 +22,13 @@ public sealed partial class EliteGame
     /// NWSHP: add a new ship of the given type to the local bubble, using the
     /// data in INWK. Returns true if the ship was added (C set).
     /// </summary>
-    private bool NWSHP(int type)
+    private bool AddShip(int type)
     {
         int slot = 0;
         while (Slots[slot] != null)
         {
             slot++;
-            if (slot >= NOSH)
+            if (slot >= MaxShips)
             {
                 // NW3: no room
                 return false;
@@ -50,11 +50,11 @@ public sealed partial class EliteGame
             }
 
             ship = Ship.Create(type, _dodoStation);
-            XX0 = blueprint;
+            _blueprint = blueprint;
 
             // NW6
-            INWK.Energy = blueprint.MaxEnergy;
-            INWK.Flags = blueprint.Missiles;
+            _currentShip.Energy = blueprint.MaxEnergy;
+            _currentShip.Flags = blueprint.Missiles;
         }
 
         // NW2
@@ -63,29 +63,29 @@ public sealed partial class EliteGame
             if (type == ShipType.RockHermit || (type >= ShipType.JunkLow && type < ShipType.JunkHigh))
             {
                 // gangbang
-                Junk++;
+                _junkCount++;
             }
 
             // NW7
-            Many[type]++;
+            _shipCounts[type]++;
 
             // NW8: add the default NEWB flags from E%
-            INWK.Newb |= ShipCatalogue.Get(type).DefaultNewb & 0b01101111;
+            _currentShip.Behaviour |= ShipCatalogue.Get(type).DefaultBehaviour & 0b01101111;
         }
 
-        ship.CopyStateFrom(INWK);
+        ship.CopyStateFrom(_currentShip);
         Slots[slot] = ship;
-        INF = ship;
+        _slotShip = ship;
         return true;
     }
 
     /// <summary>KILLSHP: remove the ship in the given slot from the local bubble.</summary>
-    private void KILLSHP(int slot)
+    private void RemoveShip(int slot)
     {
-        if (MSTG == slot)
+        if (_missileTarget == slot)
         {
-            ABORT(GREEN2);
-            MESS(200);
+            DisarmMissile(DashboardGreen);
+            ShowMessage(200);
         }
 
         // KS5
@@ -98,19 +98,19 @@ public sealed partial class EliteGame
             // KS4: remove the space station and replace it with the sun
             Slots[1] = null;
             _screen.RemoveImage(ship.DisplayOwner);
-            ZINF();
-            FLFLLS();
-            SSPR = 0;
-            SPBLB();
-            INWK.Y = 6 << 16;
-            NWSHP(ShipType.Sun);
+            ResetWorkspace();
+            ResetSunLines();
+            InSafeZone = 0;
+            ToggleStationBulb();
+            _currentShip.Y = 6 << 16;
+            AddShip(ShipType.Sun);
             return;
         }
 
         if (type == ShipType.Constrictor)
         {
-            TP |= 0b00000010;
-            TALLY = (TALLY + 0x100) & 0xFFFF;
+            _missionStatus |= 0b00000010;
+            _killTally = (_killTally + 0x100) & 0xFFFF;
         }
 
         // lll
@@ -118,23 +118,23 @@ public sealed partial class EliteGame
         {
             if (type == ShipType.RockHermit || (type >= ShipType.JunkLow && type < ShipType.JunkHigh))
             {
-                Junk--;
+                _junkCount--;
             }
 
             // KS7
-            Many[type]--;
+            _shipCounts[type]--;
         }
 
         // KSL1: move the ships above this slot down by one
-        for (int i = slot; i < NOSH; i++)
+        for (int i = slot; i < MaxShips; i++)
         {
             Slots[i] = Slots[i + 1];
         }
 
-        Slots[NOSH] = null;
+        Slots[MaxShips] = null;
 
         // KS2: update the targets of any missiles
-        for (int i = 0; i < NOSH; i++)
+        for (int i = 0; i < MaxShips; i++)
         {
             var missile = Slots[i];
             if (missile == null)
@@ -166,14 +166,14 @@ public sealed partial class EliteGame
     }
 
     /// <summary>ZINF: reset the INWK workspace, with the orientation vectors pointing along the axes.</summary>
-    private void ZINF()
+    private void ResetWorkspace()
     {
-        INWK = _workspace;
-        INWK.ResetOrientationAndPosition();
+        _currentShip = _workspace;
+        _currentShip.ResetOrientationAndPosition();
     }
 
     /// <summary>ZERO: reset the local bubble of universe and the flight variables from FRIN to de.</summary>
-    private void ZERO()
+    private void ResetBubble()
     {
         foreach (var ship in Slots)
         {
@@ -184,174 +184,174 @@ public sealed partial class EliteGame
         }
 
         Array.Clear(Slots);
-        Array.Clear(Many);
-        Junk = 0;
-        Auto = 0;
-        ECMP = 0;
-        MJ = 0;
-        CABTMP = 0;
-        LAS2 = 0;
-        MSAR = 0;
-        VIEW = 0;
-        LASCT = 0;
-        GNTMP = 0;
-        HFX = 0;
-        EV = 0;
-        DLY = 0;
-        de = 0;
+        Array.Clear(_shipCounts);
+        _junkCount = 0;
+        _autoDocking = 0;
+        _ourEcmActive = 0;
+        _inWitchspace = 0;
+        _cabinTemperature = 0;
+        _laserBeamPower = 0;
+        _missileArmed = 0;
+        _view = 0;
+        _laserPulseCounter = 0;
+        _laserTemperature = 0;
+        HyperspaceColoursOn = 0;
+        _extraVesselsDelay = 0;
+        _messageDelay = 0;
+        _messageDestroyed = 0;
     }
 
     /// <summary>RESET: reset our ship and the universe, ready to start a new game (or after dying).</summary>
-    private void RESET()
+    private void ResetShipAndUniverse()
     {
-        ZERO();
+        ResetBubble();
 
         // Zero BETA through BETA+6
-        BETA = 0;
-        BET1 = 0;
-        QQ22 = 0;
-        QQ22Hi = 0;
-        ECMA = 0;
-        ALP1 = 0;
-        ALP2 = 0;
+        _pitchAngle = 0;
+        _pitchMagnitude = 0;
+        _hyperspaceTicks = 0;
+        _hyperspaceCountdown = 0;
+        _ecmCounter = 0;
+        _rollMagnitude = 0;
+        _rollSign = 0;
 
         // JSTGY = &FF
         ToggleOptions[4] = 0xFF;
-        QQ12 = 0xFF;
-        FSH = 0xFF;
-        ASH = 0xFF;
-        ENERGY = 0xFF;
-        RES2();
+        _docked = 0xFF;
+        _forwardShield = 0xFF;
+        _aftShield = 0xFF;
+        _energy = 0xFF;
+        ResetFlight();
     }
 
     /// <summary>RES2: reset a number of flight variables and workspaces.</summary>
-    private void RES2()
+    private void ResetFlight()
     {
-        NOSTM = NOST;
-        MSTG = 0xFF;
-        JSTY = 128;
-        ALP2 = 128;
-        BET2 = 128;
-        BETA = 0;
-        BET1 = 0;
-        ALP2Flipped = 0;
-        BET2Flipped = 0;
-        MCNT = 0;
-        DELTA = 3;
-        ALPHA = 3;
-        ALP1 = 3;
+        _stardustCount = NormalStardustCount;
+        _missileTarget = 0xFF;
+        _pitchRate = 128;
+        _rollSign = 128;
+        _pitchSign = 128;
+        _pitchAngle = 0;
+        _pitchMagnitude = 0;
+        _rollSignFlipped = 0;
+        _pitchSignFlipped = 0;
+        _mainLoopCounter = 0;
+        _speed = 3;
+        _rollAngle = 3;
+        _rollMagnitude = 3;
 
-        if (SSPR != 0)
+        if (InSafeZone != 0)
         {
-            SPBLB();
+            ToggleStationBulb();
         }
 
-        if (ECMA != 0)
+        if (_ecmCounter != 0)
         {
-            ECMOF();
+            StopEcm();
         }
 
-        WPSHPS();
-        ZERO();
-        ZINF();
+        WipeScanner();
+        ResetBubble();
+        ResetWorkspace();
     }
 
     /// <summary>GTHG: spawn a Thargoid ship and a Thargon companion.</summary>
-    private void GTHG()
+    private void SpawnThargoid()
     {
-        Ze();
-        INWK.Ai = 0xFF;
-        NWSHP(ShipType.Thargoid);
-        NWSHP(ShipType.Thargon);
+        SetUpDistantShip();
+        _currentShip.Ai = 0xFF;
+        AddShip(ShipType.Thargoid);
+        AddShip(ShipType.Thargon);
     }
 
     /// <summary>
     /// Ze: set up INWK as a fairly aggressive ship a fair distance away, and
     /// return a random number (with X and the C flag also random).
     /// </summary>
-    private int Ze()
+    private int SetUpDistantShip()
     {
-        ZINF();
-        int a = DORND();
-        int x = _randX;
-        INWK.X = (a & 0x80) != 0 ? -(25 << 8) : 25 << 8;
-        INWK.Y = (x & 0x80) != 0 ? -(25 << 8) : 25 << 8;
-        INWK.Z = 25 << 8;
-        INWK.Ai = ((((x << 1) | (x >= 245 ? 1 : 0)) & 0xFF) | 0b11000000);
+        ResetWorkspace();
+        int random = NextRandom();
+        int x = _randomX;
+        _currentShip.X = (random & 0x80) != 0 ? -(25 << 8) : 25 << 8;
+        _currentShip.Y = (x & 0x80) != 0 ? -(25 << 8) : 25 << 8;
+        _currentShip.Z = 25 << 8;
+        _currentShip.Ai = ((((x << 1) | (x >= 245 ? 1 : 0)) & 0xFF) | 0b11000000);
 
         // Fall through into DORND2
-        return DORND2();
+        return NextRandomRepeatable();
     }
 
     /// <summary>THERE: returns true (C set) if we are in the Constrictor's system in mission 1.</summary>
-    private bool THERE() => GCNT == 1 && QQ0 == 144 && QQ1 == 33;
+    private bool InConstrictorSystem() => _galaxyNumber == 1 && _currentSystemX == 144 && _currentSystemY == 33;
 
     /// <summary>SOLAR: set up various aspects of arriving in a new system (the planet and sun).</summary>
-    private void SOLAR()
+    private void SetUpSystem()
     {
         // There are no Trumbles in this version, so skip to nobirths
-        bool carry = (FIST & 1) != 0;
-        FIST >>= 1;
+        bool carry = (_legalStatus & 1) != 0;
+        _legalStatus >>= 1;
 
-        ZINF();
-        int zSign = ((QQ15[1] & 3) + 3 + (carry ? 1 : 0)) & 0xFF;
+        ResetWorkspace();
+        int zSign = ((_selectedSeeds[1] & 3) + 3 + (carry ? 1 : 0)) & 0xFF;
         int xySign = zSign >> 1;
-        INWK.Z = zSign << 16;
-        INWK.X = xySign << 16;
-        INWK.Y = xySign << 16;
-        SOS1();
+        _currentShip.Z = zSign << 16;
+        _currentShip.X = xySign << 16;
+        _currentShip.Y = xySign << 16;
+        AddPlanet();
 
         // Set up the sun
-        int sunZSign = (QQ15[3] & 7) | 0b10000001;
-        INWK.Z = -((sunZSign & 0x7F) << 16);
+        int sunZSign = (_selectedSeeds[3] & 7) | 0b10000001;
+        _currentShip.Z = -((sunZSign & 0x7F) << 16);
         // Only x_sign and x_hi are set, so the sun keeps the planet's y
-        int xs = QQ15[5] & 3;
-        INWK.X = (xs << 16) | (xs << 8);
-        INWK.RollCounter = 0;
-        INWK.PitchCounter = 0;
-        NWSHP(ShipType.Sun);
+        int sunXHigh = _selectedSeeds[5] & 3;
+        _currentShip.X = (sunXHigh << 16) | (sunXHigh << 8);
+        _currentShip.RollCounter = 0;
+        _currentShip.PitchCounter = 0;
+        AddShip(ShipType.Sun);
 
-        NWSTARS();
+        InitialiseStardust();
     }
 
     /// <summary>SOS1: update the missile indicators and add the planet in INWK.</summary>
-    private void SOS1()
+    private void AddPlanet()
     {
-        msblob();
-        INWK.RollCounter = 127;
-        INWK.PitchCounter = 127;
-        NWSHP((tek & 0b00000010) | 0b10000000);
+        ResetMissileIndicators();
+        _currentShip.RollCounter = 127;
+        _currentShip.PitchCounter = 127;
+        AddShip((_techLevel & 0b00000010) | 0b10000000);
     }
 
     /// <summary>NWSTARS: initialise the stardust field (if this is a space view) and wipe the scanner.</summary>
-    private void NWSTARS()
+    private void InitialiseStardust()
     {
-        if (QQ11 == 0)
+        if (_viewType == 0)
         {
-            nWq();
+            CreateStardust();
         }
 
-        WPSHPS();
+        WipeScanner();
     }
 
     /// <summary>nWq: create a random cloud of stardust.</summary>
-    private void nWq()
+    private void CreateStardust()
     {
-        for (int y = NOSTM; y > 0; y--)
+        for (int particle = _stardustCount; particle > 0; particle--)
         {
-            SZ[y] = DORND() | 8;
-            SX[y] = DORND();
-            SY[y] = DORND();
+            _dustZ[particle] = NextRandom() | 8;
+            _dustX[particle] = NextRandom();
+            _dustY[particle] = NextRandom();
         }
 
         UpdateStardustImage();
     }
 
     /// <summary>WPSHPS: wipe all the ships from the scanner and mark them as not being on-screen.</summary>
-    private void WPSHPS()
+    private void WipeScanner()
     {
-        var savedInwk = INWK;
-        for (int x = 0; x < NOSH; x++)
+        var savedInwk = _currentShip;
+        for (int x = 0; x < MaxShips; x++)
         {
             var ship = Slots[x];
             if (ship == null)
@@ -364,14 +364,14 @@ public sealed partial class EliteGame
                 continue;
             }
 
-            TYPE = ship.Type;
-            INWK = ship.CloneBlock();
-            XSAV = x;
-            SCAN();
+            _shipType = ship.Type;
+            _currentShip = ship.CloneBlock();
+            _currentSlot = x;
+            DrawOnScanner();
             ship.Flags &= 0b10100111;
         }
 
-        INWK = savedInwk;
+        _currentShip = savedInwk;
 
         // WS2: reset the ball line heap (the planet is no longer on-screen)
         if (Slots[0] != null)
@@ -379,13 +379,11 @@ public sealed partial class EliteGame
             _screen.RemoveImage(Slots[0]!.DisplayOwner);
         }
 
-        LSP = 0;
-        LSX2Empty = true;
-        FLFLLS();
+        ResetSunLines();
     }
 
     /// <summary>FLFLLS: reset the sun line heap (the sun is no longer on-screen).</summary>
-    private void FLFLLS()
+    private void ResetSunLines()
     {
         if (_sunImage != null)
         {
@@ -393,257 +391,257 @@ public sealed partial class EliteGame
             _sunImage = null;
         }
 
-        Array.Clear(LSO);
-        LSX = 0xFF;
+        Array.Clear(_sunHalfWidths);
+        _sunHidden = 0xFF;
     }
 
     /// <summary>
     /// NWSPS: add a new space station to the local bubble, using the data in
     /// INWK (the planet's orientation and the station's position).
     /// </summary>
-    private void NWSPS()
+    private void AddStation()
     {
-        SPBLB();
-        INWK.Ai = 0b10000001;
-        INWK.PitchCounter = 0;
-        INWK.Newb = 0;
+        ToggleStationBulb();
+        _currentShip.Ai = 0b10000001;
+        _currentShip.PitchCounter = 0;
+        _currentShip.Behaviour = 0;
         if (Slots[1] != null)
         {
             _screen.RemoveImage(Slots[1]!.DisplayOwner);
         }
 
         Slots[1] = null;
-        INWK.RollCounter = 0xFF;
+        _currentShip.RollCounter = 0xFF;
 
         // Flip the signs of nosev
-        INWK.Nose = new IntVector3(-INWK.Nose.X, -INWK.Nose.Y, -INWK.Nose.Z);
+        _currentShip.Nose = new IntVector3(-_currentShip.Nose.X, -_currentShip.Nose.Y, -_currentShip.Nose.Z);
 
-        _dodoStation = tek >= 10;
-        NWSHP(ShipType.SpaceStation);
+        _dodoStation = _techLevel >= 10;
+        AddShip(ShipType.SpaceStation);
     }
 
     /// <summary>MJP: process a mis-jump into witchspace.</summary>
-    private void MJP()
+    private void MisJump()
     {
-        TT66(3);
-        LL164();
-        RES2();
-        MJ = 0xFF;
+        ClearScreen(3);
+        HyperspaceTunnel();
+        ResetFlight();
+        _inWitchspace = 0xFF;
 
         do
         {
-            GTHG();
+            SpawnThargoid();
         }
-        while (Many[ShipType.Thargoid] <= 2);
+        while (_shipCounts[ShipType.Thargoid] <= 2);
 
-        NOSTM = 2;
-        LOOK1(0);
+        _stardustCount = 2;
+        SwitchView(0);
 
         // Move us to a random point in witchspace
-        QQ1 ^= 0b00011111;
+        _currentSystemY ^= 0b00011111;
     }
 
     /// <summary>TT18: try to initiate a jump into hyperspace.</summary>
-    private void TT18()
+    private void Hyperspace()
     {
-        int fuel = QQ14 - QQ8;
-        QQ14 = fuel < 0 ? 0 : fuel;
+        int fuel = _fuel - _selectedDistance;
+        _fuel = fuel < 0 ? 0 : fuel;
 
-        if (QQ11 == 0)
+        if (_viewType == 0)
         {
-            TT66(0);
-            LL164();
+            ClearScreen(0);
+            HyperspaceTunnel();
         }
 
         // ee5: holding CTRL during the jump forces a mis-jump if PATG is set
-        if ((CtrlPressed() & PATG & 0x80) != 0)
+        if ((CtrlPressed() & AuthorNamesShown & 0x80) != 0)
         {
             // ptg
-            COK |= 1;
-            MJP();
+            _competitionFlags |= 1;
+            MisJump();
             return;
         }
 
-        if (DORND() >= 253)
+        if (NextRandom() >= 253)
         {
-            MJP();
+            MisJump();
             return;
         }
 
         // Arrive in the new system (hyp1+3 skips the call to TT111)
-        jmp();
-        hyp1Tail();
-        RES2();
-        SOLAR();
+        SetCurrentSystem();
+        ArriveInSystem();
+        ResetFlight();
+        SetUpSystem();
 
-        if ((QQ11 & 0b00111111) != 0)
+        if ((_viewType & 0b00111111) != 0)
         {
             return;
         }
 
-        TTX66();
-        if (QQ11 != 0)
+        ClearSpaceView();
+        if (_viewType != 0)
         {
-            TT114();
+            ShowChartAfterJump();
             return;
         }
 
-        QQ11++;
-        TT110();
+        _viewType++;
+        Launch();
     }
 
     /// <summary>TT114: show the relevant chart after arriving in hyperspace in a chart view.</summary>
-    private void TT114()
+    private void ShowChartAfterJump()
     {
-        if ((QQ11 & 0x80) != 0)
+        if ((_viewType & 0x80) != 0)
         {
-            TT23();
+            ShowShortRangeChart();
         }
         else
         {
-            TT22();
+            ShowLongRangeChart();
         }
     }
 
     /// <summary>TT110: launch from the station, or show the front space view.</summary>
-    private void TT110()
+    private void Launch()
     {
-        if (QQ12 != 0)
+        if (_docked != 0)
         {
-            LAUN();
-            RES2();
-            TT111();
+            LaunchTunnel();
+            ResetFlight();
+            SelectNearestSystem();
 
             // INC INWK+8 puts the planet at z = 65536, in front of us
-            INWK.Z = 1 << 16;
-            SOS1();
+            _currentShip.Z = 1 << 16;
+            AddPlanet();
 
             // Setting z_sign to &80 and incrementing z_hi puts the station at
             // z = -256, just behind us
-            INWK.Z = -(1 << 8);
-            NWSPS();
-            DELTA = 12;
-            FIST |= BAD();
-            QQ11 = 0xFF;
-            HFS1();
+            _currentShip.Z = -(1 << 8);
+            AddStation();
+            _speed = 12;
+            _legalStatus |= ContrabandBadness();
+            _viewType = 0xFF;
+            DrawTunnelCircles();
         }
 
         // NLUNCH
-        QQ12 = 0;
-        LOOK1(0);
+        _docked = 0;
+        SwitchView(0);
     }
 
     /// <summary>hyp1+3: set up the new system after a hyperspace jump.</summary>
-    private void hyp1Tail()
+    private void ArriveInSystem()
     {
         for (int x = 5; x >= 0; x--)
         {
-            QQ2[x] = safehouse[x];
+            _currentSystemSeeds[x] = _destinationSeeds[x];
         }
 
-        EV = 0;
-        QQ28 = QQ3;
-        tek = QQ5;
-        gov = QQ4;
-        GVL();
+        _extraVesselsDelay = 0;
+        _currentEconomy = _selectedEconomy;
+        _techLevel = _selectedTechLevel;
+        _government = _selectedGovernment;
+        CalculateMarketAvailability();
     }
 
     /// <summary>hyp1: do a hyperspace jump to the system at the crosshairs (from the galactic hyperdrive).</summary>
-    private void hyp1()
+    private void JumpToSelectedSystem()
     {
-        TT111();
-        jmp();
-        hyp1Tail();
+        SelectNearestSystem();
+        SetCurrentSystem();
+        ArriveInSystem();
     }
 
     /// <summary>GVL: calculate the availability of market items.</summary>
-    private void GVL()
+    private void CalculateMarketAvailability()
     {
-        QQ26 = DORND();
+        _marketRandom = NextRandom();
         // The loop stops when 4 * the item number reaches 63, so the last
         // item (alien items) is not included
         for (int item = 0; item < 16; item++)
         {
-            int x = item * 4;
-            QQ19[1] = GameData.MarketPrices[x + 1];
-            var_();
-            int a = (GameData.MarketPrices[x + 3] & QQ26) + GameData.MarketPrices[x + 2];
-            if ((QQ19[1] & 0x80) != 0)
+            int priceIndex = item * 4;
+            _scratch[1] = GameData.MarketPrices[priceIndex + 1];
+            CalculateEconomicFactor();
+            int availability = (GameData.MarketPrices[priceIndex + 3] & _marketRandom) + GameData.MarketPrices[priceIndex + 2];
+            if ((_scratch[1] & 0x80) != 0)
             {
-                a += QQ19[3];
+                availability += _scratch[3];
             }
             else
             {
-                a -= QQ19[3];
+                availability -= _scratch[3];
             }
 
-            a &= 0xFF;
-            if ((a & 0x80) != 0)
+            availability &= 0xFF;
+            if ((availability & 0x80) != 0)
             {
-                a = 0;
+                availability = 0;
             }
 
-            AVL[item] = a & 0b00111111;
+            _marketAvailability[item] = availability & 0b00111111;
         }
     }
 
     /// <summary>var: calculate QQ19+3 = economy * |economic factor|.</summary>
-    private void var_()
+    private void CalculateEconomicFactor()
     {
-        QQ19[2] = QQ19[1] & 31;
-        int a = 0;
-        AVL[16] = 0;
-        for (int y = QQ28; y > 0; y--)
+        _scratch[2] = _scratch[1] & 31;
+        int product = 0;
+        _marketAvailability[16] = 0;
+        for (int count = _currentEconomy; count > 0; count--)
         {
-            a += QQ19[2];
+            product += _scratch[2];
         }
 
-        QQ19[3] = a & 0xFF;
+        _scratch[3] = product & 0xFF;
     }
 
     /// <summary>LAUN: make the launch sound and draw the launch tunnel.</summary>
-    private void LAUN()
+    private void LaunchTunnel()
     {
-        NOISE(solaun);
-        HFS2(8);
+        MakeSound(SoundLaunch);
+        DrawTunnel(8);
     }
 
     /// <summary>LL164: make the hyperspace sound and draw the hyperspace tunnel.</summary>
-    private void LL164()
+    private void HyperspaceTunnel()
     {
-        NOISE(sohyp);
-        NOISE(sohyp2);
-        HFX = 4;
-        HFS2(4);
-        HFX = 0;
+        MakeSound(SoundHyperspace);
+        MakeSound(SoundHyperspace2);
+        HyperspaceColoursOn = 4;
+        DrawTunnel(4);
+        HyperspaceColoursOn = 0;
     }
 
     /// <summary>jmp: set the current system to the selected system.</summary>
-    private void jmp()
+    private void SetCurrentSystem()
     {
-        QQ0 = QQ9;
-        QQ1 = QQ10;
+        _currentSystemX = _crosshairX;
+        _currentSystemY = _crosshairY;
     }
 
     /// <summary>ping: move the crosshairs to the current system.</summary>
-    private void ping()
+    private void MoveCrosshairsHome()
     {
-        QQ9 = QQ0;
-        QQ10 = QQ1;
+        _crosshairX = _currentSystemX;
+        _crosshairY = _currentSystemY;
     }
 
     /// <summary>MCASH: add an amount of cash (in Cr * 10) to our cash pot.</summary>
-    private void MCASH(int amount) => CASH = unchecked(CASH + (uint)amount);
+    private void AddCash(int amount) => _cash = unchecked(_cash + (uint)amount);
 
     /// <summary>LCASH: subtract an amount of cash, returning false (C clear) if we can't afford it.</summary>
-    private bool LCASH(int amount)
+    private bool SpendCash(int amount)
     {
-        if (CASH < (uint)amount)
+        if (_cash < (uint)amount)
         {
             return false;
         }
 
-        CASH -= (uint)amount;
+        _cash -= (uint)amount;
         return true;
     }
 }

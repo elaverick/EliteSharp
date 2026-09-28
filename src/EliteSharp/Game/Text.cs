@@ -9,200 +9,221 @@ namespace EliteSharp.Game;
 public sealed partial class EliteGame
 {
     /// <summary>XC and YC: the text cursor.</summary>
-    private int XC = 1, YC = 1;
+    private int _cursorX = 1, _cursorY = 1;
 
     /// <summary>QQ17: the text case flags (bit 7 = Sentence Case, bit 6 = lower case next, &amp;FF = don't print).</summary>
-    private int QQ17;
+    private int _textCase;
 
-    // The DTW flags used by the extended token system
-    private int DTW1 = 0b00100000;
-    private int DTW2 = 0b11111111;
-    private int DTW3;
-    private int DTW4;
-    private int DTW5;
-    private int DTW6;
-    private int DTW8 = 0b11111111;
+    // The flags used by the extended text token system
+
+    /// <summary>
+    /// DTW1: the mask for applying the lower case part of Sentence Case
+    /// (%00100000 to apply lower case to the second letter of a word onwards,
+    /// or 0 to leave the case alone).
+    /// </summary>
+    private int _lowerCaseMask = 0b00100000;
+
+    /// <summary>DTW2: 0 if we are currently printing a word, non-zero if we are between words.</summary>
+    private int _notPrintingWord = 0b11111111;
+
+    /// <summary>DTW3: &amp;FF to print standard tokens from <see cref="PrintExtendedToken"/>, or 0 for extended tokens.</summary>
+    private int _standardTokens;
+
+    /// <summary>
+    /// DTW4: the justification flags (bit 7 set to justify text, and bit 6 set
+    /// to buffer the text without printing it, as used to measure messages).
+    /// </summary>
+    private int _justifyFlags;
+
+    /// <summary>DTW5: the number of characters in the justified text buffer at BUF.</summary>
+    private int _lineBufferSize;
+
+    /// <summary>DTW6: %10000000 if lower case is enabled for extended tokens, or 0 if it isn't.</summary>
+    private int _lowerCaseEnabled;
+
+    /// <summary>DTW8: the mask for capitalising the next letter (%11011111 to capitalise, %11111111 to leave it alone).</summary>
+    private int _capitaliseMask = 0b11111111;
 
     /// <summary>DTW7: the character printed by MT16 (the drive number in the catalogue).</summary>
-    private int DTW7 = 'A';
+    private int _catalogueDriveCharacter = 'A';
 
     /// <summary>LL: the line length for justified text.</summary>
-    private const int LL = 30;
+    private const int LineLength = 30;
 
     /// <summary>
     /// TKN2: the two-letter token table for extended tokens. The QQ16 table
     /// follows TKN2 in memory, and higher token numbers read into it, so the
     /// two tables are joined here.
     /// </summary>
-    private static readonly byte[] TKN2 = [.. GameData.ExtendedTwoLetterTokens, .. GameData.TwoLetterTokens, .. new byte[128]];
+    private static readonly byte[] TwoLetterTokenTable = [.. GameData.ExtendedTwoLetterTokens, .. GameData.TwoLetterTokens, .. new byte[128]];
 
     /// <summary>BUF: the line buffer for justified text.</summary>
-    private readonly int[] BUF = new int[256];
+    private readonly int[] _lineBuffer = new int[256];
 
     // ------------------------------------------------------------------------
     // Printing characters
     // ------------------------------------------------------------------------
 
     /// <summary>CHPR: print a character at the text cursor.</summary>
-    private void CHPR(int a)
+    private void PutCharacter(int character)
     {
-        if (QQ17 == 0xFF || a == 0 || a >= 128)
+        if (_textCase == 0xFF || character == 0 || character >= 128)
         {
             return;
         }
 
-        if (a == 11)
+        if (character == 11)
         {
             // cls
-            TTX66();
+            ClearSpaceView();
             return;
         }
 
-        if (a == 7)
+        if (character == 7)
         {
             // R5
-            BEEP();
+            Beep();
             return;
         }
 
-        if (a < 32)
+        if (character < 32)
         {
-            if (a != 10)
+            if (character != 10)
             {
-                XC = 1;
+                _cursorX = 1;
             }
 
             // RRX1
-            if (a != 13)
+            if (character != 13)
             {
-                YC++;
+                _cursorY++;
             }
 
             return;
         }
 
         // RR1: in the catalogue, skip spaces at column 17
-        if (CATF != 0 && a == ' ' && XC == 17)
+        if (_printingCatalogue != 0 && character == ' ' && _cursorX == 17)
         {
             return;
         }
 
-        if (a == 127)
+        if (character == 127)
         {
             // Delete the character to the left of the cursor
-            XC--;
-            _screen.EraseCharacter(XC, YC);
+            _cursorX--;
+            _screen.EraseCharacter(_cursorX, _cursorY);
             return;
         }
 
         // RR2
-        int column = XC;
-        XC++;
-        if (YC >= 24)
+        int column = _cursorX;
+        _cursorX++;
+        if (_cursorY >= 24)
         {
-            TTX66();
-            XC = 1;
-            YC = 1;
+            ClearSpaceView();
+            _cursorX = 1;
+            _cursorY = 1;
             return;
         }
 
         // RR3
-        _screen.PrintCharacter(column, YC, (char)a, COL);
+        _screen.PrintCharacter(column, _cursorY, (char)character, _colour);
     }
 
     /// <summary>
     /// TT26 (DASC): print a character, taking into account justification and
     /// the in-flight message buffer.
     /// </summary>
-    private void TT26(int a)
+    private void PrintCharacter(int character)
     {
-        DTW8 = 0xFF;
-        DTW2 = a is '.' or ':' or 10 or 12 or ' ' ? 0xFF : 0;
+        _capitaliseMask = 0xFF;
+        _notPrintingWord = character is '.' or ':' or 10 or 12 or ' ' ? 0xFF : 0;
 
-        if ((DTW4 & 0x80) == 0)
+        if ((_justifyFlags & 0x80) == 0)
         {
-            CHPR(a);
+            PutCharacter(character);
             return;
         }
 
-        if ((DTW4 & 0x40) == 0 && a == 12)
+        if ((_justifyFlags & 0x40) == 0 && character == 12)
         {
-            DA1();
+            PrintJustifiedLines();
             return;
         }
 
-        BUF[DTW5] = a;
-        DTW5 = (DTW5 + 1) & 0xFF;
+        _lineBuffer[_lineBufferSize] = character;
+        _lineBufferSize = (_lineBufferSize + 1) & 0xFF;
     }
 
     /// <summary>DA1: print the contents of the line buffer, justifying it into lines of LL characters.</summary>
-    private void DA1()
+    private void PrintJustifiedLines()
     {
-        int sc1 = 0;
+        int spacingPattern = 0;
         while (true)
         {
             // DA5
-            int x = DTW5;
+            int x = _lineBufferSize;
             if (x == 0)
             {
                 // DA6+3
-                DTW5 = 0;
-                CHPR(12);
+                _lineBufferSize = 0;
+                PutCharacter(12);
                 return;
             }
 
-            if (x < LL + 1)
+            if (x < LineLength + 1)
             {
                 // DA6
-                DAS1(x);
-                DTW5 = 0;
-                CHPR(12);
+                PrintBufferStart(x);
+                _lineBufferSize = 0;
+                PutCharacter(12);
                 return;
             }
 
             // Justify the first line by inserting spaces until the character
             // at position LL is a space
-            sc1 >>= 1;
-            Justify(ref sc1);
+            spacingPattern >>= 1;
+            Justify(ref spacingPattern);
 
             // DA2: print the first line
-            DAS1(LL);
-            CHPR(12);
+            PrintBufferStart(LineLength);
+            PutCharacter(12);
 
             // The C flag is clear from CHPR, so this is DTW5 - LL - 1
-            int remaining = DTW5 - LL - 1;
-            DTW5 = remaining & 0xFF;
-            if (DTW5 == 0)
+            int remaining = _lineBufferSize - LineLength - 1;
+            _lineBufferSize = remaining & 0xFF;
+            if (_lineBufferSize == 0)
             {
-                CHPR(12);
+                PutCharacter(12);
                 return;
             }
 
-            for (int y = 0; y <= DTW5; y++)
+            for (int y = 0; y <= _lineBufferSize; y++)
             {
-                BUF[y] = BUF[LL + 1 + y];
+                _lineBuffer[y] = _lineBuffer[LineLength + 1 + y];
             }
         }
     }
 
     /// <summary>DA11 to DAL3: insert spaces into the buffer until BUF+LL is a space.</summary>
-    private void Justify(ref int sc1)
+    private void Justify(ref int spacingPattern)
     {
         // The original loops forever if there are no spaces to expand, so we
         // give up after a while instead
         for (int attempt = 0; attempt < 1000; attempt++)
         {
             // DA11
-            if ((sc1 & 0x80) == 0)
+            if ((spacingPattern & 0x80) == 0)
             {
-                sc1 = 0b01000000;
+                spacingPattern = 0b01000000;
             }
 
-            int y = LL - 1;
+            int y = LineLength - 1;
             while (true)
             {
                 // DAL1
-                if (BUF[LL] == ' ')
+                if (_lineBuffer[LineLength] == ' ')
                 {
                     return;
                 }
@@ -218,13 +239,13 @@ public sealed partial class EliteGame
                         break;
                     }
 
-                    if (BUF[y] != ' ')
+                    if (_lineBuffer[y] != ' ')
                     {
                         continue;
                     }
 
-                    sc1 = (sc1 << 1) & 0xFF;
-                    if ((sc1 & 0x80) != 0)
+                    spacingPattern = (spacingPattern << 1) & 0xFF;
+                    if ((spacingPattern & 0x80) != 0)
                     {
                         continue;
                     }
@@ -238,17 +259,17 @@ public sealed partial class EliteGame
                 }
 
                 // Insert a space at position y by shifting the rest right
-                int sc = y;
-                for (int i = DTW5; i >= sc; i--)
+                int insertAt = y;
+                for (int i = _lineBufferSize; i >= insertAt; i--)
                 {
-                    BUF[i + 1] = BUF[i];
+                    _lineBuffer[i + 1] = _lineBuffer[i];
                 }
 
-                DTW5++;
+                _lineBufferSize++;
 
                 // DAL3: skip back past any consecutive spaces
-                y = sc - 1;
-                while (y >= 0 && BUF[y] == ' ')
+                y = insertAt - 1;
+                while (y >= 0 && _lineBuffer[y] == ' ')
                 {
                     y--;
                 }
@@ -262,11 +283,11 @@ public sealed partial class EliteGame
     }
 
     /// <summary>DAS1: print the first x characters of the line buffer.</summary>
-    private void DAS1(int x)
+    private void PrintBufferStart(int x)
     {
         for (int y = 0; y < x; y++)
         {
-            CHPR(BUF[y]);
+            PutCharacter(_lineBuffer[y]);
         }
     }
 
@@ -275,155 +296,155 @@ public sealed partial class EliteGame
     // ------------------------------------------------------------------------
 
     /// <summary>TT27: print a recursive token, a two-letter token, a control code or a character.</summary>
-    private void TT27(int a)
+    private void PrintToken(int token)
     {
-        a &= 0xFF;
-        if (a == 0)
+        token &= 0xFF;
+        if (token == 0)
         {
-            csh();
+            PrintCash();
             return;
         }
 
-        if (a >= 128)
+        if (token >= 128)
         {
-            TT43(a);
+            PrintTwoLetterOrRecursiveToken(token);
             return;
         }
 
-        switch (a)
+        switch (token)
         {
             case 1:
-                tal();
+                PrintGalaxyNumber();
                 return;
             case 2:
-                ypl();
+                PrintCurrentSystemName();
                 return;
             case 3:
-                cpl();
+                PrintSystemName();
                 return;
             case 4:
-                cmn();
+                PrintCommanderName();
                 return;
             case 5:
-                fwl();
+                PrintFuelAndCash();
                 return;
             case 6:
-                QQ17 = 0x80;
+                _textCase = 0x80;
                 return;
             case 7:
                 // X is not zero here, so fall through to the character checks
                 break;
             case 8:
-                QQ17 = 0;
+                _textCase = 0;
                 return;
             case 9:
-                crlf();
+                PrintColumnColon();
                 return;
         }
 
-        if (a >= 96)
+        if (token >= 96)
         {
-            ex(a);
+            PrintRecursiveToken(token);
             return;
         }
 
-        if (a >= 14 && a < 32)
+        if (token >= 14 && token < 32)
         {
             // qw: tokens 14-31 are recursive tokens 128-145
-            ex(a + 114);
+            PrintRecursiveToken(token + 114);
             return;
         }
 
-        int x = QQ17;
-        if (x == 0)
+        int textCase = _textCase;
+        if (textCase == 0)
         {
             // TT74
-            TT26(a);
+            PrintCharacter(token);
             return;
         }
 
-        if ((x & 0x80) != 0)
+        if ((textCase & 0x80) != 0)
         {
             // TT41: Sentence Case
-            if ((x & 0x40) != 0)
+            if ((textCase & 0x40) != 0)
             {
                 // TT45
-                if (x == 0xFF)
+                if (textCase == 0xFF)
                 {
                     return;
                 }
 
-                if (a >= 'A')
+                if (token >= 'A')
                 {
-                    TT42(a);
+                    PrintLowerCase(token);
                     return;
                 }
 
                 // TT46
-                QQ17 = x & 0b10111111;
-                TT26(a);
+                _textCase = textCase & 0b10111111;
+                PrintCharacter(token);
                 return;
             }
 
-            if (a < 'A')
+            if (token < 'A')
             {
-                TT26(a);
+                PrintCharacter(token);
                 return;
             }
 
-            QQ17 = x | 0b01000000;
-            TT26(a);
+            _textCase = textCase | 0b01000000;
+            PrintCharacter(token);
             return;
         }
 
-        if ((x & 0x40) != 0)
+        if ((textCase & 0x40) != 0)
         {
             // TT46
-            QQ17 = x & 0b10111111;
-            TT26(a);
+            _textCase = textCase & 0b10111111;
+            PrintCharacter(token);
             return;
         }
 
-        TT42(a);
+        PrintLowerCase(token);
     }
 
     /// <summary>TT42: print a letter in lower case.</summary>
-    private void TT42(int a)
+    private void PrintLowerCase(int character)
     {
-        if (a >= 'A' && a <= 'Z')
+        if (character >= 'A' && character <= 'Z')
         {
-            a += 32;
+            character += 32;
         }
 
-        TT26(a);
+        PrintCharacter(character);
     }
 
     /// <summary>TT43: print a two-letter token (128-159) or a recursive token (160-255).</summary>
-    private void TT43(int a)
+    private void PrintTwoLetterOrRecursiveToken(int token)
     {
-        if (a >= 160)
+        if (token >= 160)
         {
             // TT47
-            ex(a - 160);
+            PrintRecursiveToken(token - 160);
             return;
         }
 
-        int y = (a & 127) << 1;
-        TT27(GameData.TwoLetterTokens[y]);
-        int second = GameData.TwoLetterTokens[y + 1];
+        int index = (token & 127) << 1;
+        PrintToken(GameData.TwoLetterTokens[index]);
+        int second = GameData.TwoLetterTokens[index + 1];
         if (second != '?')
         {
-            TT27(second);
+            PrintToken(second);
         }
     }
 
     /// <summary>ex: print recursive token A from QQ18.</summary>
-    private void ex(int a)
+    private void PrintRecursiveToken(int token)
     {
         var table = GameData.RecursiveTokens;
         int position = 0;
-        int x = a & 0xFF;
-        while (x != 0)
+        int tokensToSkip = token & 0xFF;
+        while (tokensToSkip != 0)
         {
             while (table[position] != 0)
             {
@@ -431,12 +452,12 @@ public sealed partial class EliteGame
             }
 
             position++;
-            x--;
+            tokensToSkip--;
         }
 
         while (table[position] != 0)
         {
-            TT27(table[position] ^ 0x23);
+            PrintToken(table[position] ^ 0x23);
             position++;
         }
     }
@@ -446,15 +467,19 @@ public sealed partial class EliteGame
     // ------------------------------------------------------------------------
 
     /// <summary>DETOK: print extended token A.</summary>
-    private void DETOK(int a) => PrintExtendedToken(GameData.ExtendedTokens, a);
+    private void PrintExtendedToken(int token) => PrintTokenFromTable(GameData.ExtendedTokens, token);
 
     /// <summary>DETOK3: print extended token A from the RUTOK table.</summary>
-    private void DETOK3(int a) => PrintExtendedToken(GameData.ExtendedDescriptionTokens, a);
+    private void PrintDescriptionToken(int token) => PrintTokenFromTable(GameData.ExtendedDescriptionTokens, token);
 
-    private void PrintExtendedToken(byte[] table, int a)
+    /// <summary>
+    /// DETOK: print an extended token from a table of tokens, in which each
+    /// token is terminated by a byte that is zero when EOR'd with VE (&amp;57).
+    /// </summary>
+    private void PrintTokenFromTable(byte[] table, int token)
     {
         int position = 0;
-        int x = a & 0xFF;
+        int separatorsToFind = token & 0xFF;
 
         // Find the start of the token by counting separators (bytes that
         // decode to zero)
@@ -467,8 +492,8 @@ public sealed partial class EliteGame
 
             if ((table[position] ^ 0x57) == 0)
             {
-                x = (x - 1) & 0xFF;
-                if (x == 0)
+                separatorsToFind = (separatorsToFind - 1) & 0xFF;
+                if (separatorsToFind == 0)
                 {
                     break;
                 }
@@ -486,249 +511,249 @@ public sealed partial class EliteGame
                 return;
             }
 
-            int c = table[position] ^ 0x57;
-            if (c == 0)
+            int character = table[position] ^ 0x57;
+            if (character == 0)
             {
                 return;
             }
 
-            DETOK2(c);
+            PrintExtendedCharacter(character);
         }
     }
 
     /// <summary>DETOK2: print an extended text token character or control code.</summary>
-    private void DETOK2(int a)
+    private void PrintExtendedCharacter(int character)
     {
-        if (a < 32)
+        if (character < 32)
         {
-            DT3(a);
+            ProcessControlCode(character);
             return;
         }
 
-        if ((DTW3 & 0x80) != 0)
+        if ((_standardTokens & 0x80) != 0)
         {
-            TT27(a);
+            PrintToken(character);
             return;
         }
 
         // DT8
-        if (a < '[')
+        if (character < '[')
         {
-            DTS(a);
+            PrintLetter(character);
             return;
         }
 
-        if (a < 129)
+        if (character < 129)
         {
-            DT6(a);
+            PrintRandomToken(character);
             return;
         }
 
-        if (a < 215)
+        if (character < 215)
         {
-            DETOK(a);
+            PrintExtendedToken(character);
             return;
         }
 
-        int x = (a - 215) << 1;
-        DTS(TKN2[x]);
-        DTS(TKN2[x + 1]);
+        int index = (character - 215) << 1;
+        PrintLetter(TwoLetterTokenTable[index]);
+        PrintLetter(TwoLetterTokenTable[index + 1]);
     }
 
     /// <summary>DTS: print a letter in the correct case.</summary>
-    private void DTS(int a)
+    private void PrintLetter(int character)
     {
-        if (a >= 'A')
+        if (character >= 'A')
         {
-            if ((DTW6 & 0x80) != 0 || (DTW2 & 0x80) == 0)
+            if ((_lowerCaseEnabled & 0x80) != 0 || (_notPrintingWord & 0x80) == 0)
             {
                 // DT10
-                a |= DTW1;
+                character |= _lowerCaseMask;
             }
 
             // DT5
-            a &= DTW8;
+            character &= _capitaliseMask;
         }
 
         // DT9
-        TT26(a);
+        PrintCharacter(character);
     }
 
     /// <summary>DT6: print a random token from the MTIN table.</summary>
-    private void DT6(int a)
+    private void PrintRandomToken(int token)
     {
-        int x = DORND();
-        int index = (x >= 51 ? 1 : 0) + (x >= 102 ? 1 : 0) + (x >= 153 ? 1 : 0) + (x >= 204 ? 1 : 0);
-        DETOK(GameData.RandomTokenBases[a - 91] + index);
+        int random = NextRandom();
+        int index = (random >= 51 ? 1 : 0) + (random >= 102 ? 1 : 0) + (random >= 153 ? 1 : 0) + (random >= 204 ? 1 : 0);
+        PrintExtendedToken(GameData.RandomTokenBases[token - 91] + index);
     }
 
     /// <summary>DT3: process a control code in an extended token (via the JMTB jump table).</summary>
-    private void DT3(int a)
+    private void ProcessControlCode(int code)
     {
-        switch (a)
+        switch (code)
         {
             case 1:
-                MT1();
+                SetAllCaps();
                 break;
             case 2:
-                MT2();
+                SetSentenceCase();
                 break;
             case 3:
             case 4:
-                TT27(a);
+                PrintToken(code);
                 break;
             case 5:
-                DTW3 = 0;
+                _standardTokens = 0;
                 break;
             case 6:
-                QQ17 = 0x80;
-                DTW3 = 0xFF;
+                _textCase = 0x80;
+                _standardTokens = 0xFF;
                 break;
             case 8:
-                XC = 6;
-                DTW2 = 0xFF;
+                _cursorX = 6;
+                _notPrintingWord = 0xFF;
                 break;
             case 9:
-                XC = 1;
-                TT66(1);
+                _cursorX = 1;
+                ClearScreen(1);
                 break;
             case 11:
-                NLIN4();
+                DrawTitleLine();
                 break;
             case 13:
-                DTW6 = 0x80;
-                DTW1 = 0b00100000;
+                _lowerCaseEnabled = 0x80;
+                _lowerCaseMask = 0b00100000;
                 break;
             case 14:
-                MT14();
+                SetJustified();
                 break;
             case 15:
-                MT15();
+                SetLeftAligned();
                 break;
             case 16:
-                TT26(DTW7);
+                PrintCharacter(_catalogueDriveCharacter);
                 break;
             case 17:
-                MT17();
+                PrintSystemAdjective();
                 break;
             case 18:
-                MT18();
+                PrintRandomWord();
                 break;
             case 19:
-                DTW8 = 0b11011111;
+                _capitaliseMask = 0b11011111;
                 break;
             case 21:
-                CLYNS();
+                ClearBottomRows();
                 break;
             case 22:
-                PAUSE();
+                ShowShipAndWait();
                 break;
             case 23:
-                MT29(10);
+                MoveToRowInCyan(10);
                 break;
             case 24:
-                PAUSE2();
+                WaitForKeyPress();
                 break;
             case 25:
-                BRIS();
+                ShowIncomingMessage();
                 break;
             case 26:
-                MT26();
+                ReadLine();
                 break;
             case 27:
-                DETOK(217 + GCNT);
+                PrintExtendedToken(217 + _galaxyNumber);
                 break;
             case 28:
-                DETOK(220 + GCNT);
+                PrintExtendedToken(220 + _galaxyNumber);
                 break;
             case 29:
-                MT29(6);
+                MoveToRowInCyan(6);
                 break;
             case 30:
-                FILEPR();
+                PrintFilingSystem();
                 break;
             case 31:
-                OTHERFILEPR();
+                PrintOtherFilingSystem();
                 break;
             default:
                 // 7, 10, 12, 20 and 32 print the character
-                TT26(a);
+                PrintCharacter(code);
                 break;
         }
     }
 
     /// <summary>MT1: switch to ALL CAPS.</summary>
-    private void MT1()
+    private void SetAllCaps()
     {
-        DTW1 = 0;
-        DTW6 = 0;
+        _lowerCaseMask = 0;
+        _lowerCaseEnabled = 0;
     }
 
     /// <summary>MT2: switch to Sentence Case.</summary>
-    private void MT2()
+    private void SetSentenceCase()
     {
-        DTW1 = 0b00100000;
-        DTW6 = 0;
+        _lowerCaseMask = 0b00100000;
+        _lowerCaseEnabled = 0;
     }
 
     /// <summary>MT14: switch to justified text.</summary>
-    private void MT14()
+    private void SetJustified()
     {
-        DTW4 = 0x80;
-        DTW5 = 0;
+        _justifyFlags = 0x80;
+        _lineBufferSize = 0;
     }
 
     /// <summary>MT15: switch to left-aligned text.</summary>
-    private void MT15()
+    private void SetLeftAligned()
     {
-        DTW4 = 0;
-        DTW5 = 0;
+        _justifyFlags = 0;
+        _lineBufferSize = 0;
     }
 
     /// <summary>MT17: print the selected system's adjective (e.g. "Lavian").</summary>
-    private void MT17()
+    private void PrintSystemAdjective()
     {
-        QQ17 &= 0b10111111;
-        TT27(3);
-        int last = DTW5 > 0 ? BUF[DTW5 - 1] : 0;
-        if (VOWEL(last))
+        _textCase &= 0b10111111;
+        PrintToken(3);
+        int last = _lineBufferSize > 0 ? _lineBuffer[_lineBufferSize - 1] : 0;
+        if (IsVowel(last))
         {
-            DTW5--;
+            _lineBufferSize--;
         }
 
         // MT171
-        DETOK(153);
+        PrintExtendedToken(153);
     }
 
     /// <summary>MT18: print a random 1-8 letter word.</summary>
-    private void MT18()
+    private void PrintRandomWord()
     {
-        DTW8 = 0b11011111;
-        int y = DORND() & 3;
+        _capitaliseMask = 0b11011111;
+        int pairs = NextRandom() & 3;
         do
         {
-            int x = DORND() & 62;
-            DTS(TKN2[x + 2]);
-            DTS(TKN2[x + 3]);
-            y--;
+            int index = NextRandom() & 62;
+            PrintLetter(TwoLetterTokenTable[index + 2]);
+            PrintLetter(TwoLetterTokenTable[index + 3]);
+            pairs--;
         }
-        while (y >= 0);
+        while (pairs >= 0);
     }
 
     /// <summary>VOWEL: returns true if the character is a vowel.</summary>
-    private static bool VOWEL(int a)
+    private static bool IsVowel(int character)
     {
-        a |= 0b00100000;
-        return a is 'a' or 'e' or 'i' or 'o' or 'u';
+        character |= 0b00100000;
+        return character is 'a' or 'e' or 'i' or 'o' or 'u';
     }
 
     /// <summary>MT23 and MT29: move to the given row, switch to cyan and lower case.</summary>
-    private void MT29(int row)
+    private void MoveToRowInCyan(int row)
     {
-        YC = row;
-        COL = CYAN;
-        DTW6 = 0x80;
-        DTW1 = 0b00100000;
+        _cursorY = row;
+        _colour = Cyan;
+        _lowerCaseEnabled = 0x80;
+        _lowerCaseMask = 0b00100000;
     }
 
     // ------------------------------------------------------------------------
@@ -740,209 +765,209 @@ public sealed partial class EliteGame
     /// with leading spaces, optionally with a decimal point before the last
     /// digit.
     /// </summary>
-    private void BPRNT(long number, int digits, bool decimalPoint)
+    private void PrintNumber(long number, int digits, bool decimalPoint)
     {
-        int t = decimalPoint ? 10 : 11;
-        int u = decimalPoint ? digits - 1 : digits;
-        u = 12 - u;
+        int digitsBeforeForced = decimalPoint ? 10 : 11;
+        int hiddenDigits = decimalPoint ? digits - 1 : digits;
+        hiddenDigits = 12 - hiddenDigits;
 
         string text = (number % 1_000_000_000_000L).ToString("D12");
         for (int i = 0; i < 12; i++)
         {
             int digit = text[i] - '0';
-            if (digit != 0 || t == 0)
+            if (digit != 0 || digitsBeforeForced == 0)
             {
                 // TT32
-                t = 0;
-                TT26('0' + digit);
+                digitsBeforeForced = 0;
+                PrintCharacter('0' + digit);
             }
             else
             {
-                u--;
-                if (u < 0)
+                hiddenDigits--;
+                if (hiddenDigits < 0)
                 {
-                    TT26(' ');
+                    PrintCharacter(' ');
                 }
             }
 
             // TT34
-            t = Math.Max(t - 1, 0);
+            digitsBeforeForced = Math.Max(digitsBeforeForced - 1, 0);
             if (i == 10 && decimalPoint)
             {
-                TT26('.');
+                PrintCharacter('.');
             }
         }
     }
 
     /// <summary>TT11: print a 16-bit number to the given number of digits.</summary>
-    private void TT11(int value, int digits, bool decimalPoint) => BPRNT(value & 0xFFFF, digits, decimalPoint);
+    private void PrintNumber16(int value, int digits, bool decimalPoint) => PrintNumber(value & 0xFFFF, digits, decimalPoint);
 
     /// <summary>pr2: print an 8-bit number to 3 digits.</summary>
-    private void pr2(int value, bool decimalPoint = false) => TT11(value, 3, decimalPoint);
+    private void PrintNumber3(int value, bool decimalPoint = false) => PrintNumber16(value, 3, decimalPoint);
 
     /// <summary>pr5: print a 16-bit number to 5 digits.</summary>
-    private void pr5(int value, bool decimalPoint) => TT11(value, 5, decimalPoint);
+    private void PrintNumber5(int value, bool decimalPoint) => PrintNumber16(value, 5, decimalPoint);
 
     /// <summary>pr6: print a 16-bit number to 5 digits, without a decimal point.</summary>
-    private void pr6(int value) => pr5(value, false);
+    private void PrintNumber5WithoutPoint(int value) => PrintNumber5(value, false);
 
     /// <summary>csh: print our cash with one decimal place, then " CR" and a newline.</summary>
-    private void csh()
+    private void PrintCash()
     {
-        BPRNT(CASH, 9, true);
-        plf(226);
+        PrintNumber(_cash, 9, true);
+        PrintTokenLine(226);
     }
 
     /// <summary>tal: print the galaxy number.</summary>
-    private void tal() => pr2(GCNT + 1);
+    private void PrintGalaxyNumber() => PrintNumber3(_galaxyNumber + 1);
 
     /// <summary>ypl: print the current system's name.</summary>
-    private void ypl()
+    private void PrintCurrentSystemName()
     {
-        if ((MJ & 0x80) != 0)
+        if ((_inWitchspace & 0x80) != 0)
         {
             return;
         }
 
-        TT62();
-        cpl();
-        TT62();
+        SwapSystemSeeds();
+        PrintSystemName();
+        SwapSystemSeeds();
     }
 
     /// <summary>TT62: swap the current system's seeds with the selected system's seeds.</summary>
-    private void TT62()
+    private void SwapSystemSeeds()
     {
         for (int x = 5; x >= 0; x--)
         {
-            (QQ2[x], QQ15[x]) = (QQ15[x], QQ2[x]);
+            (_currentSystemSeeds[x], _selectedSeeds[x]) = (_selectedSeeds[x], _currentSystemSeeds[x]);
         }
     }
 
     /// <summary>cmn: print the commander's name.</summary>
-    private void cmn()
+    private void PrintCommanderName()
     {
         foreach (char c in CommanderName)
         {
-            TT26(c);
+            PrintCharacter(c);
         }
     }
 
     /// <summary>fwl: print fuel and cash levels.</summary>
-    private void fwl()
+    private void PrintFuelAndCash()
     {
-        TT68(105);
-        pr2(QQ14, true);
-        plf(195);
+        PrintTokenColon(105);
+        PrintNumber3(_fuel, true);
+        PrintTokenLine(195);
 
         // PCASH
-        TT27(119);
+        PrintToken(119);
     }
 
     /// <summary>crlf: tab to column 21 and print a colon.</summary>
-    private void crlf()
+    private void PrintColumnColon()
     {
-        XC = 21;
-        TT73();
+        _cursorX = 21;
+        PrintColon();
     }
 
     /// <summary>plf: print a token followed by a newline.</summary>
-    private void plf(int a)
+    private void PrintTokenLine(int token)
     {
-        TT27(a);
-        TT67();
+        PrintToken(token);
+        PrintNewline();
     }
 
     /// <summary>plf2: print a token followed by a newline, and indent the next line to column 6.</summary>
-    private void plf2(int a)
+    private void PrintTokenLineIndented(int token)
     {
-        plf(a);
-        XC = 6;
+        PrintTokenLine(token);
+        _cursorX = 6;
     }
 
     /// <summary>TT68: print a token followed by a colon.</summary>
-    private void TT68(int a)
+    private void PrintTokenColon(int token)
     {
-        TT27(a);
-        TT73();
+        PrintToken(token);
+        PrintColon();
     }
 
     /// <summary>TT73: print a colon.</summary>
-    private void TT73() => TT27(':');
+    private void PrintColon() => PrintToken(':');
 
     /// <summary>TT162: print a space.</summary>
-    private void TT162() => TT27(' ');
+    private void PrintSpace() => PrintToken(' ');
 
     /// <summary>TT67: print a newline.</summary>
-    private void TT67() => TT27(12);
+    private void PrintNewline() => PrintToken(12);
 
     /// <summary>TT67K: print a newline using CHPR directly.</summary>
-    private void TT67K() => CHPR(12);
+    private void PutNewline() => PutCharacter(12);
 
     /// <summary>TT69: switch to Sentence Case and print a newline.</summary>
-    private void TT69()
+    private void PrintSentenceNewline()
     {
-        QQ17 = 0x80;
-        TT67();
+        _textCase = 0x80;
+        PrintNewline();
     }
 
     /// <summary>TTX69: print a paragraph break (a blank line) in Sentence Case.</summary>
-    private void TTX69()
+    private void PrintParagraphBreak()
     {
-        YC++;
-        TT69();
+        _cursorY++;
+        PrintSentenceNewline();
     }
 
     /// <summary>TT60: print a token and a paragraph break.</summary>
-    private void TT60(int a)
+    private void PrintTokenParagraph(int token)
     {
-        TT27(a);
-        TTX69();
+        PrintToken(token);
+        PrintParagraphBreak();
     }
 
     /// <summary>spc: print a token followed by a space.</summary>
-    private void spc(int a)
+    private void PrintTokenSpace(int token)
     {
-        TT27(a);
-        TT162();
+        PrintToken(token);
+        PrintSpace();
     }
 
     /// <summary>prq: print a token followed by a question mark.</summary>
-    private void prq(int a)
+    private void PrintTokenQuestion(int token)
     {
-        TT27(a);
-        TT27('?');
+        PrintToken(token);
+        PrintToken('?');
     }
 
     /// <summary>NLIN3: print a title and draw a horizontal line at row 19.</summary>
-    private void NLIN3(int a)
+    private void PrintTitle(int token)
     {
-        TT27(a);
-        NLIN4();
+        PrintToken(token);
+        DrawTitleLine();
     }
 
     /// <summary>NLIN4: draw a horizontal line at pixel row 19.</summary>
-    private void NLIN4() => NLIN2(19);
+    private void DrawTitleLine() => DrawHorizontalLine(19);
 
     /// <summary>NLIN: draw a horizontal line at pixel row 23 and move the text cursor down a line.</summary>
-    private void NLIN() => NLIN5(23);
+    private void DrawTitleLineAndNewline() => NewlineAndDrawLine(23);
 
     /// <summary>NLIN5: move the text cursor down a line and draw a horizontal line at the given row.</summary>
-    private void NLIN5(int row)
+    private void NewlineAndDrawLine(int row)
     {
-        YC++;
-        NLIN2(row);
+        _cursorY++;
+        DrawHorizontalLine(row);
     }
 
     /// <summary>NLIN2: draw a horizontal yellow line across the screen at the given pixel row.</summary>
-    private void NLIN2(int row)
+    private void DrawHorizontalLine(int row)
     {
-        COL = YELLOW;
-        HLOIN3(2, 254, row);
-        COL = CYAN;
+        _colour = Yellow;
+        DrawHorizontalSegment(2, 254, row);
+        _colour = Cyan;
     }
 
     /// <summary>HLOIN3: draw a horizontal line from x1 to x2 - 1 in the current colour.</summary>
-    private void HLOIN3(int x1, int x2, int y)
+    private void DrawHorizontalSegment(int x1, int x2, int y)
     {
         if (x1 == x2)
         {
@@ -954,71 +979,69 @@ public sealed partial class EliteGame
             (x1, x2) = (x2, x1);
         }
 
-        _screen.DrawLine(x1, y, x2 - 1, y, COL);
+        _screen.DrawLine(x1, y, x2 - 1, y, _colour);
     }
 
     /// <summary>LOIN: draw a line in the current colour (using EOR logic, so drawing it twice removes it).</summary>
-    private void LOIN(int x1, int y1, int x2, int y2) => _screen.DrawLine(x1, y1, x2, y2, COL);
+    private void DrawLine(int x1, int y1, int x2, int y2) => _screen.DrawLine(x1, y1, x2, y2, _colour);
 
     /// <summary>BELL: make a beep.</summary>
-    private void BELL() => CHPR(7);
+    private void Bell() => PutCharacter(7);
 
     // ------------------------------------------------------------------------
     // Screen clearing
     // ------------------------------------------------------------------------
 
     /// <summary>TT66: clear the screen and set the current view type in QQ11.</summary>
-    private void TT66(int a)
+    private void ClearScreen(int viewType)
     {
-        QQ11 = a;
-        TTX66K();
+        _viewType = viewType;
+        ClearScreenAndShowView();
     }
 
     /// <summary>TTX66K: clear the screen, draw a border box, and print the view name if this is a space view.</summary>
-    private void TTX66K()
+    private void ClearScreenAndShowView()
     {
-        TTX66();
-        MT2();
-        LSP = 0;
-        QQ17 = 0x80;
-        DTW2 = 0x80;
-        FLFLLS();
-        LAS2 = 0;
-        DLY = 0;
-        de = 0;
-        if (QQ22Hi != 0)
+        ClearSpaceView();
+        SetSentenceCase();
+        _textCase = 0x80;
+        _notPrintingWord = 0x80;
+        ResetSunLines();
+        _laserBeamPower = 0;
+        _messageDelay = 0;
+        _messageDestroyed = 0;
+        if (_hyperspaceCountdown != 0)
         {
-            ee3(QQ22Hi);
+            PrintHyperspaceCountdown(_hyperspaceCountdown);
         }
 
-        if (QQ11 == 0)
+        if (_viewType == 0)
         {
-            XC = 11;
-            COL = CYAN;
-            TT27(VIEW | 0x60);
-            TT162();
-            TT27(175);
+            _cursorX = 11;
+            _colour = Cyan;
+            PrintToken(_view | 0x60);
+            PrintSpace();
+            PrintToken(175);
         }
 
         // tt66
-        QQ17 = 0;
+        _textCase = 0;
     }
 
     /// <summary>TTX66: clear the top part of the screen and draw a border box.</summary>
-    private void TTX66()
+    private void ClearSpaceView()
     {
         _screen.ClearSpaceView();
-        LSX2Empty = true;
         _sunImage = null;
-        BOX();
+        DrawBorderBox();
     }
 
     /// <summary>BOX: draw the border box around the space view (using EOR logic).</summary>
-    private void BOX()
+    private void DrawBorderBox()
     {
-        YC = 1;
-        XC = 1;
-        const int colour = YELLOW;
+        _cursorY = 1;
+        _cursorX = 1;
+        const int colour = Yellow;
         _screen.DrawLine(0, 0, 255, 0, colour);
         _screen.DrawLine(1, 0, 1, 2 * CentreY - 1, colour);
         _screen.DrawLine(0, 0, 0, 2 * CentreY - 1, colour);
@@ -1027,14 +1050,14 @@ public sealed partial class EliteGame
     }
 
     /// <summary>CLYNS: clear the bottom three text rows of the space view.</summary>
-    private void CLYNS()
+    private void ClearBottomRows()
     {
-        DLY = 0;
-        de = 0;
-        DTW2 = 0xFF;
-        QQ17 = 0x80;
-        YC = 20;
-        TT67K();
+        _messageDelay = 0;
+        _messageDestroyed = 0;
+        _notPrintingWord = 0xFF;
+        _textCase = 0x80;
+        _cursorY = 20;
+        PutNewline();
         _screen.ClearRows(21 * 8, 23 * 8 + 7);
     }
 
@@ -1043,150 +1066,151 @@ public sealed partial class EliteGame
     // ------------------------------------------------------------------------
 
     /// <summary>MESS: display an in-flight message in capitals at the bottom of the space view.</summary>
-    private void MESS(int a)
+    private void ShowMessage(int token)
     {
         while (true)
         {
-            if (QQ11 != 0)
+            if (_viewType != 0)
             {
-                CLYNS();
+                ClearBottomRows();
             }
 
             // infrontvw
-            YC = 21;
-            COL = YELLOW;
-            QQ17 = 0;
-            XC = messXC;
+            _cursorY = 21;
+            _colour = Yellow;
+            _textCase = 0;
+            _cursorX = _messageX;
 
-            if (DLY != 0)
+            if (_messageDelay != 0)
             {
                 // me1: erase the existing message by printing it again
-                DLY = 0;
-                COL = YELLOW;
-                mes9(MCH);
+                _messageDelay = 0;
+                _colour = Yellow;
+                PrintMessage(_messageToken);
                 continue;
             }
 
-            DLY = 20;
-            MCH = a;
+            _messageDelay = 20;
+            _messageToken = token;
 
             // Work out the length of the message so we can centre it
-            DTW4 = 0b11000000;
-            DTW5 = (de & 1) != 0 ? 10 : 0;
-            TT27(MCH);
-            messXC = (32 - DTW5) >> 1;
-            XC = messXC;
-            MT15();
-            mes9(MCH);
+            _justifyFlags = 0b11000000;
+            _lineBufferSize = (_messageDestroyed & 1) != 0 ? 10 : 0;
+            PrintToken(_messageToken);
+            _messageX = (32 - _lineBufferSize) >> 1;
+            _cursorX = _messageX;
+            SetLeftAligned();
+            PrintMessage(_messageToken);
             return;
         }
     }
 
     /// <summary>mes9: print a message token, followed by " DESTROYED" if bit 0 of de is set.</summary>
-    private void mes9(int a)
+    private void PrintMessage(int token)
     {
-        TT27(a);
-        bool destroyed = (de & 1) != 0;
-        de >>= 1;
+        PrintToken(token);
+        bool destroyed = (_messageDestroyed & 1) != 0;
+        _messageDestroyed >>= 1;
         if (destroyed)
         {
-            TT27(253);
+            PrintToken(253);
         }
     }
 
     /// <summary>me2: remove an in-flight message from the space view.</summary>
-    private void me2()
+    private void RemoveMessage()
     {
-        if (QQ11 != 0)
+        if (_viewType != 0)
         {
             // clynsneed
-            CLYNS();
+            ClearBottomRows();
             return;
         }
 
-        MESS(MCH);
-        DLY = 0;
+        ShowMessage(_messageToken);
+        _messageDelay = 0;
     }
 
     /// <summary>OUCH: potentially lose cargo or equipment following damage.</summary>
-    private void OUCH()
+    private void LoseCargoOrEquipment()
     {
-        int a = DORND();
-        int x = _randX;
-        if ((a & 0x80) != 0 || x >= 22)
+        int random = NextRandom();
+        int item = _randomX;
+        if ((random & 0x80) != 0 || item >= 22)
         {
             return;
         }
 
-        if (GetCargoOrEquipment(x) == 0 || DLY != 0)
+        if (GetCargoOrEquipment(item) == 0 || _messageDelay != 0)
         {
             return;
         }
 
-        de = 3;
-        SetCargoOrEquipment(x, 0);
-        if (x < 17)
+        _messageDestroyed = 3;
+        SetCargoOrEquipment(item, 0);
+        if (item < 17)
         {
-            MESS(x + 208);
+            ShowMessage(item + 208);
         }
-        else if (x == 17)
+        else if (item == 17)
         {
             // ou2
-            MESS(108);
+            ShowMessage(108);
         }
-        else if (x == 18)
+        else if (item == 18)
         {
             // ou3
-            MESS(111);
+            ShowMessage(111);
         }
         else
         {
-            MESS(x + 113 - 20 + 1);
+            ShowMessage(item + 113 - 20 + 1);
         }
     }
 
     /// <summary>The cargo hold and the equipment that follows it in memory (QQ20,X for X = 0-21).</summary>
-    private int GetCargoOrEquipment(int x) => x switch
+    private int GetCargoOrEquipment(int item) => item switch
     {
-        < 17 => QQ20[x],
-        17 => ECM,
-        18 => BST,
-        19 => BOMB,
-        20 => ENGY,
-        _ => DKCMP,
+        < 17 => _cargo[item],
+        17 => _ecm,
+        18 => _fuelScoops,
+        19 => _energyBomb,
+        20 => _energyUnit,
+        _ => _dockingComputer,
     };
 
-    private void SetCargoOrEquipment(int x, int value)
+    /// <summary>Set an item in the cargo hold, or an item of equipment (see <see cref="GetCargoOrEquipment"/>).</summary>
+    private void SetCargoOrEquipment(int item, int value)
     {
-        switch (x)
+        switch (item)
         {
             case < 17:
-                QQ20[x] = value;
+                _cargo[item] = value;
                 break;
             case 17:
-                ECM = value;
+                _ecm = value;
                 break;
             case 18:
-                BST = value;
+                _fuelScoops = value;
                 break;
             case 19:
-                BOMB = value;
+                _energyBomb = value;
                 break;
             case 20:
-                ENGY = value;
+                _energyUnit = value;
                 break;
             default:
-                DKCMP = value;
+                _dockingComputer = value;
                 break;
         }
     }
 
     /// <summary>ee3: print the hyperspace countdown in the top-left of the screen.</summary>
-    private void ee3(int x)
+    private void PrintHyperspaceCountdown(int countdown)
     {
-        COL = RED;
-        XC = 1;
-        YC = 1;
-        TT11(x & 0xFF, 3, false);
+        _colour = Red;
+        _cursorX = 1;
+        _cursorY = 1;
+        PrintNumber16(countdown & 0xFF, 3, false);
     }
 }

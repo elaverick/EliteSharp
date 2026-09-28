@@ -33,40 +33,40 @@ public sealed partial class EliteGame
                 case "spawn":
                 {
                     // spawn <type> [z_hi] [x] [y] [ai] [newb]: add a ship in front of us
-                    var saved = INWK;
-                    ZINF();
+                    var saved = _currentShip;
+                    ResetWorkspace();
                     int type = int.Parse(parts[1]);
-                    INWK.Z = (parts.Length > 2 ? int.Parse(parts[2]) : 8) << 8;
-                    INWK.X = parts.Length > 3 ? int.Parse(parts[3]) : 0;
-                    INWK.Y = parts.Length > 4 ? int.Parse(parts[4]) : 0;
-                    INWK.Ai = parts.Length > 5 ? Convert.ToInt32(parts[5], 16) : 0;
-                    INWK.Newb = parts.Length > 6 ? Convert.ToInt32(parts[6], 16) : 0;
-                    INWK.Speed = 0;
-                    NWSHP(type);
-                    INWK = saved;
+                    _currentShip.Z = (parts.Length > 2 ? int.Parse(parts[2]) : 8) << 8;
+                    _currentShip.X = parts.Length > 3 ? int.Parse(parts[3]) : 0;
+                    _currentShip.Y = parts.Length > 4 ? int.Parse(parts[4]) : 0;
+                    _currentShip.Ai = parts.Length > 5 ? Convert.ToInt32(parts[5], 16) : 0;
+                    _currentShip.Behaviour = parts.Length > 6 ? Convert.ToInt32(parts[6], 16) : 0;
+                    _currentShip.Speed = 0;
+                    AddShip(type);
+                    _currentShip = saved;
                     break;
                 }
 
                 case "equip":
-                    ECM = 0xFF;
-                    BOMB = 0x7F;
-                    ESCP = 0xFF;
-                    GHYP = 0xFF;
+                    _ecm = 0xFF;
+                    _energyBomb = 0x7F;
+                    _escapePod = 0xFF;
+                    _galacticHyperdrive = 0xFF;
                     break;
 
                 case "tp":
-                    TP = Convert.ToInt32(parts[1], 16);
+                    _missionStatus = Convert.ToInt32(parts[1], 16);
                     break;
 
                 case "sys":
                     // Pretend we are in the system at galactic coordinates (x, y)
-                    QQ0 = int.Parse(parts[1]);
-                    QQ1 = int.Parse(parts[2]);
+                    _currentSystemX = int.Parse(parts[1]);
+                    _currentSystemY = int.Parse(parts[2]);
                     break;
 
                 case "enter":
                     // Dock immediately (GOIN)
-                    DOENTRY();
+                    DockAtStation();
                     break;
 
                 case "kill":
@@ -82,17 +82,17 @@ public sealed partial class EliteGame
 
                 case "witch":
                     // Force a mis-jump into witchspace, as in TT18
-                    TT66(0);
-                    LL164();
-                    MJP();
+                    ClearScreen(0);
+                    HyperspaceTunnel();
+                    MisJump();
                     break;
 
                 case "tally":
-                    TALLY = int.Parse(parts[1]);
+                    _killTally = int.Parse(parts[1]);
                     break;
 
                 case "dock":
-                    DKCMP = 0xFF;
+                    _dockingComputer = 0xFF;
                     break;
 
                 case "trace":
@@ -100,7 +100,7 @@ public sealed partial class EliteGame
                     break;
 
                 case "cash":
-                    CASH = uint.Parse(parts[1]);
+                    _cash = uint.Parse(parts[1]);
                     break;
             }
         }

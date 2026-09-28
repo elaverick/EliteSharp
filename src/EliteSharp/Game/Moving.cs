@@ -14,91 +14,91 @@ public sealed partial class EliteGame
     /// MVEIT: move the ship in INWK in space, applying its own speed and
     /// rotation, and our pitch, roll and speed.
     /// </summary>
-    private void MVEIT()
+    private void MoveShip()
     {
         // Part 1: tidy the orientation vectors every 16 iterations
-        bool skipTactics = (INWK.Flags & 0b10100000) != 0;
+        bool skipTactics = (_currentShip.Flags & 0b10100000) != 0;
         if (!skipTactics)
         {
-            if (((MCNT ^ XSAV) & 15) == 0)
+            if (((_mainLoopCounter ^ _currentSlot) & 15) == 0)
             {
-                TIDY();
+                OrthonormaliseOrientation();
             }
 
             // Part 2 (MV3): call the tactics routine
-            if (TYPE >= 128)
+            if (_shipType >= 128)
             {
-                MV40();
+                MovePlanetOrSun();
                 return;
             }
 
-            if ((INWK.Ai & 0x80) != 0)
+            if ((_currentShip.Ai & 0x80) != 0)
             {
-                if (TYPE == ShipType.Missile || ((MCNT ^ XSAV) & 7) == 0)
+                if (_shipType == ShipType.Missile || ((_mainLoopCounter ^ _currentSlot) & 7) == 0)
                 {
                     // MV26
-                    TACTICS();
+                    ApplyTactics();
                 }
             }
         }
-        else if (TYPE >= 128)
+        else if (_shipType >= 128)
         {
-            MV40();
+            MovePlanetOrSun();
             return;
         }
 
         // MV30: remove the ship from the scanner, so we can move it
-        SCAN();
+        DrawOnScanner();
 
         // Part 3: move the ship along its nose vector by its speed
-        int q = (INWK.Speed << 2) & 0xFF;
-        MoveAlongNose(ref INWK.X, INWK.Nose.X, q);
-        MoveAlongNose(ref INWK.Y, INWK.Nose.Y, q);
-        MoveAlongNose(ref INWK.Z, INWK.Nose.Z, q);
+        int speedFactor = (_currentShip.Speed << 2) & 0xFF;
+        MoveAlongNose(ref _currentShip.X, _currentShip.Nose.X, speedFactor);
+        MoveAlongNose(ref _currentShip.Y, _currentShip.Nose.Y, speedFactor);
+        MoveAlongNose(ref _currentShip.Z, _currentShip.Nose.Z, speedFactor);
 
         // Part 4: apply acceleration
-        int speed = (INWK.Speed + INWK.Acceleration) & 0xFF;
+        int speed = (_currentShip.Speed + _currentShip.Acceleration) & 0xFF;
         if ((speed & 0x80) != 0)
         {
             speed = 0;
         }
 
-        int maxSpeed = XX0?.MaxSpeed ?? 0;
+        int maxSpeed = _blueprint?.MaxSpeed ?? 0;
         if (speed >= maxSpeed)
         {
             speed = maxSpeed;
         }
 
-        INWK.Speed = speed;
-        INWK.Acceleration = 0;
+        _currentShip.Speed = speed;
+        _currentShip.Acceleration = 0;
 
         // Part 5: rotate the ship's location in space by our pitch and roll
         RotateLocationByPitchAndRoll();
 
         // Part 6 onwards
-        MV45();
+        ApplyOurMovement();
     }
 
     /// <summary>
     /// MVEIT part 3: add nosev_hi * speed * 4 / 256 (using the logarithm tables)
     /// to a coordinate, with the sign of the nosev coordinate (MVT1-2).
     /// </summary>
-    private static void MoveAlongNose(ref int coordinate, int nose, int q)
+    private static void MoveAlongNose(ref int coordinate, int nose, int speedFactor)
     {
         int hi = Ship.VectorHiByte(nose);
-        int r = EliteMaths.Fmltu(hi & 0x7F, q);
-        coordinate = MVT1(coordinate, hi & 0x80, r);
+        int distance = EliteMaths.MultiplyFraction(hi & 0x7F, speedFactor);
+        coordinate = AddToCoordinate(coordinate, hi & 0x80, distance);
     }
 
     /// <summary>MVT1: add (A R) to a coordinate, where A is a sign-magnitude high byte.</summary>
-    private static int MVT1(int coordinate, int a, int r)
+    private static int AddToCoordinate(int coordinate, int high, int low)
     {
-        int magnitude = ((a & 0x7F) << 8) | (r & 0xFF);
-        return coordinate + ((a & 0x80) != 0 ? -magnitude : magnitude);
+        int magnitude = ((high & 0x7F) << 8) | (low & 0xFF);
+        return coordinate + ((high & 0x80) != 0 ? -magnitude : magnitude);
     }
 
     /// <summary>MVT3: add a signed 24-bit value to a coordinate.</summary>
-    private static int MVT3(int coordinate, int value) => coordinate + value;
+    private static int AddToCoordinate24(int coordinate, int value) => coordinate + value;
 
     /// <summary>
     /// MVEIT part 5: rotate the ship's location by our pitch and roll, using the
@@ -112,30 +112,31 @@ public sealed partial class EliteGame
     /// </summary>
     private void RotateLocationByPitchAndRoll()
     {
-        int alphaSign = ALP2 & 0x80;
-        int betaSign = BET2 & 0x80;
+        int alphaSign = _rollSign & 0x80;
+        int betaSign = _pitchSign & 0x80;
 
         // K2 = y - alpha * x
-        int term = (ALP1 * (Math.Abs(INWK.X) & 0xFFFF)) >> 8;
-        int sign = (alphaSign ^ 0x80) ^ SignOf(INWK.X);
-        int k2 = EliteMaths.AddCoordinate16(INWK.Y, sign != 0 ? -term : term);
+        int term = (_rollMagnitude * (Math.Abs(_currentShip.X) & 0xFFFF)) >> 8;
+        int sign = (alphaSign ^ 0x80) ^ SignOf(_currentShip.X);
+        int intermediateY = EliteMaths.AddCoordinate16(_currentShip.Y, sign != 0 ? -term : term);
 
         // z = z + beta * K2
-        term = (BET1 * (Math.Abs(k2) & 0xFFFF)) >> 8;
-        sign = SignOf(k2) ^ betaSign;
-        INWK.Z = EliteMaths.AddCoordinate16(INWK.Z, sign != 0 ? -term : term);
+        term = (_pitchMagnitude * (Math.Abs(intermediateY) & 0xFFFF)) >> 8;
+        sign = SignOf(intermediateY) ^ betaSign;
+        _currentShip.Z = EliteMaths.AddCoordinate16(_currentShip.Z, sign != 0 ? -term : term);
 
         // y = K2 - beta * z
-        term = (BET1 * (Math.Abs(INWK.Z) & 0xFFFF)) >> 8;
-        sign = (betaSign ^ 0x80) ^ SignOf(INWK.Z);
-        INWK.Y = EliteMaths.AddCoordinate16(k2, sign != 0 ? -term : term);
+        term = (_pitchMagnitude * (Math.Abs(_currentShip.Z) & 0xFFFF)) >> 8;
+        sign = (betaSign ^ 0x80) ^ SignOf(_currentShip.Z);
+        _currentShip.Y = EliteMaths.AddCoordinate16(intermediateY, sign != 0 ? -term : term);
 
         // x = x + alpha * y
-        term = (ALP1 * (Math.Abs(INWK.Y) & 0xFFFF)) >> 8;
-        sign = alphaSign ^ SignOf(INWK.Y);
-        INWK.X = EliteMaths.AddCoordinate16(INWK.X, sign != 0 ? -term : term);
+        term = (_rollMagnitude * (Math.Abs(_currentShip.Y) & 0xFFFF)) >> 8;
+        sign = alphaSign ^ SignOf(_currentShip.Y);
+        _currentShip.X = EliteMaths.AddCoordinate16(_currentShip.X, sign != 0 ? -term : term);
     }
 
+    /// <summary>The sign bit (bit 7) of a signed value.</summary>
     private static int SignOf(int value) => value < 0 ? 0x80 : 0;
 
     /// <summary>
@@ -143,25 +144,25 @@ public sealed partial class EliteGame
     /// its orientation by our pitch and roll and its own pitch and roll, and
     /// redraw it on the scanner.
     /// </summary>
-    private void MV45()
+    private void ApplyOurMovement()
     {
         // Part 6: move the ship in the z-axis by our speed
-        INWK.Z = MVT1(INWK.Z, 0x80, DELTA);
+        _currentShip.Z = AddToCoordinate(_currentShip.Z, 0x80, _speed);
 
         // The sun doesn't need rotating
-        if ((TYPE & 0b10000001) == 129)
+        if ((_shipType & 0b10000001) == 129)
         {
             return;
         }
 
         // Part 7: rotate the orientation vectors by our pitch and roll
-        MVS4(ref INWK.Nose);
-        MVS4(ref INWK.Roof);
-        MVS4(ref INWK.Side);
+        RotateByPitchAndRoll(ref _currentShip.Nose);
+        RotateByPitchAndRoll(ref _currentShip.Roof);
+        RotateByPitchAndRoll(ref _currentShip.Side);
 
         // Part 8: apply the ship's own pitch and roll
-        int pitch = INWK.PitchCounter;
-        RAT2 = pitch & 0x80;
+        int pitch = _currentShip.PitchCounter;
+        _rotationTemp2 = pitch & 0x80;
         int magnitude = pitch & 0x7F;
         if (magnitude != 0)
         {
@@ -171,15 +172,15 @@ public sealed partial class EliteGame
                 magnitude--;
             }
 
-            INWK.PitchCounter = magnitude | RAT2;
-            MVS5(ref INWK.Roof.X, ref INWK.Nose.X);
-            MVS5(ref INWK.Roof.Y, ref INWK.Nose.Y);
-            MVS5(ref INWK.Roof.Z, ref INWK.Nose.Z);
+            _currentShip.PitchCounter = magnitude | _rotationTemp2;
+            RotateVectorPair(ref _currentShip.Roof.X, ref _currentShip.Nose.X);
+            RotateVectorPair(ref _currentShip.Roof.Y, ref _currentShip.Nose.Y);
+            RotateVectorPair(ref _currentShip.Roof.Z, ref _currentShip.Nose.Z);
         }
 
         // MV8
-        int roll = INWK.RollCounter;
-        RAT2 = roll & 0x80;
+        int roll = _currentShip.RollCounter;
+        _rotationTemp2 = roll & 0x80;
         magnitude = roll & 0x7F;
         if (magnitude != 0)
         {
@@ -188,22 +189,22 @@ public sealed partial class EliteGame
                 magnitude--;
             }
 
-            INWK.RollCounter = magnitude | RAT2;
-            MVS5(ref INWK.Roof.X, ref INWK.Side.X);
-            MVS5(ref INWK.Roof.Y, ref INWK.Side.Y);
-            MVS5(ref INWK.Roof.Z, ref INWK.Side.Z);
+            _currentShip.RollCounter = magnitude | _rotationTemp2;
+            RotateVectorPair(ref _currentShip.Roof.X, ref _currentShip.Side.X);
+            RotateVectorPair(ref _currentShip.Roof.Y, ref _currentShip.Side.Y);
+            RotateVectorPair(ref _currentShip.Roof.Z, ref _currentShip.Side.Z);
         }
 
         // Part 9 (MV5): redraw on the scanner, unless the ship is exploding or killed
-        if ((INWK.Flags & 0b10100000) != 0)
+        if ((_currentShip.Flags & 0b10100000) != 0)
         {
             // MVD1
-            INWK.Flags &= ~Ship.FlagScanner;
+            _currentShip.Flags &= ~Ship.FlagScanner;
             return;
         }
 
-        INWK.Flags |= Ship.FlagScanner;
-        SCAN();
+        _currentShip.Flags |= Ship.FlagScanner;
+        DrawOnScanner();
     }
 
     /// <summary>
@@ -214,15 +215,15 @@ public sealed partial class EliteGame
     ///   y = y - beta * z_hi
     ///   z = z + beta * y_hi
     /// </summary>
-    private void MVS4(ref IntVector3 v)
+    private void RotateByPitchAndRoll(ref IntVector3 v)
     {
-        int alpha = Signed(ALPHA);
-        v.Y = EliteMaths.Mad(alpha, -Ship.VectorHi(v.X), v.Y);
-        v.X = EliteMaths.Mad(alpha, Ship.VectorHi(v.Y), v.X);
+        int alpha = Signed(_rollAngle);
+        v.Y = EliteMaths.MultiplyAdd(alpha, -Ship.VectorHi(v.X), v.Y);
+        v.X = EliteMaths.MultiplyAdd(alpha, Ship.VectorHi(v.Y), v.X);
 
-        int beta = Signed(BETA);
-        v.Y = EliteMaths.Mad(beta, -Ship.VectorHi(v.Z), v.Y);
-        v.Z = EliteMaths.Mad(beta, Ship.VectorHi(v.Y), v.Z);
+        int beta = Signed(_pitchAngle);
+        v.Y = EliteMaths.MultiplyAdd(beta, -Ship.VectorHi(v.Z), v.Y);
+        v.Z = EliteMaths.MultiplyAdd(beta, Ship.VectorHi(v.Y), v.Z);
     }
 
     /// <summary>
@@ -234,10 +235,10 @@ public sealed partial class EliteGame
     ///
     /// (with the signs of the y / 16 and x / 16 terms flipped if RAT2 is negative).
     /// </summary>
-    private void MVS5(ref int x, ref int y)
+    private void RotateVectorPair(ref int x, ref int y)
     {
-        int newX = EliteMaths.Add16(ScaleDown512(x), SixteenthWithSign(y, RAT2));
-        int newY = EliteMaths.Add16(ScaleDown512(y), SixteenthWithSign(x, RAT2 ^ 0x80));
+        int newX = EliteMaths.Add16(ScaleDown512(x), SixteenthWithSign(y, _rotationTemp2));
+        int newY = EliteMaths.Add16(ScaleDown512(y), SixteenthWithSign(x, _rotationTemp2 ^ 0x80));
         x = newX;
         y = newY;
     }
@@ -246,8 +247,8 @@ public sealed partial class EliteGame
     private static int ScaleDown512(int value)
     {
         int magnitude = Math.Abs(value) & 0x7FFF;
-        int t = (magnitude >> 8) >> 1;
-        magnitude -= t;
+        int correction = (magnitude >> 8) >> 1;
+        magnitude -= correction;
         return value < 0 ? -magnitude : magnitude;
     }
 
@@ -263,28 +264,28 @@ public sealed partial class EliteGame
     /// MV40: rotate the planet or sun's location in space by our pitch and roll
     /// (using 24-bit coordinates and MULT3), then join MVEIT at MV45.
     /// </summary>
-    private void MV40()
+    private void MovePlanetOrSun()
     {
-        int alpha = Signed(ALPHA);
-        int beta = Signed(BETA);
+        int alpha = Signed(_rollAngle);
+        int beta = Signed(_pitchAngle);
 
         // K2 = y - alpha * x / 256
-        int k = Shr8(EliteMaths.Mult3(INWK.X, -alpha));
-        int k2 = MVT3(INWK.Y, k);
+        int term = DivideBy256(EliteMaths.Multiply24(_currentShip.X, -alpha));
+        int intermediateY = AddToCoordinate24(_currentShip.Y, term);
 
         // z = z + beta * K2 / 256
-        k = Shr8(EliteMaths.Mult3(k2, beta));
-        INWK.Z = MVT3(INWK.Z, k);
+        term = DivideBy256(EliteMaths.Multiply24(intermediateY, beta));
+        _currentShip.Z = AddToCoordinate24(_currentShip.Z, term);
 
         // y = K2 - beta * z / 256
-        k = Shr8(EliteMaths.Mult3(INWK.Z, -beta));
-        INWK.Y = k2 + k;
+        term = DivideBy256(EliteMaths.Multiply24(_currentShip.Z, -beta));
+        _currentShip.Y = intermediateY + term;
 
         // x = x + alpha * y / 256
-        k = Shr8(EliteMaths.Mult3(INWK.Y, alpha));
-        INWK.X = MVT3(INWK.X, k);
+        term = DivideBy256(EliteMaths.Multiply24(_currentShip.Y, alpha));
+        _currentShip.X = AddToCoordinate24(_currentShip.X, term);
 
-        MV45();
+        ApplyOurMovement();
     }
 
     /// <summary>
@@ -292,7 +293,7 @@ public sealed partial class EliteGame
     /// sign-magnitude form (so the magnitude is truncated), with a 23-bit
     /// magnitude.
     /// </summary>
-    private static int Shr8(long product)
+    private static int DivideBy256(long product)
     {
         int magnitude = (int)((Math.Abs(product) >> 8) & 0x7FFFFF);
         return product < 0 ? -magnitude : magnitude;
@@ -302,132 +303,136 @@ public sealed partial class EliteGame
     /// TIDY: orthonormalise the orientation vectors of the ship in INWK, so
     /// that rounding errors don't accumulate as it rotates.
     /// </summary>
-    private void TIDY()
+    private void OrthonormaliseOrientation()
     {
         // Normalise nosev
-        var (nx, ny, nz) = EliteMaths.Normalise(Ship.VectorHi(INWK.Nose.X), Ship.VectorHi(INWK.Nose.Y), Ship.VectorHi(INWK.Nose.Z), out _);
-        INWK.Nose = new IntVector3(nx << 8, ny << 8, nz << 8);
+        var (noseX, noseY, noseZ) = EliteMaths.Normalise(Ship.VectorHi(_currentShip.Nose.X), Ship.VectorHi(_currentShip.Nose.Y), Ship.VectorHi(_currentShip.Nose.Z), out _);
+        _currentShip.Nose = new IntVector3(noseX << 8, noseY << 8, noseZ << 8);
 
-        int rx = Ship.VectorHi(INWK.Roof.X);
-        int ry = Ship.VectorHi(INWK.Roof.Y);
-        int rz = Ship.VectorHi(INWK.Roof.Z);
+        int roofX = Ship.VectorHi(_currentShip.Roof.X);
+        int roofY = Ship.VectorHi(_currentShip.Roof.Y);
+        int roofZ = Ship.VectorHi(_currentShip.Roof.Z);
 
         // Make roofv orthogonal to nosev by solving for one of its coordinates,
         // using the largest nosev coordinate as the divisor
-        if ((Math.Abs(nx) & 0b01100000) != 0)
+        if ((Math.Abs(noseX) & 0b01100000) != 0)
         {
-            rx = TIS3(nx, ny, nz, ry, rz);
+            roofX = SolveOrthogonalComponent(noseX, noseY, noseZ, roofY, roofZ);
         }
-        else if ((Math.Abs(ny) & 0b01100000) != 0)
+        else if ((Math.Abs(noseY) & 0b01100000) != 0)
         {
             // TI1
-            ry = TIS3(ny, nx, nz, rx, rz);
+            roofY = SolveOrthogonalComponent(noseY, noseX, noseZ, roofX, roofZ);
         }
         else
         {
             // TI2
-            rz = TIS3(nz, nx, ny, rx, ry);
+            roofZ = SolveOrthogonalComponent(noseZ, noseX, noseY, roofX, roofY);
         }
 
         // TI3: normalise roofv
-        (rx, ry, rz) = EliteMaths.Normalise(rx, ry, rz, out _);
+        (roofX, roofY, roofZ) = EliteMaths.Normalise(roofX, roofY, roofZ, out _);
 
         // Set sidev to the cross product of nosev and roofv
-        int sx = -EliteMaths.Tis1(nz, ry, EliteMaths.Mult1(ny, rz));
-        int sy = -EliteMaths.Tis1(nx, rz, EliteMaths.Mult1(nz, rx));
-        int sz = -EliteMaths.Tis1(ny, rx, EliteMaths.Mult1(nx, ry));
+        int sideX = -EliteMaths.MultiplyAddDivideBy96(noseZ, roofY, EliteMaths.MultiplySigned(noseY, roofZ));
+        int sideY = -EliteMaths.MultiplyAddDivideBy96(noseX, roofZ, EliteMaths.MultiplySigned(noseZ, roofX));
+        int sideZ = -EliteMaths.MultiplyAddDivideBy96(noseY, roofX, EliteMaths.MultiplySigned(noseX, roofY));
 
         // Zero the low bytes of nosev, roofv and sidev, except for sidev_z_lo
         // which the original misses
-        INWK.Roof = new IntVector3(rx << 8, ry << 8, rz << 8);
-        int sideZLo = Math.Abs(INWK.Side.Z) & 0xFF;
-        INWK.Side = new IntVector3(sx << 8, sy << 8, sz < 0 ? -((-sz << 8) | sideZLo) : (sz << 8) | sideZLo);
+        _currentShip.Roof = new IntVector3(roofX << 8, roofY << 8, roofZ << 8);
+        int sideZLo = Math.Abs(_currentShip.Side.Z) & 0xFF;
+        _currentShip.Side = new IntVector3(sideX << 8, sideY << 8, sideZ < 0 ? -((-sideZ << 8) | sideZLo) : (sideZ << 8) | sideZLo);
     }
 
     /// <summary>
     /// TIS3: calculate -(nosev_1 * roofv_1 + nosev_2 * roofv_2) / nosev_3,
     /// the value of roofv_3 that makes roofv orthogonal to nosev.
     /// </summary>
-    private static int TIS3(int nose3, int nose1, int nose2, int roof1, int roof2)
+    private static int SolveOrthogonalComponent(int nose3, int nose1, int nose2, int roof1, int roof2)
     {
-        int sum = EliteMaths.Mad(nose2, roof2, EliteMaths.Mult1(nose1, roof1));
-        return EliteMaths.Dvidt(-sum, nose3);
+        int sum = EliteMaths.MultiplyAdd(nose2, roof2, EliteMaths.MultiplySigned(nose1, roof1));
+        return EliteMaths.DivideSigned(-sum, nose3);
     }
 
     /// <summary>
     /// PLUT: transform the ship in INWK so that it is seen from the current
     /// view (front, rear, left or right).
     /// </summary>
-    private void PLUT()
+    private void TransformForView()
     {
-        switch (VIEW)
+        switch (_view)
         {
             case 0:
                 return;
             case 1:
                 // Rear view: flip the x and z axes
-                INWK.X = -INWK.X;
-                INWK.Z = -INWK.Z;
-                INWK.Nose.X = -INWK.Nose.X;
-                INWK.Nose.Z = -INWK.Nose.Z;
-                INWK.Roof.X = -INWK.Roof.X;
-                INWK.Roof.Z = -INWK.Roof.Z;
-                INWK.Side.X = -INWK.Side.X;
-                INWK.Side.Z = -INWK.Side.Z;
+                _currentShip.X = -_currentShip.X;
+                _currentShip.Z = -_currentShip.Z;
+                _currentShip.Nose.X = -_currentShip.Nose.X;
+                _currentShip.Nose.Z = -_currentShip.Nose.Z;
+                _currentShip.Roof.X = -_currentShip.Roof.X;
+                _currentShip.Roof.Z = -_currentShip.Roof.Z;
+                _currentShip.Side.X = -_currentShip.Side.X;
+                _currentShip.Side.Z = -_currentShip.Side.Z;
                 return;
         }
 
         // Left view (RAT2 = 0): x = z, z = -x
         // Right view (RAT2 = &80): x = -z, z = x
-        RAT2 = VIEW == 3 ? 0x80 : 0;
-        RAT = RAT2 ^ 0x80;
-        (INWK.X, INWK.Z) = SwapForView(INWK.X, INWK.Z);
-        (INWK.Nose.X, INWK.Nose.Z) = SwapForView(INWK.Nose.X, INWK.Nose.Z);
-        (INWK.Roof.X, INWK.Roof.Z) = SwapForView(INWK.Roof.X, INWK.Roof.Z);
-        (INWK.Side.X, INWK.Side.Z) = SwapForView(INWK.Side.X, INWK.Side.Z);
+        _rotationTemp2 = _view == 3 ? 0x80 : 0;
+        _rotationTemp = _rotationTemp2 ^ 0x80;
+        (_currentShip.X, _currentShip.Z) = SwapForView(_currentShip.X, _currentShip.Z);
+        (_currentShip.Nose.X, _currentShip.Nose.Z) = SwapForView(_currentShip.Nose.X, _currentShip.Nose.Z);
+        (_currentShip.Roof.X, _currentShip.Roof.Z) = SwapForView(_currentShip.Roof.X, _currentShip.Roof.Z);
+        (_currentShip.Side.X, _currentShip.Side.Z) = SwapForView(_currentShip.Side.X, _currentShip.Side.Z);
     }
 
+    /// <summary>
+    /// PLUT for the left and right views: swap the x and z parts of a vector,
+    /// negating one of them depending on the view (see <see cref="_rotationTemp"/>).
+    /// </summary>
     private (int X, int Z) SwapForView(int x, int z)
     {
-        int newX = RAT2 != 0 ? -z : z;
-        int newZ = RAT != 0 ? -x : x;
+        int newX = _rotationTemp2 != 0 ? -z : z;
+        int newZ = _rotationTemp != 0 ? -x : x;
         return (newX, newZ);
     }
 
     /// <summary>LOOK1: switch to a new space view.</summary>
-    private void LOOK1(int view)
+    private void SwitchView(int view)
     {
-        DOVDU19(0);
-        if (QQ11 != 0)
+        SetSpacePalette(0);
+        if (_viewType != 0)
         {
             // LQ
-            VIEW = view;
-            TT66(0);
-            SIGHT();
-            if ((BOMB & 0x80) != 0)
+            _view = view;
+            ClearScreen(0);
+            DrawCrosshairs();
+            if ((_energyBomb & 0x80) != 0)
             {
-                BOMBOFF();
+                ToggleBombBolt();
             }
 
-            NWSTARS();
+            InitialiseStardust();
             return;
         }
 
-        if (view == VIEW)
+        if (view == _view)
         {
             return;
         }
 
-        VIEW = view;
-        TT66(0);
-        FLIP();
-        if ((BOMB & 0x80) != 0)
+        _view = view;
+        ClearScreen(0);
+        FlipStardust();
+        if ((_energyBomb & 0x80) != 0)
         {
-            BOMBOFF();
+            ToggleBombBolt();
         }
 
-        WPSHPS();
-        SIGHT();
+        WipeScanner();
+        DrawCrosshairs();
     }
 
     /// <summary>
@@ -435,9 +440,9 @@ public sealed partial class EliteGame
     /// sizes 20 and 10 using EOR, so the inner parts cancel out, leaving four
     /// separate arms.
     /// </summary>
-    private void SIGHT()
+    private void DrawCrosshairs()
     {
-        int laser = LASER[VIEW];
+        int laser = _lasers[_view];
         if (laser == 0)
         {
             return;
@@ -445,20 +450,32 @@ public sealed partial class EliteGame
 
         int index = laser switch
         {
-            POW => 0,
-            POW + 128 => 1,
-            Armlas => 2,
+            PulseLaserPower => 0,
+            PulseLaserPower + 128 => 1,
+            MilitaryLaserPower => 2,
             _ => 3,
         };
 
         int colour = Data.GameData.SightColours[index];
-        int cy = CentreY;
-        _screen.DrawLine(108, cy, 117, cy, colour);
-        _screen.DrawLine(138, cy, 147, cy, colour);
+        int centreY = CentreY;
+        _screen.DrawLine(108, centreY, 117, centreY, colour);
+        _screen.DrawLine(138, centreY, 147, centreY, colour);
         _screen.DrawLine(128, 76, 128, 85, colour);
         _screen.DrawLine(128, 107, 128, 116, colour);
     }
 
-    /// <summary>RAT and RAT2: temporary storage for rotation directions.</summary>
-    private int RAT, RAT2;
+    /// <summary>
+    /// RAT: temporary storage used when rotating. It holds the sign to apply
+    /// when swapping axes for the left and right views (see PLUT), and the
+    /// amount of pitch and roll to apply when a ship turns (see TACTICS).
+    /// </summary>
+    private int _rotationTemp;
+
+    /// <summary>
+    /// RAT2: temporary storage used when rotating. It holds the direction of
+    /// rotation for MVS5, the sign to apply when swapping axes for the left
+    /// and right views (see PLUT), and the threshold beyond which a ship
+    /// starts to pitch and roll when it turns (see TACTICS).
+    /// </summary>
+    private int _rotationTemp2;
 }

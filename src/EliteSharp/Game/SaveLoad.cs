@@ -11,16 +11,16 @@ namespace EliteSharp.Game;
 public sealed partial class EliteGame
 {
     /// <summary>NT%: the size of the commander data block (TP to SVC+2).</summary>
-    private const int NT = 76;
+    private const int CommanderDataSize = 76;
 
     /// <summary>
     /// NA%: the last saved commander, as the 8-byte name (terminated by a
     /// carriage return) followed by the commander data block and checksums.
     /// </summary>
-    private readonly byte[] NA = new byte[8 + NT + 16];
+    private readonly byte[] _savedCommander = new byte[8 + CommanderDataSize + 16];
 
     /// <summary>CATF: non-zero while the disc catalogue is being printed.</summary>
-    private int CATF;
+    private int _printingCatalogue;
 
     /// <summary>The last line of text entered with MT26 (INWK+5 in the original).</summary>
     private string _lastInput = "";
@@ -34,227 +34,227 @@ public sealed partial class EliteGame
     }
 
     /// <summary>JAMESON: restore the default JAMESON commander into NA%.</summary>
-    private void JAMESON()
+    private void RestoreDefaultCommander()
     {
-        Array.Clear(NA);
-        Array.Copy(GameData.DefaultCommander, NA, Math.Min(GameData.DefaultCommander.Length, NA.Length));
+        Array.Clear(_savedCommander);
+        Array.Copy(GameData.DefaultCommander, _savedCommander, Math.Min(GameData.DefaultCommander.Length, _savedCommander.Length));
     }
 
     /// <summary>CHECK: calculate the checksum of the commander data block in NA%.</summary>
-    private int CHECK()
+    private int CalculateChecksum()
     {
-        int x = NT - 3;
-        int a = x;
+        int index = CommanderDataSize - 3;
+        int checksum = index;
         int carry = 0;
-        for (; x > 0; x--)
+        for (; index > 0; index--)
         {
-            int sum = a + NA[7 + x] + carry;
+            int sum = checksum + _savedCommander[7 + index] + carry;
             carry = sum > 0xFF ? 1 : 0;
-            a = (sum & 0xFF) ^ NA[8 + x];
+            checksum = (sum & 0xFF) ^ _savedCommander[8 + index];
         }
 
-        return a;
+        return checksum;
     }
 
     /// <summary>DFAULT: copy the commander in NA% into the game's state.</summary>
-    private void DFAULT()
+    private void ApplySavedCommander()
     {
         // The name, up to the carriage return
         var name = new StringBuilder();
-        for (int i = 0; i < 7 && NA[i] != 13; i++)
+        for (int i = 0; i < 7 && _savedCommander[i] != 13; i++)
         {
-            name.Append((char)NA[i]);
+            name.Append((char)_savedCommander[i]);
         }
 
         CommanderName = name.ToString();
 
         int b = 8;
-        TP = NA[b + 0];
-        QQ0 = NA[b + 1];
-        QQ1 = NA[b + 2];
+        _missionStatus = _savedCommander[b + 0];
+        _currentSystemX = _savedCommander[b + 1];
+        _currentSystemY = _savedCommander[b + 2];
         for (int i = 0; i < 6; i++)
         {
-            QQ21[i] = NA[b + 3 + i];
+            _galaxySeeds[i] = _savedCommander[b + 3 + i];
         }
 
-        CASH = (uint)(NA[b + 9] << 24 | NA[b + 10] << 16 | NA[b + 11] << 8 | NA[b + 12]);
-        QQ14 = NA[b + 13];
-        COK = NA[b + 14];
-        GCNT = NA[b + 15];
+        _cash = (uint)(_savedCommander[b + 9] << 24 | _savedCommander[b + 10] << 16 | _savedCommander[b + 11] << 8 | _savedCommander[b + 12]);
+        _fuel = _savedCommander[b + 13];
+        _competitionFlags = _savedCommander[b + 14];
+        _galaxyNumber = _savedCommander[b + 15];
         for (int i = 0; i < 4; i++)
         {
-            LASER[i] = NA[b + 16 + i];
+            _lasers[i] = _savedCommander[b + 16 + i];
         }
 
-        CRGO = NA[b + 22];
+        _cargoCapacity = _savedCommander[b + 22];
         for (int i = 0; i < 17; i++)
         {
-            QQ20[i] = NA[b + 23 + i];
+            _cargo[i] = _savedCommander[b + 23 + i];
         }
 
-        ECM = NA[b + 40];
-        BST = NA[b + 41];
-        BOMB = NA[b + 42];
-        ENGY = NA[b + 43];
-        DKCMP = NA[b + 44];
-        GHYP = NA[b + 45];
-        ESCP = NA[b + 46];
-        TALLYL = NA[b + 50];
-        NOMSL = NA[b + 51];
-        FIST = NA[b + 52];
+        _ecm = _savedCommander[b + 40];
+        _fuelScoops = _savedCommander[b + 41];
+        _energyBomb = _savedCommander[b + 42];
+        _energyUnit = _savedCommander[b + 43];
+        _dockingComputer = _savedCommander[b + 44];
+        _galacticHyperdrive = _savedCommander[b + 45];
+        _escapePod = _savedCommander[b + 46];
+        _killTallyFraction = _savedCommander[b + 50];
+        _missiles = _savedCommander[b + 51];
+        _legalStatus = _savedCommander[b + 52];
         for (int i = 0; i < 17; i++)
         {
-            AVL[i] = NA[b + 53 + i];
+            _marketAvailability[i] = _savedCommander[b + 53 + i];
         }
 
-        QQ26 = NA[b + 70];
-        TALLY = NA[b + 71] | (NA[b + 72] << 8);
-        SVC = NA[b + 73];
+        _marketRandom = _savedCommander[b + 70];
+        _killTally = _savedCommander[b + 71] | (_savedCommander[b + 72] << 8);
+        _saveCount = _savedCommander[b + 73];
 
-        QQ11 = 0;
+        _viewType = 0;
 
         // The original loops forever here if the checksum doesn't match, so
         // we skip that check, but we do set the cheat flag in COK if CHK2
         // doesn't match
-        int check = CHECK() ^ 0xA9;
-        int cok = COK;
-        if (check != NA[b + 74])
+        int check = CalculateChecksum() ^ 0xA9;
+        int cok = _competitionFlags;
+        if (check != _savedCommander[b + 74])
         {
             cok |= 0x80;
         }
 
-        COK = cok | 0b00001000;
+        _competitionFlags = cok | 0b00001000;
     }
 
     /// <summary>Copy the game's commander state into NA% (as SV1 does before saving).</summary>
-    private void CommanderToNA()
+    private void CopyCommanderToSaveBlock()
     {
         int b = 8;
-        NA[b + 0] = (byte)TP;
-        NA[b + 1] = (byte)QQ0;
-        NA[b + 2] = (byte)QQ1;
+        _savedCommander[b + 0] = (byte)_missionStatus;
+        _savedCommander[b + 1] = (byte)_currentSystemX;
+        _savedCommander[b + 2] = (byte)_currentSystemY;
         for (int i = 0; i < 6; i++)
         {
-            NA[b + 3 + i] = (byte)QQ21[i];
+            _savedCommander[b + 3 + i] = (byte)_galaxySeeds[i];
         }
 
-        NA[b + 9] = (byte)(CASH >> 24);
-        NA[b + 10] = (byte)(CASH >> 16);
-        NA[b + 11] = (byte)(CASH >> 8);
-        NA[b + 12] = (byte)CASH;
-        NA[b + 13] = (byte)QQ14;
-        NA[b + 14] = (byte)COK;
-        NA[b + 15] = (byte)GCNT;
+        _savedCommander[b + 9] = (byte)(_cash >> 24);
+        _savedCommander[b + 10] = (byte)(_cash >> 16);
+        _savedCommander[b + 11] = (byte)(_cash >> 8);
+        _savedCommander[b + 12] = (byte)_cash;
+        _savedCommander[b + 13] = (byte)_fuel;
+        _savedCommander[b + 14] = (byte)_competitionFlags;
+        _savedCommander[b + 15] = (byte)_galaxyNumber;
         for (int i = 0; i < 4; i++)
         {
-            NA[b + 16 + i] = (byte)LASER[i];
+            _savedCommander[b + 16 + i] = (byte)_lasers[i];
         }
 
-        NA[b + 20] = 0;
-        NA[b + 21] = 0;
-        NA[b + 22] = (byte)CRGO;
+        _savedCommander[b + 20] = 0;
+        _savedCommander[b + 21] = 0;
+        _savedCommander[b + 22] = (byte)_cargoCapacity;
         for (int i = 0; i < 17; i++)
         {
-            NA[b + 23 + i] = (byte)QQ20[i];
+            _savedCommander[b + 23 + i] = (byte)_cargo[i];
         }
 
-        NA[b + 40] = (byte)ECM;
-        NA[b + 41] = (byte)BST;
-        NA[b + 42] = (byte)BOMB;
-        NA[b + 43] = (byte)ENGY;
-        NA[b + 44] = (byte)DKCMP;
-        NA[b + 45] = (byte)GHYP;
-        NA[b + 46] = (byte)ESCP;
-        NA[b + 47] = 0;
-        NA[b + 48] = 0;
-        NA[b + 49] = 0;
-        NA[b + 50] = (byte)TALLYL;
-        NA[b + 51] = (byte)NOMSL;
-        NA[b + 52] = (byte)FIST;
+        _savedCommander[b + 40] = (byte)_ecm;
+        _savedCommander[b + 41] = (byte)_fuelScoops;
+        _savedCommander[b + 42] = (byte)_energyBomb;
+        _savedCommander[b + 43] = (byte)_energyUnit;
+        _savedCommander[b + 44] = (byte)_dockingComputer;
+        _savedCommander[b + 45] = (byte)_galacticHyperdrive;
+        _savedCommander[b + 46] = (byte)_escapePod;
+        _savedCommander[b + 47] = 0;
+        _savedCommander[b + 48] = 0;
+        _savedCommander[b + 49] = 0;
+        _savedCommander[b + 50] = (byte)_killTallyFraction;
+        _savedCommander[b + 51] = (byte)_missiles;
+        _savedCommander[b + 52] = (byte)_legalStatus;
         for (int i = 0; i < 17; i++)
         {
-            NA[b + 53 + i] = (byte)AVL[i];
+            _savedCommander[b + 53 + i] = (byte)_marketAvailability[i];
         }
 
-        NA[b + 70] = (byte)QQ26;
-        NA[b + 71] = (byte)TALLY;
-        NA[b + 72] = (byte)(TALLY >> 8);
-        NA[b + 73] = (byte)SVC;
+        _savedCommander[b + 70] = (byte)_marketRandom;
+        _savedCommander[b + 71] = (byte)_killTally;
+        _savedCommander[b + 72] = (byte)(_killTally >> 8);
+        _savedCommander[b + 73] = (byte)_saveCount;
     }
 
     /// <summary>
     /// SVE: display the disc access menu and process the choice. Returns true
     /// (C set) if a new commander was loaded.
     /// </summary>
-    private bool SVE()
+    private bool DiscAccessMenu()
     {
         while (true)
         {
-            TRADEMODE2();
-            DETOK(1);
-            int key = TT217();
+            SetTradingPalette();
+            PrintExtendedToken(1);
+            int key = WaitForKey();
             switch (key)
             {
                 case '1':
                 {
                     // loading
-                    GTNMEW();
-                    int drive = GTDRV();
+                    AskForCommanderName();
+                    int drive = AskForDrive();
                     if (drive < 0)
                     {
                         return true;
                     }
 
-                    if (!LOD(drive))
+                    if (!LoadCommanderFile(drive))
                     {
                         continue;
                     }
 
-                    TRNME();
+                    StoreCommanderName();
                     return true;
                 }
 
                 case '2':
                 {
                     // SV1: saving
-                    GTNMEW();
-                    TRNME();
-                    SVC >>= 1;
-                    DETOK(4);
-                    CommanderToNA();
-                    int check = CHECK();
-                    NA[8 + 75] = (byte)check;
-                    NA[8 + 74] = (byte)(check ^ 0xA9);
-                    TT67();
-                    TT67();
-                    int drive = GTDRV();
+                    AskForCommanderName();
+                    StoreCommanderName();
+                    _saveCount >>= 1;
+                    PrintExtendedToken(4);
+                    CopyCommanderToSaveBlock();
+                    int check = CalculateChecksum();
+                    _savedCommander[8 + 75] = (byte)check;
+                    _savedCommander[8 + 74] = (byte)(check ^ 0xA9);
+                    PrintNewline();
+                    PrintNewline();
+                    int drive = AskForDrive();
                     if (drive >= 0)
                     {
-                        wfile(drive);
+                        SaveCommanderFile(drive);
                     }
 
                     // SVEX9
-                    DFAULT();
+                    ApplySavedCommander();
                     return false;
                 }
 
                 case '3':
                     // feb10: show the catalogue
-                    CATS();
-                    TT217();
+                    ShowCatalogue();
+                    WaitForKey();
                     continue;
 
                 case '4':
-                    DELT();
+                    DeleteCommanderFile();
                     continue;
 
                 case '5':
                     // jan18: restore the default commander
-                    DETOK(224);
-                    if (YESNO())
+                    PrintExtendedToken(224);
+                    if (WaitForYesNo())
                     {
-                        JAMESON();
-                        DFAULT();
+                        RestoreDefaultCommander();
+                        ApplySavedCommander();
                         return true;
                     }
 
@@ -268,11 +268,11 @@ public sealed partial class EliteGame
     }
 
     /// <summary>YESNO: wait for "Y" or "N", returning true for "Y".</summary>
-    private bool YESNO()
+    private bool WaitForYesNo()
     {
         while (true)
         {
-            int key = TT217();
+            int key = WaitForKey();
             if (key == 'Y')
             {
                 return true;
@@ -286,41 +286,41 @@ public sealed partial class EliteGame
     }
 
     /// <summary>GTNMEW: ask for a commander's name.</summary>
-    private void GTNMEW()
+    private void AskForCommanderName()
     {
         _inputLimit = 7;
-        DETOK(8);
-        MT26();
+        PrintExtendedToken(8);
+        ReadLine();
         _inputLimit = 9;
         if (_lastInput.Length == 0)
         {
             // TR1: use the current name
-            _lastInput = CurrentNaName();
+            _lastInput = SavedCommanderName();
         }
     }
 
     /// <summary>The name stored in NA%.</summary>
-    private string CurrentNaName()
+    private string SavedCommanderName()
     {
         var name = new StringBuilder();
-        for (int i = 0; i < 7 && NA[i] != 13; i++)
+        for (int i = 0; i < 7 && _savedCommander[i] != 13; i++)
         {
-            name.Append((char)NA[i]);
+            name.Append((char)_savedCommander[i]);
         }
 
         return name.ToString();
     }
 
     /// <summary>TRNME: copy the entered name into NA%.</summary>
-    private void TRNME()
+    private void StoreCommanderName()
     {
         string name = _lastInput.Length > 7 ? _lastInput[..7] : _lastInput;
         for (int i = 0; i < 8; i++)
         {
-            NA[i] = i < name.Length ? (byte)name[i] : (byte)13;
+            _savedCommander[i] = i < name.Length ? (byte)name[i] : (byte)13;
         }
 
-        NA[name.Length] = 13;
+        _savedCommander[name.Length] = 13;
     }
 
     /// <summary>RLINE+2: the maximum number of characters that MT26 accepts.</summary>
@@ -330,22 +330,22 @@ public sealed partial class EliteGame
     /// MT26: read a line of text from the keyboard into the input buffer,
     /// returning false (C set) if ESCAPE was pressed.
     /// </summary>
-    private bool MT26()
+    private bool ReadLine()
     {
-        int savedColour = COL;
-        COL = RED;
-        DELAY(8);
+        int savedColour = _colour;
+        _colour = Red;
+        Delay(8);
         var input = new StringBuilder();
         while (true)
         {
             // OSW0L
-            int key = TT217();
+            int key = WaitForKey();
             if (key == 13)
             {
                 // OSW03
                 _lastInput = input.ToString();
-                CHPR(12);
-                COL = savedColour;
+                PutCharacter(12);
+                _colour = savedColour;
                 return true;
             }
 
@@ -353,7 +353,7 @@ public sealed partial class EliteGame
             {
                 // OSW04
                 _lastInput = input.ToString();
-                COL = savedColour;
+                _colour = savedColour;
                 return false;
             }
 
@@ -362,34 +362,34 @@ public sealed partial class EliteGame
                 // OSW05
                 if (input.Length == 0)
                 {
-                    CHPR(7);
+                    PutCharacter(7);
                     continue;
                 }
 
                 input.Length--;
-                CHPR(127);
+                PutCharacter(127);
                 continue;
             }
 
             if (input.Length >= _inputLimit || key < '!' || key >= '{')
             {
                 // OSW01
-                CHPR(7);
+                PutCharacter(7);
                 continue;
             }
 
             input.Append((char)key);
-            CHPR(key);
+            PutCharacter(key);
         }
     }
 
     /// <summary>GTDRV: ask for a drive number, returning -1 (C set) if the key wasn't a drive.</summary>
-    private int GTDRV()
+    private int AskForDrive()
     {
-        DETOK(2);
-        int key = TT217() | 0b00010000;
-        CHPR(key);
-        TT26(12);
+        PrintExtendedToken(2);
+        int key = WaitForKey() | 0b00010000;
+        PutCharacter(key);
+        PrintCharacter(12);
         if (key < '0' || key >= '4')
         {
             return -1;
@@ -402,11 +402,11 @@ public sealed partial class EliteGame
     private static string FileNameFor(string name) => "E." + name.Trim().ToUpperInvariant();
 
     /// <summary>wfile: save the commander in NA% to a file.</summary>
-    private void wfile(int drive)
+    private void SaveCommanderFile(int drive)
     {
         var data = new byte[256];
-        Array.Copy(NA, 8, data, 0, NT + 1);
-        string name = CurrentNaName();
+        Array.Copy(_savedCommander, 8, data, 0, CommanderDataSize + 1);
+        string name = SavedCommanderName();
         try
         {
             File.WriteAllBytes(Path.Combine(DriveFolder(drive), FileNameFor(name)), data);
@@ -418,7 +418,7 @@ public sealed partial class EliteGame
     }
 
     /// <summary>LOD: load a commander file into NA%, returning false if the file isn't a commander file.</summary>
-    private bool LOD(int drive)
+    private bool LoadCommanderFile(int drive)
     {
         byte[]? data = null;
         try
@@ -433,31 +433,31 @@ public sealed partial class EliteGame
         {
         }
 
-        if (data == null || data.Length < NT + 1 || (data[0] & 0x80) != 0)
+        if (data == null || data.Length < CommanderDataSize + 1 || (data[0] & 0x80) != 0)
         {
             // ELT2F: not a valid file
-            DETOK(9);
-            TT217();
+            PrintExtendedToken(9);
+            WaitForKey();
             return false;
         }
 
-        Array.Copy(data, 0, NA, 8, NT + 1);
+        Array.Copy(data, 0, _savedCommander, 8, CommanderDataSize + 1);
         return true;
     }
 
     /// <summary>CATS: ask for a drive number and show the disc catalogue.</summary>
-    private bool CATS()
+    private bool ShowCatalogue()
     {
-        int drive = GTDRV();
+        int drive = AskForDrive();
         if (drive < 0)
         {
             return false;
         }
 
-        DTW7 = '0' + drive;
-        DETOK(3);
-        CATF = 1;
-        XC = 1;
+        _catalogueDriveCharacter = '0' + drive;
+        PrintExtendedToken(3);
+        _printingCatalogue = 1;
+        _cursorX = 1;
 
         // Print the catalogue in the style of the DFS *CAT command
         string[] files;
@@ -490,32 +490,32 @@ public sealed partial class EliteGame
             PrintLine(line);
         }
 
-        CATF = 0;
+        _printingCatalogue = 0;
         return true;
 
         void PrintLine(string text)
         {
             foreach (char c in text)
             {
-                CHPR(c);
+                PutCharacter(c);
             }
 
-            CHPR(13);
-            CHPR(10);
+            PutCharacter(13);
+            PutCharacter(10);
         }
     }
 
     /// <summary>DELT: delete a file from a disc.</summary>
-    private void DELT()
+    private void DeleteCommanderFile()
     {
-        if (!CATS())
+        if (!ShowCatalogue())
         {
             return;
         }
 
-        int drive = DTW7 - '0';
-        DETOK(8);
-        MT26();
+        int drive = _catalogueDriveCharacter - '0';
+        PrintExtendedToken(8);
+        ReadLine();
         if (_lastInput.Length == 0)
         {
             return;
@@ -535,8 +535,8 @@ public sealed partial class EliteGame
     }
 
     /// <summary>FILEPR: print the name of the current filing system.</summary>
-    private void FILEPR() => DETOK(3 + DISK);
+    private void PrintFilingSystem() => PrintExtendedToken(3 + FilingSystemToggle);
 
     /// <summary>OTHERFILEPR: print the name of the other filing system.</summary>
-    private void OTHERFILEPR() => DETOK(2 - DISK);
+    private void PrintOtherFilingSystem() => PrintExtendedToken(2 - FilingSystemToggle);
 }

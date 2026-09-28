@@ -21,10 +21,10 @@ public sealed partial class EliteGame
     private readonly Dictionary<object, ScannerBlip> _blips = [];
 
     /// <summary>COMX, COMY, COMC: the compass dot's position and colour.</summary>
-    private int COMX, COMY, COMC;
+    private int _compassX, _compassY, _compassColour;
 
     /// <summary>mscol: the colour of each missile indicator.</summary>
-    private readonly int[] mscol = new int[5];
+    private readonly int[] _missileColours = new int[5];
 
     /// <summary>Whether the E.C.M. and space station bulbs are lit (they are toggled with EOR logic).</summary>
     private bool _ecmBulb, _stationBulb;
@@ -32,6 +32,7 @@ public sealed partial class EliteGame
     /// <summary>The dashboard bitmap, decoded into rectangles once.</summary>
     private static readonly List<ScreenRect> DashboardBitmap = DecodeDashboard();
 
+    /// <summary>Decode the dashboard image (P.DIALS2P, in screen mode 2) into rectangles of identical bytes.</summary>
     private static List<ScreenRect> DecodeDashboard()
     {
         var rects = new List<ScreenRect>();
@@ -66,7 +67,7 @@ public sealed partial class EliteGame
     }
 
     /// <summary>DIALS: update the dashboard (in the original this redraws the bars and the compass).</summary>
-    private void DIALS() => COMPAS();
+    private void UpdateDashboard() => UpdateCompass();
 
     /// <summary>Build the dashboard for the current frame.</summary>
     private void DrawDashboard(FrameBuilder builder)
@@ -78,21 +79,21 @@ public sealed partial class EliteGame
         }
 
         // PZW2 and PZW: the colours for the bars, flashing if FLH is set
-        int danger = ((MCNT & 8) & FLH) != 0 ? GREEN2 : RED2;
+        int danger = ((_mainLoopCounter & 8) & FlashingBars) != 0 ? DashboardGreen : DashboardRed;
 
         // The right-hand side: speed, roll, pitch and energy banks
-        DrawBar(builder, 208, 0, DELTA >> 1, 14, danger, WHITE2);
-        DrawIndicator(builder, 208, 1, AddK(8, ((ALP1 >> 2) | ALP2) ^ 0x80));
-        int pitch = BETA;
-        if (BET1 != 0)
+        DrawBar(builder, 208, 0, _speed >> 1, 14, danger, DashboardWhite);
+        DrawIndicator(builder, 208, 1, AddSignMagnitudeHighBytes(8, ((_rollMagnitude >> 2) | _rollSign) ^ 0x80));
+        int pitch = _pitchAngle;
+        if (_pitchMagnitude != 0)
         {
             pitch = (pitch - 1) & 0xFF;
         }
 
-        DrawIndicator(builder, 208, 2, AddK(8, pitch));
+        DrawIndicator(builder, 208, 2, AddSignMagnitudeHighBytes(8, pitch));
 
         int[] banks = new int[4];
-        int remaining = ENERGY >> 2;
+        int remaining = _energy >> 2;
         for (int x = 3; x >= 0; x--)
         {
             if (remaining - 16 < 0)
@@ -107,21 +108,21 @@ public sealed partial class EliteGame
 
         for (int y = 0; y < 4; y++)
         {
-            DrawBar(builder, 208, 3 + y, banks[y], 3, STRIPE, danger);
+            DrawBar(builder, 208, 3 + y, banks[y], 3, DashboardStripe, danger);
         }
 
         // The left-hand side: shields, fuel, temperatures and altitude
-        DrawBar(builder, 16, 0, FSH >> 4, 3, STRIPE, danger);
-        DrawBar(builder, 16, 1, ASH >> 4, 3, STRIPE, danger);
-        DrawBar(builder, 16, 2, QQ14 >> 2, 3, YELLOW2, YELLOW2);
-        DrawBar(builder, 16, 3, CABTMP >> 4, 11, danger, WHITE2);
-        DrawBar(builder, 16, 4, GNTMP >> 4, 11, danger, WHITE2);
-        DrawBar(builder, 16, 5, ALTIT >> 4, 240, YELLOW2, YELLOW2);
+        DrawBar(builder, 16, 0, _forwardShield >> 4, 3, DashboardStripe, danger);
+        DrawBar(builder, 16, 1, _aftShield >> 4, 3, DashboardStripe, danger);
+        DrawBar(builder, 16, 2, _fuel >> 2, 3, DashboardYellow, DashboardYellow);
+        DrawBar(builder, 16, 3, _cabinTemperature >> 4, 11, danger, DashboardWhite);
+        DrawBar(builder, 16, 4, _laserTemperature >> 4, 11, danger, DashboardWhite);
+        DrawBar(builder, 16, 5, _altitude >> 4, 240, DashboardYellow, DashboardYellow);
 
         // MSBAR: the missile indicators
         for (int x = 1; x <= 4; x++)
         {
-            int colour = mscol[x];
+            int colour = _missileColours[x];
             if (colour == 0)
             {
                 continue;
@@ -144,12 +145,12 @@ public sealed partial class EliteGame
         }
 
         // DOT: the compass
-        if (COMC != 0)
+        if (_compassColour != 0)
         {
-            DrawDash(builder, COMX, COMY, COMC);
-            if (COMC == YELLOW2)
+            DrawDash(builder, _compassX, _compassY, _compassColour);
+            if (_compassColour == DashboardYellow)
             {
-                DrawDash(builder, COMX, COMY - 1, COMC);
+                DrawDash(builder, _compassX, _compassY - 1, _compassColour);
             }
         }
 
@@ -194,14 +195,14 @@ public sealed partial class EliteGame
         int block = value >> 1;
         if (block < 8)
         {
-            builder.Rect(x + block * 4, DashTop + row * 8 + 1, 2, 4, WHITE2, VertexFlags.Dashboard | VertexFlags.Mode2);
+            builder.Rect(x + block * 4, DashTop + row * 8 + 1, 2, 4, DashboardWhite, VertexFlags.Dashboard | VertexFlags.Mode2);
         }
     }
 
     /// <summary>ADDK: (A X) = (A 0) + (S 0) with sign-magnitude arithmetic, returning the high byte.</summary>
-    private static int AddK(int s, int a)
+    private static int AddSignMagnitudeHighBytes(int addend, int value)
     {
-        int result = EliteMaths.Add16(EliteMaths.FromSignMagnitude(a) << 8, s << 8);
+        int result = EliteMaths.Add16(EliteMaths.FromSignMagnitude(value) << 8, addend << 8);
         return (result >> 8) & 0xFF;
     }
 
@@ -225,20 +226,20 @@ public sealed partial class EliteGame
     }
 
     /// <summary>SCAN: draw (or erase) the ship in INWK on the scanner.</summary>
-    private void SCAN()
+    private void DrawOnScanner()
     {
-        if ((INWK.Flags & Ship.FlagScanner) == 0 || TYPE >= 128)
+        if ((_currentShip.Flags & Ship.FlagScanner) == 0 || _shipType >= 128)
         {
             return;
         }
 
-        int colour = ShipCatalogue.Get(TYPE).ScannerColour;
-        if (((INWK.XHi | INWK.YHi | INWK.ZHi) & 0b11000000) != 0)
+        int colour = ShipCatalogue.Get(_shipType).ScannerColour;
+        if (((_currentShip.XHi | _currentShip.YHi | _currentShip.ZHi) & 0b11000000) != 0)
         {
             return;
         }
 
-        var owner = INWK.DisplayOwner;
+        var owner = _currentShip.DisplayOwner;
         if (_blips.Remove(owner))
         {
             // The ship was on the scanner, so this call erases it
@@ -246,22 +247,22 @@ public sealed partial class EliteGame
         }
 
         // X1 = 125 + x_hi (made even)
-        int a = INWK.XHi;
-        if (INWK.X < 0)
+        int offset = _currentShip.XHi;
+        if (_currentShip.X < 0)
         {
-            a = (-a) & 0xFF;
+            offset = (-offset) & 0xFF;
         }
 
-        int x1 = (a + 125) & 0xFE;
+        int x1 = (offset + 125) & 0xFE;
 
         // Y2 = 220 - z_hi / 4
-        a = INWK.ZHi >> 2;
-        a = INWK.Z < 0 ? (~a + 35 + 1) & 0xFF : (a + 35) & 0xFF;
-        int y2 = a ^ 0xFF;
+        offset = _currentShip.ZHi >> 2;
+        offset = _currentShip.Z < 0 ? (~offset + 35 + 1) & 0xFF : (offset + 35) & 0xFF;
+        int y2 = offset ^ 0xFF;
 
         // The dot's y-coordinate is Y2 - y_hi / 2, clipped to the scanner
-        a = INWK.YHi >> 1;
-        int dot = INWK.Y < 0 ? (a + y2) & 0xFF : ((~a & 0xFF) + y2 + 1) & 0xFF;
+        offset = _currentShip.YHi >> 1;
+        int dot = _currentShip.Y < 0 ? (offset + y2) & 0xFF : ((~offset & 0xFF) + y2 + 1) & 0xFF;
         if ((dot & 0x80) == 0 || dot >= 247)
         {
             dot = 246;
@@ -275,77 +276,77 @@ public sealed partial class EliteGame
     }
 
     /// <summary>COMPAS: update the compass to point to the planet or the space station.</summary>
-    private void COMPAS()
+    private void UpdateCompass()
     {
-        if (SSPR != 0)
+        if (InSafeZone != 0)
         {
             // SP1: point to the station
-            SPS4();
+            CalculateStationVector();
         }
         else
         {
-            SPS1();
+            CalculatePlanetVector();
         }
 
         // SP2
-        COMX = (SPS2(XX15[0]) + 195) & 0xFF;
-        COMY = (204 - SPS2(XX15[1]) - 1) & 0xFF;
-        COMC = XX15[2] < 0 ? GREEN2 : YELLOW2;
+        _compassX = (CompassOffset(_unitVector[0]) + 195) & 0xFF;
+        _compassY = (204 - CompassOffset(_unitVector[1]) - 1) & 0xFF;
+        _compassColour = _unitVector[2] < 0 ? DashboardGreen : DashboardYellow;
     }
 
     /// <summary>SPS4: calculate the normalised vector to the space station in XX15.</summary>
-    private void SPS4()
+    private void CalculateStationVector()
     {
         var station = Slots[1];
-        SetK3Coord(0, station?.X ?? 0);
-        SetK3Coord(1, station?.Y ?? 0);
-        SetK3Coord(2, station?.Z ?? 0);
-        TAS2();
+        SetVectorCoordinate(0, station?.X ?? 0);
+        SetVectorCoordinate(1, station?.Y ?? 0);
+        SetVectorCoordinate(2, station?.Z ?? 0);
+        NormaliseVector();
     }
 
     /// <summary>SPS2: X = A / 10, for a signed value A (the compass offset).</summary>
-    private static int SPS2(int a)
+    private static int CompassOffset(int value)
     {
-        int magnitude = (Math.Abs(a) << 1) & 0xFF;
-        EliteMaths.Dvid4(magnitude, 20, out int p, out _);
-        return a < 0 ? -p : p;
+        int magnitude = (Math.Abs(value) << 1) & 0xFF;
+        EliteMaths.DivideWithRemainder(magnitude, 20, out int offset, out _);
+        return value < 0 ? -offset : offset;
     }
 
     /// <summary>MSBAR: set the colour of a missile indicator.</summary>
-    private void MSBAR(int missile, int colour)
+    private void SetMissileIndicator(int missile, int colour)
     {
         if (missile >= 1 && missile <= 4)
         {
-            mscol[missile] = colour;
+            _missileColours[missile] = colour;
         }
     }
 
     /// <summary>msblob: display the dashboard's missile indicators in green.</summary>
-    private void msblob()
+    private void ResetMissileIndicators()
     {
         for (int x = 4; x > 0; x--)
         {
-            MSBAR(x, x <= NOMSL ? GREEN2 : 0);
+            SetMissileIndicator(x, x <= _missiles ? DashboardGreen : 0);
         }
     }
 
     /// <summary>ABORT: disarm the missiles and update the indicators.</summary>
-    private void ABORT(int colour) => ABORT2(0xFF, colour);
+    private void DisarmMissile(int colour) => SetMissileTarget(0xFF, colour);
 
     /// <summary>ABORT2: set the missile target and update the current missile indicator.</summary>
-    private void ABORT2(int target, int colour)
+    private void SetMissileTarget(int target, int colour)
     {
-        MSTG = target;
-        MSBAR(NOMSL, colour);
-        MSAR = colour;
+        _missileTarget = target;
+        SetMissileIndicator(_missiles, colour);
+        _missileArmed = colour;
     }
 
     /// <summary>ECBLB: toggle the E.C.M. bulb.</summary>
-    private void ECBLB() => _ecmBulb = !_ecmBulb;
+    private void ToggleEcmBulb() => _ecmBulb = !_ecmBulb;
 
     /// <summary>SPBLB: toggle the space station bulb.</summary>
-    private void SPBLB() => _stationBulb = !_stationBulb;
+    private void ToggleStationBulb() => _stationBulb = !_stationBulb;
 
     /// <summary>DET1: show or hide the dashboard (by setting the number of character rows shown).</summary>
-    private void DET1(int rows) => _screen.DashboardVisible = rows > 24;
+    private void SetDashboardRows(int rows) => _screen.DashboardVisible = rows > 24;
 }

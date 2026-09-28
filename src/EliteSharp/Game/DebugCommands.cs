@@ -16,7 +16,17 @@ public sealed partial class EliteGame
     private void Trace(string text) => _trace?.WriteLine(text);
 
     /// <summary>Queue a test command, which is run at the start of the next main loop iteration.</summary>
-    public void DebugCommand(string command) => _debugCommands.Enqueue(command);
+    public void DebugCommand(string command)
+    {
+        // "renderer classic" or "renderer 3d" takes effect straight away
+        if (command.StartsWith("renderer ", StringComparison.OrdinalIgnoreCase))
+        {
+            Renderer = command.EndsWith("classic", StringComparison.OrdinalIgnoreCase) ? RendererKind.Classic : RendererKind.World3D;
+            return;
+        }
+
+        _debugCommands.Enqueue(command);
+    }
 
     private void RunDebugCommands()
     {
@@ -93,6 +103,11 @@ public sealed partial class EliteGame
 
                 case "dock":
                     _dockingComputer = 0xFF;
+                    break;
+
+                case "facecheck":
+                    // Compare the GPU's face visibility test with LL9's (needs trace)
+                    _faceCheck = true;
                     break;
 
                 case "trace":

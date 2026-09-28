@@ -1,4 +1,5 @@
 using EliteSharp.Data;
+using EliteSharp.Rendering.Scene;
 
 namespace EliteSharp.Rendering;
 
@@ -16,6 +17,21 @@ public readonly record struct ScreenRect(int X, int Y, int Width, int Height, in
 /// A 3D line in space relative to our ship.
 /// </summary>
 public readonly record struct SpaceLine(float X1, float Y1, float Z1, float X2, float Y2, float Z2, int Colour);
+
+/// <summary>Which part of the display an object's image belongs to.</summary>
+public enum ImageLayer
+{
+    /// <summary>The 2D display (the HUD).</summary>
+    Hud,
+
+    /// <summary>
+    /// The 3D world: the 2D image of something that the 3D renderer draws in
+    /// 3D, such as a ship. These images are only drawn by the classic
+    /// renderer, but they are always kept, as the game uses them to work out
+    /// where the hangar's lines stop.
+    /// </summary>
+    World,
+}
 
 /// <summary>
 /// The current on-screen image of a moving object (a ship, the planet, the sun,
@@ -51,10 +67,28 @@ public sealed class Screen
     /// <summary>The total height of the screen, including the dashboard.</summary>
     public const int Height = 248;
 
+    /// <summary>The colour of the space view's border (yellow, in the mode 1 palette).</summary>
+    private const int BorderColour = 0b00001111;
+
+    /// <summary>
+    /// The lines of the space view's border (BOX): along the top, and two
+    /// pixels wide down each side.
+    /// </summary>
+    private static readonly ScreenLine[] BorderLines =
+    [
+        new(0, 0, Width - 1, 0, BorderColour),
+        new(1, 0, 1, SpaceViewHeight - 1, BorderColour),
+        new(0, 0, 0, SpaceViewHeight - 1, BorderColour),
+        new(Width - 1, 0, Width - 1, SpaceViewHeight - 1, BorderColour),
+        new(Width - 2, 0, Width - 2, SpaceViewHeight - 1, BorderColour),
+    ];
+
+    /// <summary>Whether the space view's border is shown.</summary>
+    private bool _border;
     private readonly List<ScreenLine> _canvasLines = [];
     private readonly List<ScreenRect> _canvasRects = [];
     private readonly Dictionary<(int Col, int Row), List<(char Char, int Colour)>> _text = [];
-    private readonly Dictionary<object, ObjectImage> _images = [];
+    private readonly Dictionary<object, (ObjectImage Image, ImageLayer Layer)> _images = [];
     private readonly FrameBuilder _builder = new();
     private readonly FrameExchange _exchange;
 
@@ -78,8 +112,23 @@ public sealed class Screen
     /// <summary>Whether the escape pod is fitted (which changes dashboard colour 3 to white).</summary>
     public bool EscapePodFitted { get; set; }
 
+    /// <summary>
+    /// Whether the game is showing a space view in flight (QQ11 = 0), rather
+    /// than a chart, a text screen or the hangar, in which case the renderer
+    /// puts the space view's border around the whole 3D view.
+    /// </summary>
+    public bool IsSpaceView { get; set; }
+
     /// <summary>Called when building each frame, to add the dashboard.</summary>
     public Action<FrameBuilder>? DashboardRenderer { get; set; }
+
+    /// <summary>
+    /// Called when building each frame, to take a snapshot of the 3D world for
+    /// the 3D renderer. If this isn't set, or it returns null (when the classic
+    /// renderer is being used), the images in the world layer are drawn in 2D
+    /// instead.
+    /// </summary>
+    public Func<SceneFrame?>? WorldSnapshot { get; set; }
 
     /// <summary>Clear the space view: all text, lines and object images.</summary>
     public void ClearSpaceView()
@@ -88,7 +137,14 @@ public sealed class Screen
         _canvasRects.Clear();
         _text.Clear();
         _images.Clear();
+        _border = false;
     }
+
+    /// <summary>
+    /// Draw the border around the space view. The original draws it with EOR
+    /// logic, so drawing it a second time removes it (as the death screen does).
+    /// </summary>
+    public void ToggleBorder() => _border = !_border;
 
     /// <summary>
     /// Draw a line on the canvas. If toggle is set and an identical line is
@@ -183,7 +239,7 @@ public sealed class Screen
     }
 
     /// <summary>Set the on-screen image of a moving object, replacing any previous image.</summary>
-    public void SetImage(object owner, ObjectImage image)
+    public void SetImage(object owner, ObjectImage image, ImageLayer layer = ImageLayer.Hud)
     {
         if (image.IsEmpty)
         {
@@ -191,7 +247,7 @@ public sealed class Screen
         }
         else
         {
-            _images[owner] = image;
+            _images[owner] = (image, layer);
         }
     }
 
@@ -200,7 +256,7 @@ public sealed class Screen
 
     public bool HasImage(object owner) => _images.ContainsKey(owner);
 
-    public ObjectImage? GetImage(object owner) => _images.GetValueOrDefault(owner);
+    public ObjectImage? GetImage(object owner) => _images.TryGetValue(owner, out var entry) ? entry.Image : null;
 
     /// <summary>
     /// Work out which pixels in the space view have something drawn in them
@@ -246,6 +302,14 @@ public sealed class Screen
             Line(line.X1, line.Y1, line.X2, line.Y2);
         }
 
+        if (_border)
+        {
+            foreach (var line in BorderLines)
+            {
+                Line(line.X1, line.Y1, line.X2, line.Y2);
+            }
+        }
+
         foreach (var rect in _canvasRects)
         {
             Rect(rect);
@@ -274,7 +338,7 @@ public sealed class Screen
             }
         }
 
-        foreach (var image in _images.Values)
+        foreach (var (image, _) in _images.Values)
         {
             foreach (var line in image.Lines)
             {
@@ -311,8 +375,23 @@ public sealed class Screen
             _builder.Line(line.X1, line.Y1, line.X2, line.Y2, line.Colour);
         }
 
-        foreach (var image in _images.Values)
+        if (_border)
         {
+            foreach (var line in BorderLines)
+            {
+                _builder.BorderLine(line.X1, line.Y1, line.X2, line.Y2, line.Colour);
+            }
+        }
+
+        var world = WorldSnapshot?.Invoke();
+        foreach (var (image, layer) in _images.Values)
+        {
+            if (layer == ImageLayer.World && world != null)
+            {
+                // The 3D renderer draws this
+                continue;
+            }
+
             foreach (var rect in image.Rects)
             {
                 _builder.Rect(rect.X, rect.Y, rect.Width, rect.Height, rect.Colour);
@@ -342,7 +421,7 @@ public sealed class Screen
             DashboardRenderer?.Invoke(_builder);
         }
 
-        _exchange.Publish(_builder.Build(BuildSpacePalette(), BuildDashboardPalette(), HyperspaceColours, DashboardVisible));
+        _exchange.Publish(_builder.Build(world, IsSpaceView, BuildSpacePalette(), BuildDashboardPalette(), HyperspaceColours, DashboardVisible));
     }
 
     /// <summary>Add a character from the MOS font, merging each row of pixels into runs.</summary>

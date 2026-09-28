@@ -3,6 +3,7 @@ using EliteSharp.Game;
 using EliteSharp.Game.Ships;
 using EliteSharp.Input;
 using EliteSharp.Rendering;
+using EliteSharp.Rendering.Vulkan;
 using EliteSharp.Sound;
 using Silk.NET.Input;
 using Silk.NET.Maths;
@@ -33,8 +34,10 @@ var game = new EliteGame(screen, keyboard, sound, options, gamepad);
 
 var windowOptions = WindowOptions.DefaultVulkan with
 {
-    Title = "Elite",
-    Size = new Vector2D<int>(256 * options.Scale, 248 * options.Scale),
+    Title = options.Renderer == RendererKind.World3D ? "Elite - 3D renderer" : "Elite - classic renderer",
+    Size = options.WindowSize is var (width, height)
+        ? new Vector2D<int>(width, height)
+        : new Vector2D<int>(256 * options.Scale, 248 * options.Scale),
     WindowState = options.FullScreen ? WindowState.Fullscreen : WindowState.Normal,
 };
 
@@ -46,7 +49,7 @@ bool closeRequested = false;
 
 window.Load += () =>
 {
-    renderer = new VulkanRenderer(window);
+    renderer = new VulkanRenderer(window, options.ClassicFrame ? WorldFraming.Classic : WorldFraming.Wide);
     var input = window.CreateInput();
     foreach (var kb in input.Keyboards)
     {
@@ -56,6 +59,14 @@ window.Load += () =>
             if (key == Key.Enter && (k.IsKeyPressed(Key.AltLeft) || k.IsKeyPressed(Key.AltRight)))
             {
                 window.WindowState = window.WindowState == WindowState.Fullscreen ? WindowState.Normal : WindowState.Fullscreen;
+                return;
+            }
+
+            // Alt+V switches between the 3D and classic renderers (not Alt+R,
+            // which the NVIDIA and AMD overlays use)
+            if (key == Key.V && (k.IsKeyPressed(Key.AltLeft) || k.IsKeyPressed(Key.AltRight)))
+            {
+                game.Renderer = game.Renderer == RendererKind.World3D ? RendererKind.Classic : RendererKind.World3D;
                 return;
             }
 
@@ -90,6 +101,13 @@ window.Load += () =>
 
 window.Render += _ =>
 {
+    // Show which renderer is running in the title bar
+    string title = game.Renderer == RendererKind.World3D ? "Elite - 3D renderer" : "Elite - classic renderer";
+    if (window.Title != title)
+    {
+        window.Title = title;
+    }
+
     renderer?.Draw(exchange.Latest);
     if (gameError != null || closeRequested)
     {

@@ -1,5 +1,7 @@
 using EliteSharp.Data;
 using EliteSharp.Game.Ships;
+using EliteSharp.Rendering;
+using EliteSharp.Rendering.Scene;
 
 namespace EliteSharp.Game;
 
@@ -903,7 +905,10 @@ public sealed partial class EliteGame
         ToggleLaserBeams();
     }
 
-    /// <summary>LASLI2: draw (or erase) the laser lines.</summary>
+    /// <summary>
+    /// LASLI2: draw (or erase) the laser lines. The original draws them with
+    /// EOR logic, so drawing them a second time erases them.
+    /// </summary>
     private void ToggleLaserBeams()
     {
         if (_viewType != 0)
@@ -911,17 +916,36 @@ public sealed partial class EliteGame
             return;
         }
 
+        if (_screen.HasImage(_laserOwner))
+        {
+            RemoveFromScreen(_laserOwner);
+            return;
+        }
+
+        BeginWorldDrawing(_view, inFlight: true);
+        var image = new ObjectImage();
+        var beams = new List<LineSegment>();
         _laserEndY -= 2;
-        DrawLaserLines(32, 224);
+        DrawLaserLines(image, beams, 32, 224);
         _laserEndY += 2;
-        DrawLaserLines(48, 208);
+        DrawLaserLines(image, beams, 48, 208);
+        _screen.SetImage(_laserOwner, image, ImageLayer.World);
+        _world.SetLines(_laserOwner, beams);
     }
 
-    /// <summary>las: draw a pair of laser lines from the bottom corners of the space view to (LASX, LASY).</summary>
-    private void DrawLaserLines(int left, int right)
+    /// <summary>
+    /// las: draw a pair of laser lines from the bottom corners of the space
+    /// view to (LASX, LASY). In the 3D world, the beams start just in front of
+    /// us at those corners, and reach into the distance towards (LASX, LASY).
+    /// </summary>
+    private void DrawLaserLines(ObjectImage image, List<LineSegment> beams, int left, int right)
     {
-        _screen.DrawLine(_laserEndX, _laserEndY, left, 2 * CentreY - 1, Red);
-        _screen.DrawLine(_laserEndX, _laserEndY, right, 2 * CentreY - 1, Red);
+        var target = ScreenPointToWorld(_laserEndX, _laserEndY, LaserRange);
+        foreach (int corner in (ReadOnlySpan<int>)[left, right])
+        {
+            image.Lines.Add(new ScreenLine(_laserEndX, _laserEndY, corner, 2 * CentreY - 1, Red));
+            beams.Add(new LineSegment(ScreenPointToWorld(corner, 2 * CentreY - 1, ScreenEdgeDistance), target, Red));
+        }
     }
 
     // ------------------------------------------------------------------------

@@ -1,6 +1,8 @@
+using System.Numerics;
 using EliteSharp.Data;
 using EliteSharp.Game.Ships;
 using EliteSharp.Rendering;
+using EliteSharp.Rendering.Scene;
 
 namespace EliteSharp.Game;
 
@@ -103,6 +105,10 @@ public sealed partial class EliteGame
     /// <summary>LL9: draw the ship in INWK.</summary>
     private void DrawShip()
     {
+        // Work out which view INWK is in (see _drawView)
+        BeginWorldDrawing(_plutView ?? 0, _plutView.HasValue);
+        _plutView = null;
+
         if (_shipType >= 128)
         {
             // LL25
@@ -217,6 +223,8 @@ public sealed partial class EliteGame
 
         _currentShip.Flags |= Ship.FlagDrawn;
         var image = new ObjectImage();
+        var transform = CurrentShipTransform();
+        List<LineSegment>? worldLines = null;
         int lineHeapUsed = 1;
         int heapSize = blueprint.LineHeapSize;
 
@@ -226,6 +234,8 @@ public sealed partial class EliteGame
             int gunX = _projectedX[gun], gunY = _projectedY[gun];
             if ((gunX & 0xFF) != 0xFF && ((gunX >> 8) & 0xFF) != 0xFF)
             {
+                // The ship's laser beam goes from its gun to one of the bottom
+                // corners of the screen (or thereabouts)
                 int x2 = _currentShip.X < 0 ? 255 : 0;
                 int y2 = _currentShip.ZLo;
                 int gunScreenX = ToSigned16(gunX), gunScreenY = ToSigned16(gunY);
@@ -234,6 +244,10 @@ public sealed partial class EliteGame
                     image.Lines.Add(new ScreenLine(gunScreenX, gunScreenY, x2, y2, _colour));
                     lineHeapUsed += 4;
                 }
+
+                var gunVertex = blueprint.Vertices[gun];
+                var gunPosition = Vector3.Transform(new Vector3(gunVertex.X, gunVertex.Y, gunVertex.Z), transform);
+                worldLines = [new LineSegment(gunPosition, ScreenPointToWorld(x2, y2, ScreenEdgeDistance), _colour)];
             }
         }
 
@@ -265,7 +279,13 @@ public sealed partial class EliteGame
             lineHeapUsed += 4;
         }
 
-        _screen.SetImage(owner, image);
+        _screen.SetImage(owner, image, ImageLayer.World);
+
+        // In the 3D world, the ship is its model and its transform, and the GPU
+        // works out which edges to draw
+        float normalOffsetScale = NormalOffsetScale(blueprint);
+        CheckFaceVisibility(blueprint, transform, normalOffsetScale);
+        _world.SetShip(owner, new ShipInstance(blueprint.Model, transform, _colour, _shipDistance, normalOffsetScale), worldLines);
     }
 
     /// <summary>Set up one row of XX16 from an orientation vector, scaling each coordinate by 256 / 197.</summary>
@@ -574,7 +594,7 @@ public sealed partial class EliteGame
             _currentShip.Flags &= ~Ship.FlagDrawn;
         }
 
-        _screen.RemoveImage(owner);
+        RemoveFromScreen(owner);
     }
 
     /// <summary>SHPPT: draw a distant ship as a dot.</summary>
@@ -595,7 +615,11 @@ public sealed partial class EliteGame
             _currentShip.Flags &= ~Ship.FlagDrawn;
         }
 
-        _screen.SetImage(owner, image);
+        _screen.SetImage(owner, image, ImageLayer.World);
+
+        // In the 3D world, the dot is wherever the ship is (and the GPU clips it
+        // to the view), rather than only where the original's screen can show it
+        _world.SetParticles(owner, [new Particle(CurrentShipPosition(), 4, 2, _colour)]);
     }
 
     /// <summary>
@@ -649,7 +673,7 @@ public sealed partial class EliteGame
             // Erase the existing cloud (which, as in the original, reseeds the
             // random number generator)
             DrawExplosionCloud(null);
-            _screen.RemoveImage(owner);
+            RemoveFromScreen(owner);
         }
 
         // Work out the cloud's size from its distance and counter
@@ -695,25 +719,36 @@ public sealed partial class EliteGame
             return;
         }
 
-        // Copy the screen coordinates of the explosion vertices into the heap
+        // Copy the screen coordinates of the explosion vertices into the heap,
+        // along with their positions in space for the 3D world
         cloud.Origins.Clear();
+        cloud.ViewOrigins.Clear();
         int vertices = (cloud.CountByte - 6) / 4;
         for (int i = 0; i < vertices; i++)
         {
             cloud.Origins.Add((_projectedX[i], _projectedY[i]));
+            cloud.ViewOrigins.Add(new Vector3(VertexX[i], VertexY[i], VertexZ[i]));
         }
 
         _currentShip.Flags |= Ship.FlagOnScreenCloud;
         var image = new ObjectImage();
-        DrawExplosionCloud(image);
-        _screen.SetImage(owner, image);
+        var particles = new List<Particle>();
+        DrawExplosionCloud(image, particles);
+        _screen.SetImage(owner, image, ImageLayer.World);
+        _world.SetParticles(owner, particles);
     }
 
     /// <summary>
     /// PTCLS: draw (or erase) the explosion cloud. The random number generator
     /// is seeded from the cloud data so the same cloud is produced each time.
+    ///
+    /// For the 3D world, each particle is also added to the list of particles
+    /// (if one is given), at the same offset from its vertex as it is drawn on
+    /// the original's screen, and at the vertex's distance. This uses exactly
+    /// the same random numbers as the 2D cloud, so the game's random number
+    /// sequence is unaffected.
     /// </summary>
-    private void DrawExplosionCloud(ObjectImage? image)
+    private void DrawExplosionCloud(ObjectImage? image, List<Particle>? particles = null)
     {
         var cloud = _currentShip.Explosion;
         int counter = cloud.Counter;
@@ -722,12 +757,13 @@ public sealed partial class EliteGame
             counter ^= 0xFF;
         }
 
-        int particles = (counter >> 4) | 1;
+        int particleCount = (counter >> 4) | 1;
         int savedSeed1 = _randomSeeds[1];
 
         for (int v = 0; v < cloud.Origins.Count; v++)
         {
             var (originX, originY) = cloud.Origins[v];
+            var viewOrigin = cloud.ViewOrigins[v];
             int heapOffset = 6 + 4 * (v + 1);
 
             // Seed the random number generator from the cloud's seeds
@@ -736,21 +772,29 @@ public sealed partial class EliteGame
                 _randomSeeds[i] = cloud.Seeds[i] ^ heapOffset;
             }
 
-            for (int n = particles; n >= 0; n--)
+            for (int n = particleCount; n >= 0; n--)
             {
                 int random = NextCloudRandom();
                 _colour = GameData.ExplosionColours[random & 3];
 
+                // The original skips the x-coordinate if the y-coordinate is off
+                // the bottom of the screen, but still takes a random number
+                // (EX11), which is the only random number RandomCloudCoordinate
+                // takes, so we can work out the x-coordinate either way
                 int y = RandomCloudCoordinate(originY, cloud.Size);
-                if ((y >> 8) != 0 || (y & 0xFF) >= 2 * CentreY - 1)
+                int x = RandomCloudCoordinate(originX, cloud.Size);
+
+                if (particles != null && viewOrigin.Z > 0)
                 {
-                    // EX11
-                    NextCloudRandom();
-                    continue;
+                    // Convert the particle's offset on the screen into an offset in
+                    // space at the vertex's distance
+                    float scale = viewOrigin.Z / 256;
+                    float dx = ToSigned16(x - originX) * scale;
+                    float dy = ToSigned16(y - originY) * scale;
+                    particles.Add(new Particle(ViewToWorld(viewOrigin.X + dx, viewOrigin.Y - dy, viewOrigin.Z), 2, random >= 80 ? 1 : 2, _colour));
                 }
 
-                int x = RandomCloudCoordinate(originX, cloud.Size);
-                if ((x >> 8) != 0)
+                if ((y >> 8) != 0 || (y & 0xFF) >= 2 * CentreY - 1 || (x >> 8) != 0)
                 {
                     continue;
                 }
@@ -872,10 +916,15 @@ public sealed partial class EliteGame
         if ((_shipType & 1) != 0)
         {
             DrawSun();
-            return;
+        }
+        else
+        {
+            DrawPlanet(large);
         }
 
-        DrawPlanet(large);
+        // Add the planet or sun to the 3D world, whether or not it is on the
+        // original's screen (the 3D view can be wider)
+        SetWorldPlanetOrSun(large);
     }
 
     /// <summary>PL2: remove the planet or sun from the screen.</summary>
@@ -937,7 +986,7 @@ public sealed partial class EliteGame
 
         var image = new ObjectImage();
         image.Lines.AddRange(_planetLines);
-        _screen.SetImage(_currentShip.DisplayOwner, image);
+        _screen.SetImage(_currentShip.DisplayOwner, image, ImageLayer.World);
     }
 
     /// <summary>
@@ -1142,7 +1191,7 @@ public sealed partial class EliteGame
     /// <summary>WPLS2: remove the planet from the screen.</summary>
     private void RemovePlanet()
     {
-        _screen.RemoveImage(_currentShip.DisplayOwner);
+        RemoveFromScreen(_currentShip.DisplayOwner);
     }
 
     // ------------------------------------------------------------------------
@@ -1302,7 +1351,7 @@ public sealed partial class EliteGame
         }
 
         _sunImage = image;
-        _screen.SetImage(_sunOwner, image);
+        _screen.SetImage(_sunOwner, image, ImageLayer.World);
     }
 
     /// <summary>EDGES: the ends of a horizontal line of half-width A centred on YY, clipped to the screen.</summary>
@@ -1323,12 +1372,15 @@ public sealed partial class EliteGame
     /// <summary>WPLS: remove the sun from the screen.</summary>
     private void RemoveSun()
     {
+        // The 3D sun can be in the world even if the sun isn't on the
+        // original's screen, as the 3D view can be wider
+        _world.Remove(_sunOwner);
         if ((_sunHidden & 0x80) != 0)
         {
             return;
         }
 
-        _screen.RemoveImage(_sunOwner);
+        RemoveFromScreen(_sunOwner);
         _sunImage = null;
         Array.Clear(_sunHalfWidths);
         _sunHidden = 0xFF;

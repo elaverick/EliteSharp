@@ -1,12 +1,14 @@
 using System.Runtime.InteropServices;
+using EliteSharp.Rendering.Scene;
 
 namespace EliteSharp.Rendering;
 
 /// <summary>
-/// A vertex as sent to the GPU. For 2D primitives the position is in logical
-/// BBC screen pixels (256 x 248, origin top-left); for 3D primitives it is a
-/// point in space relative to our ship, which the vertex shader projects using
-/// Elite's perspective (screen x = 128 + 256 * x / z, screen y = 96 - 256 * y / z).
+/// A vertex of the 2D display as sent to the GPU. For 2D primitives the
+/// position is in logical BBC screen pixels (256 x 248, origin top-left). In
+/// the classic renderer, the 3D world is drawn with these too, as points in
+/// space relative to our ship, which the vertex shader projects using Elite's
+/// perspective (screen x = 128 + 256 * x / z, screen y = 96 - 256 * y / z).
 /// </summary>
 [StructLayout(LayoutKind.Sequential, Pack = 4)]
 public struct Vertex(float x, float y, float z, uint colour, uint flags)
@@ -37,16 +39,31 @@ public static class VertexFlags
 }
 
 /// <summary>
-/// A complete frame to be drawn: the vertices for the triangle list and the line
-/// list, plus the palette state. Built on the game thread, drawn by the renderer.
+/// A complete frame to be drawn: the 3D world (unless the classic renderer is
+/// being used), and the 2D display as vertices for the triangle list and the
+/// line list, plus the palette state. Built on the game thread, drawn by the
+/// renderer.
 /// </summary>
 public sealed class FrameData
 {
+    /// <summary>The 3D world, or null if there isn't one (or the classic renderer draws it in 2D).</summary>
+    public SceneFrame? World;
+
     public Vertex[] Triangles = [];
     public int TriangleVertexCount;
 
     public Vertex[] Lines = [];
     public int LineVertexCount;
+
+    /// <summary>
+    /// The space view's border (a line list), which is kept separate so the
+    /// renderer can draw it around a 3D view that is wider than the 2D display.
+    /// </summary>
+    public Vertex[] Border = [];
+    public int BorderVertexCount;
+
+    /// <summary>Whether this is a space view in flight (see <see cref="Screen.IsSpaceView"/>).</summary>
+    public bool SpaceView;
 
     /// <summary>The sixteen physical colours (0-7) of the ULA palette for the space view.</summary>
     public int[] SpacePalette = new int[16];
@@ -68,11 +85,13 @@ public sealed class FrameBuilder
 {
     private readonly List<Vertex> _triangles = new(16384);
     private readonly List<Vertex> _lines = new(8192);
+    private readonly List<Vertex> _border = new(16);
 
     public void Clear()
     {
         _triangles.Clear();
         _lines.Clear();
+        _border.Clear();
     }
 
     /// <summary>Add a 2D line in logical screen coordinates, drawn to the pixel centres.</summary>
@@ -80,6 +99,13 @@ public sealed class FrameBuilder
     {
         _lines.Add(new Vertex(x1 + 0.5f, y1 + 0.5f, 0, (uint)colour, flags));
         _lines.Add(new Vertex(x2 + 0.5f, y2 + 0.5f, 0, (uint)colour, flags));
+    }
+
+    /// <summary>Add a line of the space view's border, in logical screen coordinates.</summary>
+    public void BorderLine(float x1, float y1, float x2, float y2, int colour)
+    {
+        _border.Add(new Vertex(x1 + 0.5f, y1 + 0.5f, 0, (uint)colour, 0));
+        _border.Add(new Vertex(x2 + 0.5f, y2 + 0.5f, 0, (uint)colour, 0));
     }
 
     /// <summary>Add a 3D line between two points in space relative to our ship.</summary>
@@ -105,10 +131,14 @@ public sealed class FrameBuilder
         _triangles.Add(d);
     }
 
-    public FrameData Build(int[] spacePalette, int[] dashboardPalette, bool hyperspaceColours, bool dashboardVisible)
+    public FrameData Build(SceneFrame? world, bool spaceView, int[] spacePalette, int[] dashboardPalette, bool hyperspaceColours, bool dashboardVisible)
     {
         return new FrameData
         {
+            World = world,
+            SpaceView = spaceView,
+            Border = _border.ToArray(),
+            BorderVertexCount = _border.Count,
             Triangles = _triangles.ToArray(),
             TriangleVertexCount = _triangles.Count,
             Lines = _lines.ToArray(),

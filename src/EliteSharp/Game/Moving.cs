@@ -361,6 +361,7 @@ public sealed partial class EliteGame
     /// </summary>
     private void TransformForView()
     {
+        _plutView = _view;
         switch (_view)
         {
             case 0:

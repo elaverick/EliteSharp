@@ -91,13 +91,13 @@ public sealed partial class EliteGame
         // KS5
         var ship = Slots[slot]!;
         int type = ship.Type;
-        _screen.RemoveImage(ship.DisplayOwner);
+        RemoveFromScreen(ship.DisplayOwner);
 
         if (type == ShipType.SpaceStation)
         {
             // KS4: remove the space station and replace it with the sun
             Slots[1] = null;
-            _screen.RemoveImage(ship.DisplayOwner);
+            RemoveFromScreen(ship.DisplayOwner);
             ResetWorkspace();
             ResetSunLines();
             InSafeZone = 0;
@@ -179,7 +179,7 @@ public sealed partial class EliteGame
         {
             if (ship != null)
             {
-                _screen.RemoveImage(ship.DisplayOwner);
+                RemoveFromScreen(ship.DisplayOwner);
             }
         }
 
@@ -376,7 +376,7 @@ public sealed partial class EliteGame
         // WS2: reset the ball line heap (the planet is no longer on-screen)
         if (Slots[0] != null)
         {
-            _screen.RemoveImage(Slots[0]!.DisplayOwner);
+            RemoveFromScreen(Slots[0]!.DisplayOwner);
         }
 
         ResetSunLines();
@@ -385,6 +385,7 @@ public sealed partial class EliteGame
     /// <summary>FLFLLS: reset the sun line heap (the sun is no longer on-screen).</summary>
     private void ResetSunLines()
     {
+        _world.Remove(_sunOwner);
         if (_sunImage != null)
         {
             _screen.RemoveImage(_sunOwner);
@@ -407,7 +408,7 @@ public sealed partial class EliteGame
         _currentShip.Behaviour = 0;
         if (Slots[1] != null)
         {
-            _screen.RemoveImage(Slots[1]!.DisplayOwner);
+            RemoveFromScreen(Slots[1]!.DisplayOwner);
         }
 
         Slots[1] = null;

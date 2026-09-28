@@ -1,4 +1,5 @@
 using EliteSharp.Rendering;
+using EliteSharp.Rendering.Scene;
 
 namespace EliteSharp.Game;
 
@@ -267,20 +268,32 @@ public sealed partial class EliteGame
             return;
         }
 
+        BeginWorldDrawing(_view, inFlight: true);
         var image = new ObjectImage();
+        var particles = new List<Particle>();
         for (int particle = _stardustCount; particle > 0; particle--)
         {
+            // The stardust's coordinates are its position on the screen (in
+            // pixels from the centre) and its distance, so in space it is at
+            // that distance along the line of sight through that point
+            int screenX = EliteMaths.FromSignMagnitude(_dustX[particle]);
+            int screenY = EliteMaths.FromSignMagnitude(_dustY[particle]);
+            float distance = Math.Max(_dustZ[particle], 4);
+            var position = ViewToWorld(screenX * distance / 256, screenY * distance / 256, distance);
+            particles.Add(new Particle(position, 2, _dustZ[particle] >= 80 ? 1 : 2, DustColour, Stardust: true));
+
             int dustY = _dustY[particle];
             if ((dustY & 0x7F) >= CentreY)
             {
                 continue;
             }
 
-            int x = CentreX + EliteMaths.FromSignMagnitude(_dustX[particle]);
-            int row = CentreY - EliteMaths.FromSignMagnitude(dustY);
+            int x = CentreX + screenX;
+            int row = CentreY - screenY;
             image.Rects.AddRange(PixelRects(x & 0xFF, row, _dustZ[particle], DustColour));
         }
 
-        _screen.SetImage(_dustOwner, image);
+        _screen.SetImage(_dustOwner, image, ImageLayer.World);
+        _world.SetParticles(_dustOwner, particles);
     }
 }

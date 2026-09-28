@@ -1,12 +1,11 @@
-using System.Runtime.InteropServices;
-using Silk.NET.Shaderc;
-
-namespace EliteSharp.Rendering;
+namespace EliteSharp.Rendering.Vulkan;
 
 /// <summary>
-/// The GLSL shaders, compiled to SPIR-V at startup using shaderc.
+/// The GLSL shaders for the 2D HUD (text, the dashboard, the charts and the
+/// other 2D parts of the display), which reproduce the BBC's screen modes and
+/// palettes. In the classic renderer, the 3D world is drawn with these too.
 /// </summary>
-internal static class Shaders
+internal static class HudShaders
 {
     /// <summary>
     /// The vertex shader. 2D vertices are in logical BBC pixels (256 x 248, with
@@ -126,38 +125,4 @@ internal static class Shaders
             outColour = vec4(float(physical & 1u), float((physical >> 1u) & 1u), float((physical >> 2u) & 1u), 1.0);
         }
         """;
-
-    public static unsafe byte[] Compile(string source, ShaderKind kind, string name)
-    {
-        var shaderc = Shaderc.GetApi();
-        var compiler = shaderc.CompilerInitialize();
-        var options = shaderc.CompileOptionsInitialize();
-        try
-        {
-            shaderc.CompileOptionsSetOptimizationLevel(options, OptimizationLevel.Performance);
-            var result = shaderc.CompileIntoSpv(compiler, source, (nuint)System.Text.Encoding.UTF8.GetByteCount(source), kind, name, "main", options);
-            try
-            {
-                if (shaderc.ResultGetCompilationStatus(result) != CompilationStatus.Success)
-                {
-                    string message = Marshal.PtrToStringUTF8((nint)shaderc.ResultGetErrorMessage(result)) ?? "unknown error";
-                    throw new InvalidOperationException($"Failed to compile shader {name}: {message}");
-                }
-
-                var length = (int)shaderc.ResultGetLength(result);
-                var bytes = new byte[length];
-                new ReadOnlySpan<byte>(shaderc.ResultGetBytes(result), length).CopyTo(bytes);
-                return bytes;
-            }
-            finally
-            {
-                shaderc.ResultRelease(result);
-            }
-        }
-        finally
-        {
-            shaderc.CompileOptionsRelease(options);
-            shaderc.CompilerRelease(compiler);
-        }
-    }
 }

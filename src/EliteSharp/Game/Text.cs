@@ -1032,6 +1032,7 @@ public sealed partial class EliteGame
     private void ClearSpaceView()
     {
         _screen.ClearSpaceView();
+        _world.Clear();
         _sunImage = null;
         DrawBorderBox();
     }
@@ -1041,12 +1042,7 @@ public sealed partial class EliteGame
     {
         _cursorY = 1;
         _cursorX = 1;
-        const int colour = Yellow;
-        _screen.DrawLine(0, 0, 255, 0, colour);
-        _screen.DrawLine(1, 0, 1, 2 * CentreY - 1, colour);
-        _screen.DrawLine(0, 0, 0, 2 * CentreY - 1, colour);
-        _screen.DrawLine(255, 0, 255, 2 * CentreY - 1, colour);
-        _screen.DrawLine(254, 0, 254, 2 * CentreY - 1, colour);
+        _screen.ToggleBorder();
     }
 
     /// <summary>CLYNS: clear the bottom three text rows of the space view.</summary>

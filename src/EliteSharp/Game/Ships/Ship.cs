@@ -47,6 +47,13 @@ public sealed class ExplosionCloud
 
     /// <summary>The screen coordinates of the vertices that act as cloud origins.</summary>
     public readonly List<(int X, int Y)> Origins = [];
+
+    /// <summary>
+    /// The positions of the same vertices in the space of the view that the
+    /// ship was drawn in (for the 3D world, which isn't part of the original's
+    /// heap).
+    /// </summary>
+    public readonly List<System.Numerics.Vector3> ViewOrigins = [];
 }
 
 /// <summary>

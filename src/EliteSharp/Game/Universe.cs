@@ -107,11 +107,8 @@ public sealed partial class EliteGame
             return;
         }
 
-        if (type == ShipType.Constrictor)
-        {
-            _missionStatus |= 0b00000010;
-            _killTally = (_killTally + 0x100) & 0xFFFF;
-        }
+        // Missions that are waiting for this ship to go (such as the Constrictor)
+        _missions.OnShipRemoved(this, type);
 
         // lll
         if (type < 128)
@@ -282,9 +279,6 @@ public sealed partial class EliteGame
         // Fall through into DORND2
         return NextRandomRepeatable();
     }
-
-    /// <summary>THERE: returns true (C set) if we are in the Constrictor's system in mission 1.</summary>
-    private bool InConstrictorSystem() => _galaxyNumber == 1 && _currentSystemX == 144 && _currentSystemY == 33;
 
     /// <summary>SOLAR: set up various aspects of arriving in a new system (the planet and sun).</summary>
     private void SetUpSystem()

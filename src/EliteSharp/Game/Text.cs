@@ -675,27 +675,17 @@ public sealed partial class EliteGame
             case 21:
                 ClearBottomRows();
                 break;
-            case 22:
-                ShowShipAndWait();
-                break;
             case 23:
                 MoveToRowInCyan(10);
-                break;
-            case 24:
-                WaitForKeyPress();
-                break;
-            case 25:
-                ShowIncomingMessage();
                 break;
             case 26:
                 ReadLine();
                 break;
-            case 27:
-                PrintExtendedToken(217 + _galaxyNumber);
-                break;
-            case 28:
-                PrintExtendedToken(220 + _galaxyNumber);
-                break;
+
+            // Codes 22 (show the ship and wait), 24 (wait for a key), 25
+            // (incoming message), 27 (the captain's name) and 28 (where the
+            // Constrictor was last seen) were only used by the mission text,
+            // which is now in Assets/Missions
             case 29:
                 MoveToRowInCyan(6);
                 break;
@@ -706,7 +696,8 @@ public sealed partial class EliteGame
                 PrintOtherFilingSystem();
                 break;
             default:
-                // 7, 10, 12, 20 and 32 print the character
+                // 7, 10, 12, 20 and 32 print the character (and so would the
+                // unused codes)
                 PrintCharacter(code);
                 break;
         }

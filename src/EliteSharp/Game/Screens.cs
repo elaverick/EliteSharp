@@ -405,11 +405,17 @@ public sealed partial class EliteGame
         PrintTokenParagraph(195);
     }
 
-    /// <summary>PDESC: print the system's extended description, or a mission 1 directive.</summary>
+    /// <summary>PDESC: print the system's extended description, or a mission's description (such as a clue in mission 1).</summary>
     private void PrintSystemDescription()
     {
         if (_selectedDistance == 0 && (_docked & 0x80) != 0)
         {
+            // The missions' descriptions are in Assets/Missions
+            if (_missions.TryShowSystemDescription(this, _galaxyNumber, SystemNumber))
+            {
+                return;
+            }
+
             // NRU% is 0 in the original source, which is a bug that makes the
             // game crash for some systems, so we use the intended table size
             int count = GameData.ExtendedDescriptionSystems.Length;
@@ -426,22 +432,9 @@ public sealed partial class EliteGame
                     continue;
                 }
 
-                if ((galaxy & 0x80) != 0)
-                {
-                    // PD3
-                    PrintExtendedCharacter(176);
-                }
-                else
-                {
-                    if ((_missionStatus & 1) == 0)
-                    {
-                        break;
-                    }
-
-                    SetJustified();
-                    PrintExtendedCharacter(1);
-                }
-
+                // PD3 (the original also keeps the mission 1 clues in these
+                // tables, but those are now in the mission files)
+                PrintExtendedCharacter(176);
                 PrintDescriptionToken(y);
                 PrintExtendedToken(177);
                 return;

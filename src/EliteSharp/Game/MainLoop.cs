@@ -308,15 +308,9 @@ public sealed partial class EliteGame
 
         _extraVesselsDelay = (_extraVesselsDelay + 1) & 0xFF;
 
-        if ((_missionStatus & 0b00001100) == 0b00001000)
-        {
-            random = NextRandom();
-            if (random >= 220)
-            {
-                // fothg2
-                SpawnThargoid();
-            }
-        }
+        // Ships that missions send after us, such as the Thargoids that chase
+        // the plans in mission 2 (fothg2)
+        _missions.RunEncounters(this);
 
         SpawnPiratesOrBountyHunter();
     }
@@ -387,16 +381,10 @@ public sealed partial class EliteGame
 
         // The C flag is clear here as we passed through the BCS above
         int type = (random & 3) + ShipType.CobraMkIIIPirate;
-        if (InConstrictorSystem())
+        if (_missions.TrySpawnTarget(this))
         {
-            _currentShip.Ai = 0b11111001;
-            int mission1Status = _missionStatus & 0b00000011;
-            if ((mission1Status & 1) != 0 && ((mission1Status >> 1) | _shipCounts[ShipType.Constrictor]) == 0)
-            {
-                // YESCON: spawn the Constrictor
-                AddShip(ShipType.Constrictor);
-                return;
-            }
+            // YESCON: a mission's target (such as the Constrictor) appears instead
+            return;
         }
 
         // NOCON
@@ -672,50 +660,9 @@ public sealed partial class EliteGame
         DrawHangar();
         Delay(44);
 
-        int missionStatus = _missionStatus & 0b00000011;
-        if (missionStatus == 0)
-        {
-            if ((_killTally >> 8) != 0 && (_galaxyNumber >> 1) == 0)
-            {
-                StartMission1();
-            }
-
-            GoToDockingBay();
-        }
-
-        if (missionStatus == 0b00000011)
-        {
-            FinishMission1();
-        }
-
-        // EN2: mission 2
-        if (_galaxyNumber == 2)
-        {
-            int status = _missionStatus & 0b00001111;
-            if (status == 0b00000010)
-            {
-                if ((_killTally >> 8) >= 5)
-                {
-                    StartMission2();
-                }
-            }
-            else if (status == 0b00000110)
-            {
-                if (_currentSystemX == 215 && _currentSystemY == 84)
-                {
-                    ShowMission2Briefing();
-                }
-            }
-            else if (status == 0b00001010)
-            {
-                if (_currentSystemX == 63 && _currentSystemY == 72)
-                {
-                    FinishMission2();
-                }
-            }
-        }
-
-        // EN4
+        // Any mission briefings and debriefings (see Assets/Missions), and
+        // then the docking bay (EN4)
+        _missions.OnDocked(this);
         GoToDockingBay();
     }
 

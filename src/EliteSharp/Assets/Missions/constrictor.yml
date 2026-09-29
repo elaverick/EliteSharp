@@ -1,0 +1,176 @@
+# Mission 1: the Constrictor.
+#
+# Once we have a decent kill tally in galaxy 1 or 2, the Navy asks us to track
+# down and destroy the stolen Constrictor. It is hiding in Orarra in galaxy 2,
+# and while we are looking for it, the Data on System screens in the systems
+# along its trail tell us where it went next. See README.md for the format.
+
+id: constrictor
+name: The Constrictor
+
+# The mission's stage is kept in bits 0 and 1 of the mission byte in the
+# commander file (these are the values the original uses, so saved games work)
+progress:
+  bits: [0, 1]
+  stages:
+    not-started: 0
+    hunting: 1
+    constrictor-destroyed: 3
+    complete: 2
+
+values:
+  captainName:
+    byGalaxy:
+      1: Curruthers
+      2: Fosdyke Smythe
+  lastSeen:
+    byGalaxy:
+      1: was last seen at Reesdice
+      2: is believed to have jumped to this galaxy
+
+  # Random words for the system descriptions below, each chosen afresh every
+  # time it is used
+  strange:
+    oneOf: [FUNNY, WEIRD, UNUSUAL, STRANGE, PECULIAR]
+  scoundrel:
+    oneOf: [SON OF A BITCH, SCOUNDREL, BLACKGUARD, ROGUE, "WHORESON BEETLE HEADED FLAP EAR'D KNAVE"]
+  killer:
+    oneOf: [KILLER, DEADLY, EVIL, LETHAL, VICIOUS]
+  seenNearErrius:
+    oneOf:
+      - "I HEAR A {{strange}} LOOKING SHIP APPEARED AT ERRIUS"
+      - "YEAH, I HEAR A {{strange}} SHIP LEFT ERRIUS A  WHILE BACK"
+      - "GET YOUR IRON ASS OVER TO ERRIUS"
+      - "SOME {{scoundrel}} NEW SHIP WAS SEEN AT ERRIUS"
+      - "TRY ERRIUS"
+
+docking:
+
+  - name: briefing
+    when:
+      stage: not-started
+      galaxy: [1, 2]
+      minimumKillTally: 256
+    steps:
+      - setStage: hunting
+      - run: incomingMessage
+      - introduceShip: constrictor
+      - text:
+          row: 10
+          justify: true
+          lines:
+            - "Greetings Commander {{commanderName}}, I am Captain {{captainName}} of Her
+              Majesty's Space Navy and I beg a moment of your valuable time."
+            - " We would like you to do a little job for us."
+            - " The ship you see here is a new model, the Constrictor, equiped with a top
+              secret new shield generator."
+            - " Unfortunately it's been stolen."
+      - showShipUntilKey
+      - text:
+          justify: true
+          lines:
+            - " It went missing from our ship yard on Xeer five months ago and {{lastSeen}}."
+            - " Your mission, should you decide to accept it, is to seek and destroy this
+              ship."
+            - " You are cautioned that only Military  Lasers will penetrate the new shields
+              and that the Constrictor is fitted with an E.C.M.System."
+      - text:
+          column: 6
+          lines:
+            - "Good Luck, Commander."
+      - run: messageEnds
+      - showShipUntilKey
+
+  - name: debriefing
+    when:
+      stage: constrictor-destroyed
+    steps:
+      - setStage: complete
+      - addCash: 5000
+      - run: incomingMessage
+      - clearScreen
+      - text:
+          row: 10
+          justify: true
+          lines:
+            - "  Congratulations Commander!"
+            - ""
+            - "There will always be a place for you in Her Majesty's Space Navy."
+            - " And maybe sooner than you think..."
+      - run: messageEnds
+      - waitForKey
+
+# The Constrictor waits in Orarra, where it turns up in place of a group of
+# pirates whenever it isn't already around
+target:
+  ship: constrictor
+  system: { galaxy: 2, name: Orarra }
+  stage: hunting
+  aggression: 60
+  ecm: true
+
+# The mission moves on whenever a Constrictor leaves the local bubble, which
+# is usually because we have destroyed it. As in the original, this also
+# happens if we meet a Constrictor before the mission starts (which only the
+# debug commands allow), and then the mission never starts.
+shipRemoved:
+  - ship: constrictor
+    steps:
+      - changeStage:
+          not-started: complete
+          hunting: constrictor-destroyed
+      - addKillTally: 256
+
+# The Constrictor's trail, shown on the Data on System screen while we are
+# docked in each system. The game adds a full stop to the end of each one, as
+# it does for its other special system descriptions, and like the original,
+# these are written in capitals.
+systemDescriptions:
+  stages: [hunting, constrictor-destroyed]
+  systems:
+    - galaxy: 1
+      system: Xeer
+      text: "THE CONSTRICTOR WAS LAST SEEN AT REESDICE, COMMANDER"
+    - galaxy: 1
+      system: Reesdice
+      text: "A {{strange}} LOOKING SHIP LEFT HERE A WHILE BACK. LOOKED BOUND FOR AREXE"
+    - galaxy: 1
+      system: Arexe
+      text: "YEP, A {{strange}} NEW SHIP HAD A GALACTIC HYPERDRIVE FITTED HERE. USED IT TOO"
+    - galaxy: 2
+      system: Errius
+      text: "THIS  {{strange}} SHIP DEHYPED HERE FROM NOWHERE, SUN SKIMMED AND JUMPED. I HEAR IT
+        WENT TO INBIBE"
+    - galaxy: 2
+      system: Inbibe
+      text: "{{scoundrel}} SHIP WENT FOR ME AT AUSAR. MY LASERS DIDN'T EVEN SCRATCH THE {{scoundrel}}"
+    - galaxy: 2
+      system: Ausar
+      text: "OH DEAR ME YES. A FRIGHTFUL ROGUE WITH WHAT I BELIEVE YOU PEOPLE CALL A LEAD
+        POSTERIOR SHOT UP LOTS OF THOSE BEASTLY PIRATES AND WENT TO USLERI"
+    - galaxy: 2
+      system: Usleri
+      text: "YOU CAN TACKLE THE {{killer}} {{scoundrel}} IF YOU LIKE. HE'S AT ORARRA"
+    - galaxy: 2
+      system: Orarra
+      text: "THERE'S A REAL {{scoundrel}} PIRATE OUT THERE"
+
+    # False trails around Errius
+    - { galaxy: 2, system: Bebege, text: "{{seenNearErrius}}" }
+    - { galaxy: 2, system: Cearso, text: "{{seenNearErrius}}" }
+    - { galaxy: 2, system: Dicela, text: "{{seenNearErrius}}" }
+    - { galaxy: 2, system: Eringe, text: "{{seenNearErrius}}" }
+    - { galaxy: 2, system: Gexein, text: "{{seenNearErrius}}" }
+    - { galaxy: 2, system: Isarin, text: "{{seenNearErrius}}" }
+    - { galaxy: 2, system: Letibema, text: "{{seenNearErrius}}" }
+    - { galaxy: 2, system: Maisso, text: "{{seenNearErrius}}" }
+    - { galaxy: 2, system: Onen, text: "{{seenNearErrius}}" }
+    - { galaxy: 2, system: Ramaza, text: "{{seenNearErrius}}" }
+    - { galaxy: 2, system: Sosole, text: "{{seenNearErrius}}" }
+    - { galaxy: 2, system: Tivere, text: "{{seenNearErrius}}" }
+    - { galaxy: 2, system: Veriar, text: "{{seenNearErrius}}" }
+
+    # For anyone who follows the Constrictor too far
+    - galaxy: 3
+      system: Xeveon
+      text: "BOY ARE YOU IN THE WRONG GALAXY!"

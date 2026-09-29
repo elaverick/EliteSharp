@@ -1,0 +1,118 @@
+# Mission 2: the Thargoid plans.
+#
+# After the Constrictor mission, once we have a high enough kill tally in
+# galaxy 3, the Navy asks us to go to Ceerdi, where we are given the defence
+# plans for the Thargoid hive worlds to carry to Birera. The Thargoids know,
+# and come after us until we get there. See README.md for the format.
+
+id: thargoid-plans
+name: The Thargoid Plans
+
+# The mission's stage is kept in bits 2 and 3 of the mission byte in the
+# commander file (these are the values the original uses, so saved games work)
+progress:
+  bits: [2, 3]
+  stages:
+    not-started: 0
+    going-to-ceerdi: 1
+    carrying-plans: 2
+    complete: 3
+
+# The docking events only happen once the Constrictor mission is over
+requires:
+  constrictor: complete
+
+values:
+  captainName:
+    byGalaxy:
+      3: Fortesque
+
+docking:
+
+  - name: offer
+    when:
+      stage: not-started
+      galaxy: 3
+      minimumKillTally: 1280
+    steps:
+      - setStage: going-to-ceerdi
+      - run: incomingMessage
+      - clearScreen
+      - text:
+          row: 10
+          justify: true
+          lines:
+            - "  Attention Commander {{commanderName}}, I am Captain {{captainName}} of Her
+              Majesty's Space Navy. We have need of your services again."
+            - " If you would be so good as to go to Ceerdi you will be briefed."
+            - " If successful, you will be well rewarded."
+      - run: messageEnds
+      - waitForKey
+
+  - name: briefing
+    when:
+      stage: going-to-ceerdi
+      galaxy: 3
+      system: Ceerdi
+    steps:
+      - setStage: carrying-plans
+      - run: incomingMessage
+      - clearScreen
+      - text:
+          row: 6
+          justify: true
+          lines:
+            - "Good Day Commander {{commanderName}}."
+            - " I am Agent Blake of Naval Intelligence."
+            - " As you know, the Navy have been keeping the Thargoids off your ass out in
+              deep space for many years now. Well the situation has changed."
+            - " Our boys are ready for a push right to the home system of those murderers."
+      - waitForKey
+      - clearScreen
+      - text:
+          row: 6
+          justify: true
+          lines:
+            - " I have obtained the defence plans for their Hive Worlds."
+            - " The beetles know we've got something but not what."
+            - " If I transmit the plans to our base on Birera they'll intercept the
+              transmission. I need a ship to make the run."
+            - " You're elected."
+            - " The plans are unipulse coded within this transmission."
+      - text:
+          column: 6
+          justify: true
+          lines:
+            - " You will be paid."
+            - "     Good luck Commander."
+      - run: messageEnds
+      - waitForKey
+
+  - name: debriefing
+    when:
+      stage: carrying-plans
+      galaxy: 3
+      system: Birera
+    steps:
+      - setStage: complete
+      - fitEquipment: navalEnergyUnit
+      - addKillTally: 256
+      - run: incomingMessage
+      - clearScreen
+      - text:
+          row: 6
+          column: 6
+          justify: true
+          lines:
+            - "Well done Commander."
+            - " You have served us well and we shall remember."
+            - " We did not expect the Thargoids to find out about you."
+            - " For the moment please accept this Navy Energy Unit as payment."
+      - run: messageEnds
+      - waitForKey
+
+# While we carry the plans, Thargoids may come after us wherever we are
+encounters:
+  - stage: carrying-plans
+    ship: thargoid
+    chanceIn256: 36

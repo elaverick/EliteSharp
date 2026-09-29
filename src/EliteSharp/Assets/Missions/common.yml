@@ -1,0 +1,22 @@
+# Sequences that any mission can run with `run: <name>` (see README.md).
+
+sequences:
+
+  # The "INCOMING MESSAGE" screen that comes before each message from the Navy
+  incomingMessage:
+    - clearScreen
+    - text:
+        row: 10
+        column: 6
+        lines:
+          - " INCOMING MESSAGE"
+        newlineAtEnd: false
+    - pause: 2
+
+  # The sign-off at the end of each message
+  messageEnds:
+    - text:
+        column: 6
+        lines:
+          - "  MESSAGE ENDS"
+        newlineAtEnd: false

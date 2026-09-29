@@ -48,6 +48,12 @@ yourself, which only takes a couple of minutes:
 After the first build, you'll find `EliteSharp.exe` in
 `src\EliteSharp\bin\Release\net10.0`, and you can run that directly.
 
+The missions are written in YAML in `src\EliteSharp\Assets\Missions` (see the
+README there). The game reads them from the `Assets\Missions` folder next to
+`EliteSharp.exe` when it starts, so you can change them or add your own there
+without rebuilding the game (the build copies them from `src`). To run the tests, run `dotnet test` in the
+`tests\EliteSharp.Tests` folder.
+
 ## Starting out
 
 When the game starts, it asks if you want to load a saved commander. Press

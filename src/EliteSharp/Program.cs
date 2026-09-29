@@ -1,5 +1,6 @@
 using EliteSharp;
 using EliteSharp.Game;
+using EliteSharp.Game.Missions;
 using EliteSharp.Game.Ships;
 using EliteSharp.Input;
 using EliteSharp.Rendering;
@@ -11,13 +12,15 @@ using Silk.NET.Windowing;
 
 var options = GameOptions.Parse(args);
 
-// Load the ship assets before anything else, so any problems are reported
-// straight away
+// Load the ship assets and the missions before anything else, so any
+// problems are reported straight away
+MissionCatalogue missions;
 try
 {
     ShipCatalogue.Reload();
+    missions = MissionLoader.Load(MissionLoader.DefaultFolder);
 }
-catch (Exception e) when (e is InvalidDataException or IOException)
+catch (Exception e) when (e is InvalidDataException or IOException or MissionLoadException)
 {
     Directory.CreateDirectory(options.DataFolder);
     File.WriteAllText(Path.Combine(options.DataFolder, "crash.log"), e.Message);
@@ -30,7 +33,7 @@ var hud = new Hud(exchange);
 var keyboard = new BbcKeyboard();
 using var sound = options.Sound ? SoundEngine.TryCreate() : null;
 using var gamepad = options.Gamepad ? Gamepad.TryCreate(keyboard) : null;
-var game = new EliteGame(hud, keyboard, sound, options, gamepad);
+var game = new EliteGame(hud, keyboard, sound, options, gamepad, missions);
 
 var windowOptions = WindowOptions.DefaultVulkan with
 {

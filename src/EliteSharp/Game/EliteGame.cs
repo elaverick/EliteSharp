@@ -1,5 +1,6 @@
 using System.Diagnostics;
 using EliteSharp.Data;
+using EliteSharp.Game.Missions;
 using EliteSharp.Game.Ships;
 using EliteSharp.Input;
 using EliteSharp.Rendering;
@@ -66,8 +67,13 @@ public sealed partial class EliteGame
     private long _nextMainLoopTicks;
     private volatile bool _quit;
 
-    public EliteGame(Hud hud, BbcKeyboard keyboard, SoundEngine? sound, GameOptions options, Gamepad? gamepad = null)
+    /// <summary>
+    /// Create the game. The missions are loaded from Assets/Missions unless
+    /// they are given.
+    /// </summary>
+    public EliteGame(Hud hud, BbcKeyboard keyboard, SoundEngine? sound, GameOptions options, Gamepad? gamepad = null, MissionCatalogue? missions = null)
     {
+        _missions = new MissionRuntime(missions ?? MissionLoader.Load(MissionLoader.DefaultFolder));
         _gamepad = gamepad;
         _hud = hud;
         _keyboard = keyboard;

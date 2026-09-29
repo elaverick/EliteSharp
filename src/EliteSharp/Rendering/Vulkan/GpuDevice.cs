@@ -285,11 +285,14 @@ public sealed unsafe class DynamicBuffer(GpuDevice gpu, BufferUsageFlags usage) 
 
     public Silk.NET.Vulkan.Buffer Buffer => _buffer!.Buffer;
 
-    /// <summary>Copy data into the buffer, growing it first if necessary.</summary>
-    public void Write<T>(ReadOnlySpan<T> data)
+    /// <summary>
+    /// Room in the buffer for the given number of items, growing it first if
+    /// necessary, to be filled in directly (the buffer stays mapped).
+    /// </summary>
+    public Span<T> Map<T>(int count)
         where T : unmanaged
     {
-        ulong size = (ulong)(data.Length * sizeof(T));
+        ulong size = (ulong)(count * sizeof(T));
         if (_buffer == null || _buffer.Size < size)
         {
             // The renderer waits for this frame's previous submission to finish
@@ -298,7 +301,7 @@ public sealed unsafe class DynamicBuffer(GpuDevice gpu, BufferUsageFlags usage) 
             _buffer = gpu.CreateHostBuffer(Math.Max(size * 2, 64 * 1024), usage);
         }
 
-        data.CopyTo(new Span<T>(_buffer.Mapped, data.Length));
+        return new Span<T>(_buffer.Mapped, count);
     }
 
     public void Dispose() => _buffer?.Dispose();

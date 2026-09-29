@@ -38,7 +38,9 @@ public struct HudLine(Vector4 ends, Ink ink)
 
 /// <summary>
 /// A complete frame to be drawn: the 3D world, the HUD, and the palette that
-/// both are drawn with. Built on the game thread, drawn by the renderer.
+/// both are drawn with. The game fills it in, and the renderer draws it (see
+/// <see cref="FrameExchange"/>). Frames are reused, so everything in one is
+/// cleared and refilled rather than replaced.
 ///
 /// The HUD is in three parts, each drawn with its own clipping: the space
 /// view (the top 192 rows, over the 3D world), the lines that span the full
@@ -47,33 +49,44 @@ public struct HudLine(Vector4 ends, Ink ink)
 /// </summary>
 public sealed class FrameData
 {
-    /// <summary>The 3D world, or null if there isn't one.</summary>
-    public SceneFrame? World;
+    /// <summary>The 3D world (if <see cref="HasWorld"/> is set).</summary>
+    public SceneFrame World { get; } = new();
 
-    /// <summary>The HUD's rectangles: the space view's, then the dashboard's.</summary>
-    public HudQuad[] Quads = [];
+    /// <summary>Whether the frame has a 3D world.</summary>
+    public bool HasWorld { get; set; }
 
-    public int SpaceQuadCount;
+    /// <summary>The space view's rectangles.</summary>
+    public List<HudQuad> SpaceQuads { get; } = new(1024);
 
-    public int DashboardQuadCount;
+    /// <summary>The dashboard's rectangles.</summary>
+    public List<HudQuad> DashboardQuads { get; } = new(256);
+
+    /// <summary>The space view's lines.</summary>
+    public List<HudLine> SpaceLines { get; } = new(1024);
 
     /// <summary>
-    /// The HUD's lines: the space view's, then the wide lines, whose logical
+    /// The lines that span the full width of the space view, whose logical
     /// x-coordinates 0 and 256 are at the edges of a widened space view (so the
     /// renderer can stretch them to the edges of a window that is wider than
     /// the HUD).
     /// </summary>
-    public HudLine[] Lines = [];
-
-    public int SpaceLineCount;
-
-    public int WideLineCount;
+    public List<HudLine> WideLines { get; } = new(256);
 
     /// <summary>What the inks look like.</summary>
-    public Palette Palette;
+    public Palette Palette { get; set; }
 
     /// <summary>Whether the dashboard is shown (it is hidden on the death screen).</summary>
-    public bool DashboardVisible = true;
+    public bool DashboardVisible { get; set; } = true;
+
+    public void Clear()
+    {
+        World.Clear();
+        HasWorld = false;
+        SpaceQuads.Clear();
+        DashboardQuads.Clear();
+        SpaceLines.Clear();
+        WideLines.Clear();
+    }
 }
 
 /// <summary>Which part of the HUD a <see cref="HudBuilder"/> is adding to.</summary>
@@ -86,27 +99,22 @@ public enum HudLayer
     Dashboard,
 }
 
-/// <summary>Collects the HUD's rectangles and lines for a frame.</summary>
+/// <summary>Adds the HUD's rectangles and lines to a frame.</summary>
 public sealed class HudBuilder
 {
-    private readonly List<HudQuad> _spaceQuads = new(1024);
-    private readonly List<HudQuad> _dashboardQuads = new(256);
-    private readonly List<HudLine> _spaceLines = new(1024);
-    private readonly List<HudLine> _wideLines = new(256);
+    private FrameData _frame = null!;
+
+    /// <summary>Start adding to a frame (which should have been cleared).</summary>
+    public void Begin(FrameData frame)
+    {
+        _frame = frame;
+        Layer = HudLayer.SpaceView;
+    }
 
     /// <summary>The part of the HUD that rectangles and images are added to.</summary>
     public HudLayer Layer { get; set; }
 
-    private List<HudQuad> Quads => Layer == HudLayer.Dashboard ? _dashboardQuads : _spaceQuads;
-
-    public void Clear()
-    {
-        _spaceQuads.Clear();
-        _dashboardQuads.Clear();
-        _spaceLines.Clear();
-        _wideLines.Clear();
-        Layer = HudLayer.SpaceView;
-    }
+    private List<HudQuad> Quads => Layer == HudLayer.Dashboard ? _frame.DashboardQuads : _frame.SpaceQuads;
 
     /// <summary>Add a filled rectangle.</summary>
     public void Rect(float x, float y, float width, float height, Ink ink) =>
@@ -127,37 +135,60 @@ public sealed class HudBuilder
 
     /// <summary>Add a line between the centres of two of the space view's pixels.</summary>
     public void Line(float x1, float y1, float x2, float y2, Ink ink) =>
-        _spaceLines.Add(new HudLine(new Vector4(x1 + 0.5f, y1 + 0.5f, x2 + 0.5f, y2 + 0.5f), ink));
+        _frame.SpaceLines.Add(new HudLine(new Vector4(x1 + 0.5f, y1 + 0.5f, x2 + 0.5f, y2 + 0.5f), ink));
 
-    /// <summary>Add a line that spans the full width of the space view (see <see cref="FrameData.Lines"/>).</summary>
+    /// <summary>Add a line that spans the full width of the space view (see <see cref="FrameData.WideLines"/>).</summary>
     public void WideLine(float x1, float y1, float x2, float y2, Ink ink) =>
-        _wideLines.Add(new HudLine(new Vector4(x1 + 0.5f, y1 + 0.5f, x2 + 0.5f, y2 + 0.5f), ink));
+        _frame.WideLines.Add(new HudLine(new Vector4(x1 + 0.5f, y1 + 0.5f, x2 + 0.5f, y2 + 0.5f), ink));
 
     private static Vector4 Source(AtlasRegion region) => new(region.X, region.Y, region.Width, region.Height);
-
-    public FrameData Build(SceneFrame? world, Palette palette, bool dashboardVisible) => new()
-    {
-        World = world,
-        Quads = [.. _spaceQuads, .. _dashboardQuads],
-        SpaceQuadCount = _spaceQuads.Count,
-        DashboardQuadCount = _dashboardQuads.Count,
-        Lines = [.. _spaceLines, .. _wideLines],
-        SpaceLineCount = _spaceLines.Count,
-        WideLineCount = _wideLines.Count,
-        Palette = palette,
-        DashboardVisible = dashboardVisible,
-    };
 }
 
 /// <summary>
-/// Hands completed frames from the game thread to the render thread. The render
-/// thread always draws the most recently published frame.
+/// Hands frames from the game thread to the render thread, with three frames
+/// that take turns: the game fills one in and publishes it, the renderer draws
+/// the most recently published one (and keeps it until it takes the next), and
+/// the third holds the latest published frame until the renderer takes it. No
+/// frame is written while it is being read, and the frames' storage is reused.
 /// </summary>
 public sealed class FrameExchange
 {
-    private FrameData? _latest;
+    private readonly Lock _lock = new();
+    private FrameData _writing = new();
+    private FrameData _published = new();
+    private FrameData _reading = new();
+    private bool _hasPublished;
+    private bool _hasRead;
 
-    public void Publish(FrameData frame) => Volatile.Write(ref _latest, frame);
+    /// <summary>The frame for the game to fill in (it belongs to the game thread until it's published).</summary>
+    public FrameData Writing => _writing;
 
-    public FrameData? Latest => Volatile.Read(ref _latest);
+    /// <summary>Publish the frame that the game has filled in, and give the game another to fill in.</summary>
+    public void Publish()
+    {
+        lock (_lock)
+        {
+            (_writing, _published) = (_published, _writing);
+            _hasPublished = true;
+        }
+    }
+
+    /// <summary>
+    /// The most recently published frame, for the renderer, which can use it
+    /// until it calls this again (or null if no frame has been published yet).
+    /// </summary>
+    public FrameData? TakeLatest()
+    {
+        lock (_lock)
+        {
+            if (_hasPublished)
+            {
+                (_reading, _published) = (_published, _reading);
+                _hasPublished = false;
+                _hasRead = true;
+            }
+
+            return _hasRead ? _reading : null;
+        }
+    }
 }

@@ -5,25 +5,6 @@ using EliteSharp.Rendering;
 namespace EliteSharp.Game.Ships;
 
 /// <summary>
-/// A vertex in a ship blueprint (VERTEX macro): coordinates, the four faces that
-/// the vertex belongs to, and the visibility distance beyond which it is hidden.
-/// </summary>
-public readonly record struct ShipVertex(int X, int Y, int Z, int Face1, int Face2, int Face3, int Face4, int Visibility);
-
-/// <summary>
-/// An edge in a ship blueprint (EDGE macro): the two vertices it joins, the two
-/// faces either side of it and its visibility distance.
-/// </summary>
-public readonly record struct ShipEdge(int Vertex1, int Vertex2, int Face1, int Face2, int Visibility);
-
-/// <summary>
-/// A face in a ship blueprint (FACE macro): the face normal (before scaling by
-/// the blueprint's normal scale factor) and the distance beyond which the face
-/// is always treated as visible.
-/// </summary>
-public readonly record struct ShipFace(int NormalX, int NormalY, int NormalZ, int Visibility);
-
-/// <summary>
 /// A ship type's attributes, as stored in its JSON file in Assets/Ships (see
 /// ship.schema.json there for a description of each property).
 /// </summary>
@@ -165,11 +146,6 @@ public sealed class ShipBlueprint
     /// <summary>Bytes #1-2: the targetable area (the square of the targeting radius).</summary>
     public int TargetableArea { get; }
 
-    /// <summary>Byte #5: the size of the ship line heap, i.e. 1 + 4 * the maximum number of visible edges.</summary>
-    public int LineHeapSize => 1 + 4 * Model.MaxVisibleEdges;
-
-    public int MaxVisibleEdges => Model.MaxVisibleEdges;
-
     /// <summary>Byte #6 / 4: the vertex from which the ship fires its lasers.</summary>
     public int GunVertex => Model.GunVertex;
 
@@ -179,7 +155,11 @@ public sealed class ShipBlueprint
     /// <summary>Bytes #10-11: the bounty in Cr * 10.</summary>
     public int Bounty { get; }
 
-    /// <summary>Byte #13: the distance (z_hi) beyond which the ship is shown as a dot.</summary>
+    /// <summary>
+    /// Byte #13: the distance (z_hi) beyond which the original shows the ship as
+    /// a dot. The game still uses it to decide whether a distant ship counts as
+    /// drawn; the renderer always draws ships as 3D geometry.
+    /// </summary>
     public int VisibilityDistance => Model.DotDistance;
 
     /// <summary>Byte #14: the ship's maximum energy.</summary>
@@ -188,9 +168,6 @@ public sealed class ShipBlueprint
     /// <summary>Byte #15: the ship's maximum speed.</summary>
     public int MaxSpeed { get; }
 
-    /// <summary>Byte #18: face normals are scaled by 2^NormalScale.</summary>
-    public int NormalScale => Model.NormalScale;
-
     /// <summary>Byte #19: bits 3-7 contain the laser power, bits 0-2 the number of missiles.</summary>
     public int LaserAndMissiles { get; }
 
@@ -198,11 +175,8 @@ public sealed class ShipBlueprint
 
     public int Missiles => LaserAndMissiles & 7;
 
-    public IReadOnlyList<ShipVertex> Vertices => Model.Vertices;
-
-    public IReadOnlyList<ShipEdge> Edges => Model.Edges;
-
-    public IReadOnlyList<ShipFace> Faces => Model.Faces;
+    /// <summary>The positions of the model's vertices (for the explosion cloud and the laser beam).</summary>
+    public IReadOnlyList<System.Numerics.Vector3> Vertices => Model.Vertices;
 
     /// <summary>shpcol: the ship's colour in the space view.</summary>
     public Ink Colour { get; }

@@ -1,7 +1,7 @@
 using System.Buffers.Binary;
 using System.Text.Json;
 
-namespace EliteSharp.Game.Ships;
+namespace EliteSharp.Formats;
 
 /// <summary>
 /// A minimal reader for glTF 2.0 files (the JSON form, .gltf), supporting what

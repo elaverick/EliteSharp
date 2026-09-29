@@ -16,12 +16,16 @@ public enum DepthMode
     TestAndWrite,
 }
 
+/// <summary>The formats of the images that the pipelines draw into (with dynamic rendering).</summary>
+public readonly record struct RenderTargetFormats(Format Colour, Format Depth);
+
 /// <summary>The settings for a graphics pipeline.</summary>
 public sealed class PipelineDescription
 {
     public required ShaderModule VertexShader { get; init; }
 
-    public required ShaderModule FragmentShader { get; init; }
+    /// <summary>The fragment shader, or null for a pipeline that only writes depth.</summary>
+    public ShaderModule? FragmentShader { get; init; }
 
     public required PrimitiveTopology Topology { get; init; }
 
@@ -33,6 +37,9 @@ public sealed class PipelineDescription
 
     public DepthMode Depth { get; init; }
 
+    /// <summary>Whether to cull the back faces of triangles (for closed surfaces).</summary>
+    public bool CullBackFaces { get; init; }
+
     /// <summary>
     /// The slope-scaled depth bias for polygons (0 for none), which offsets
     /// each polygon's depth in proportion to how steeply its depth changes
@@ -43,14 +50,22 @@ public sealed class PipelineDescription
 }
 
 /// <summary>
-/// Creates the graphics pipelines. Everything the renderers draw uses dynamic
-/// viewports, scissors and line widths, no face culling (the depth buffer
-/// does all the hiding) and no blending (transparent pixels are
-/// discarded instead).
+/// Creates the graphics pipelines, for dynamic rendering into a colour image
+/// and a depth buffer. Everything the renderers draw uses dynamic viewports,
+/// scissors and line widths, and no blending (transparent pixels are discarded
+/// instead). A pipeline with no fragment shader writes only depth.
 /// </summary>
 public static unsafe class PipelineFactory
 {
-    public static Pipeline Create(GpuDevice gpu, RenderPass renderPass, PipelineDescription description)
+    /// <summary>
+    /// Which way round a triangle's corners go on the screen when it faces the
+    /// camera. The meshes are wound anticlockwise when seen from outside, in
+    /// the original's left-handed space, and Vulkan's screen space has y
+    /// pointing down, which leaves them clockwise on the screen.
+    /// </summary>
+    private const FrontFace OutsideFacing = FrontFace.Clockwise;
+
+    public static Pipeline Create(GpuDevice gpu, RenderTargetFormats targets, PipelineDescription description)
     {
         var entryPoint = (byte*)SilkMarshal.StringToPtr("main");
         try
@@ -63,13 +78,17 @@ public static unsafe class PipelineFactory
                 Module = description.VertexShader,
                 PName = entryPoint,
             };
-            stages[1] = new PipelineShaderStageCreateInfo
+            uint stageCount = 1;
+            if (description.FragmentShader is { } fragmentShader)
             {
-                SType = StructureType.PipelineShaderStageCreateInfo,
-                Stage = ShaderStageFlags.FragmentBit,
-                Module = description.FragmentShader,
-                PName = entryPoint,
-            };
+                stages[stageCount++] = new PipelineShaderStageCreateInfo
+                {
+                    SType = StructureType.PipelineShaderStageCreateInfo,
+                    Stage = ShaderStageFlags.FragmentBit,
+                    Module = fragmentShader,
+                    PName = entryPoint,
+                };
+            }
 
             fixed (VertexInputBindingDescription* bindings = description.Bindings)
             fixed (VertexInputAttributeDescription* attributes = description.Attributes)
@@ -100,8 +119,8 @@ public static unsafe class PipelineFactory
                 {
                     SType = StructureType.PipelineRasterizationStateCreateInfo,
                     PolygonMode = PolygonMode.Fill,
-                    CullMode = CullModeFlags.None,
-                    FrontFace = FrontFace.Clockwise,
+                    CullMode = description.CullBackFaces ? CullModeFlags.BackBit : CullModeFlags.None,
+                    FrontFace = OutsideFacing,
                     LineWidth = 1,
                     DepthBiasEnable = description.DepthBiasSlope != 0,
                     DepthBiasSlopeFactor = description.DepthBiasSlope,
@@ -122,9 +141,12 @@ public static unsafe class PipelineFactory
                     DepthCompareOp = CompareOp.GreaterOrEqual,
                 };
 
+                // A depth-only pipeline leaves the colour image alone
                 var blendAttachment = new PipelineColorBlendAttachmentState
                 {
-                    ColorWriteMask = ColorComponentFlags.RBit | ColorComponentFlags.GBit | ColorComponentFlags.BBit | ColorComponentFlags.ABit,
+                    ColorWriteMask = description.FragmentShader == null
+                        ? 0
+                        : ColorComponentFlags.RBit | ColorComponentFlags.GBit | ColorComponentFlags.BBit | ColorComponentFlags.ABit,
                     BlendEnable = false,
                 };
 
@@ -143,10 +165,20 @@ public static unsafe class PipelineFactory
                     PDynamicStates = dynamicStates,
                 };
 
+                var colourFormat = targets.Colour;
+                var rendering = new PipelineRenderingCreateInfo
+                {
+                    SType = StructureType.PipelineRenderingCreateInfo,
+                    ColorAttachmentCount = 1,
+                    PColorAttachmentFormats = &colourFormat,
+                    DepthAttachmentFormat = targets.Depth,
+                };
+
                 var createInfo = new GraphicsPipelineCreateInfo
                 {
                     SType = StructureType.GraphicsPipelineCreateInfo,
-                    StageCount = 2,
+                    PNext = &rendering,
+                    StageCount = stageCount,
                     PStages = stages,
                     PVertexInputState = &vertexInput,
                     PInputAssemblyState = &inputAssembly,
@@ -157,8 +189,6 @@ public static unsafe class PipelineFactory
                     PColorBlendState = &colourBlend,
                     PDynamicState = &dynamicState,
                     Layout = description.Layout,
-                    RenderPass = renderPass,
-                    Subpass = 0,
                 };
 
                 GpuDevice.Check(gpu.Vk.CreateGraphicsPipelines(gpu.Device, default, 1, in createInfo, null, out var pipeline), "vkCreateGraphicsPipelines");

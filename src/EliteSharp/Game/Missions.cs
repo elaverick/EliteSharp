@@ -394,7 +394,7 @@ public sealed partial class EliteGame
             lines.Add(Line(x, -HangarFloorDepth, x, wall, wall, wall));
         }
 
-        _world.SetLines(_hangarOwner, lines);
+        _world.SetLines(_hangarOwner, System.Runtime.InteropServices.CollectionsMarshal.AsSpan(lines));
     }
 
     /// <summary>

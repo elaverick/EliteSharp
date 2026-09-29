@@ -3,7 +3,7 @@
     "version": "2.0",
     "generator": "EliteSharp tools/export_ships.py",
     "extras": {
-      "description": "Elite ship wireframe. Coordinates are in the original's left-handed space (x right, y up, z forward); the node mirrors x to convert to glTF's right-handed space."
+      "description": "Elite ship model. Coordinates are in the original's left-handed space (x right, y up, z forward); the node mirrors x to convert to glTF's right-handed space."
     }
   },
   "scene": 0,
@@ -24,100 +24,71 @@
       "name": "Adder",
       "primitives": [
         {
+          "mode": 4,
+          "attributes": {
+            "POSITION": 0
+          },
+          "indices": 1,
+          "extras": {
+            "role": "surface"
+          }
+        },
+        {
           "mode": 1,
           "attributes": {
-            "POSITION": 0,
-            "_FACES": 1,
-            "_VISIBILITY": 2
+            "POSITION": 0
           },
-          "indices": 3
+          "indices": 2,
+          "extras": {
+            "role": "structure"
+          }
+        },
+        {
+          "mode": 1,
+          "attributes": {
+            "POSITION": 0
+          },
+          "indices": 3,
+          "extras": {
+            "role": "details"
+          }
         }
       ],
       "extras": {
         "elite": {
-          "normalScale": 2,
           "dotDistance": 20,
-          "maxVisibleEdges": 25,
           "gunVertex": 0,
-          "explosionVertices": 4,
-          "edges": [
-            {"faces": [1, 0], "visibility": 31},
-            {"faces": [3, 2], "visibility": 7},
-            {"faces": [5, 4], "visibility": 31},
-            {"faces": [6, 5], "visibility": 31},
-            {"faces": [14, 7], "visibility": 31},
-            {"faces": [10, 8], "visibility": 31},
-            {"faces": [10, 9], "visibility": 31},
-            {"faces": [12, 11], "visibility": 7},
-            {"faces": [6, 4], "visibility": 31},
-            {"faces": [13, 7], "visibility": 31},
-            {"faces": [9, 8], "visibility": 31},
-            {"faces": [11, 0], "visibility": 31},
-            {"faces": [11, 9], "visibility": 31},
-            {"faces": [2, 0], "visibility": 31},
-            {"faces": [4, 2], "visibility": 31},
-            {"faces": [12, 1], "visibility": 31},
-            {"faces": [12, 10], "visibility": 31},
-            {"faces": [3, 1], "visibility": 31},
-            {"faces": [5, 3], "visibility": 31},
-            {"faces": [13, 0], "visibility": 31},
-            {"faces": [14, 1], "visibility": 31},
-            {"faces": [13, 9], "visibility": 31},
-            {"faces": [13, 4], "visibility": 31},
-            {"faces": [14, 10], "visibility": 31},
-            {"faces": [14, 5], "visibility": 31},
-            {"faces": [0, 0], "visibility": 5},
-            {"faces": [0, 0], "visibility": 3},
-            {"faces": [0, 0], "visibility": 4},
-            {"faces": [0, 0], "visibility": 3}
-          ],
-          "faces": [
-            {"normal": [0, 39, 10], "visibility": 31},
-            {"normal": [0, -39, 10], "visibility": 31},
-            {"normal": [69, 50, 13], "visibility": 31},
-            {"normal": [69, -50, 13], "visibility": 31},
-            {"normal": [30, 52, 0], "visibility": 31},
-            {"normal": [30, -52, 0], "visibility": 31},
-            {"normal": [0, 0, -160], "visibility": 31},
-            {"normal": [0, 0, -160], "visibility": 31},
-            {"normal": [0, 0, -160], "visibility": 31},
-            {"normal": [-30, 52, 0], "visibility": 31},
-            {"normal": [-30, -52, 0], "visibility": 31},
-            {"normal": [-69, 50, 13], "visibility": 31},
-            {"normal": [-69, -50, 13], "visibility": 31},
-            {"normal": [0, 28, 0], "visibility": 31},
-            {"normal": [0, -28, 0], "visibility": 31}
-          ]
+          "explosionVertices": 4
         }
       }
     }
   ],
   "accessors": [
     {
-      "bufferView": 0,
       "componentType": 5126,
       "count": 18,
       "type": "VEC3",
-      "min": [-30, -7, -40],
-      "max": [30, 7, 40]
+      "min": [-30.0, -7.0, -40.0],
+      "max": [30.0, 7.0, 40.0],
+      "bufferView": 0
     },
     {
-      "bufferView": 1,
-      "componentType": 5121,
-      "count": 18,
-      "type": "VEC4"
-    },
-    {
-      "bufferView": 2,
-      "componentType": 5126,
-      "count": 18,
-      "type": "SCALAR"
-    },
-    {
-      "bufferView": 3,
       "componentType": 5123,
-      "count": 58,
-      "type": "SCALAR"
+      "count": 72,
+      "type": "SCALAR",
+      "bufferView": 1
+    },
+    {
+      "componentType": 5123,
+      "count": 50,
+      "type": "SCALAR",
+      "bufferView": 2
+    },
+    {
+      "componentType": 5123,
+      "count": 8,
+      "type": "SCALAR",
+      "bufferView": 3
     }
   ],
   "bufferViews": [
@@ -130,26 +101,26 @@
     {
       "buffer": 0,
       "byteOffset": 216,
-      "byteLength": 72,
-      "target": 34962
-    },
-    {
-      "buffer": 0,
-      "byteOffset": 288,
-      "byteLength": 72,
-      "target": 34962
+      "byteLength": 144,
+      "target": 34963
     },
     {
       "buffer": 0,
       "byteOffset": 360,
-      "byteLength": 116,
+      "byteLength": 100,
+      "target": 34963
+    },
+    {
+      "buffer": 0,
+      "byteOffset": 460,
+      "byteLength": 16,
       "target": 34963
     }
   ],
   "buffers": [
     {
       "byteLength": 476,
-      "uri": "data:application/octet-stream;base64,AACQwQAAAAAAACBCAACQQQAAAAAAACBCAADwQQAAAAAAAMDBAADwQQAAAAAAACDCAACQQQAA4MAAACDCAACQwQAA4MAAACDCAADwwQAAAAAAACDCAADwwQAAAAAAAMDBAACQwQAA4EAAACDCAACQQQAA4EAAACDCAACQwQAA4EAAAFBBAACQQQAA4EAAAFBBAACQwQAA4MAAAFBBAACQQQAA4MAAAFBBAAAwwQAAQEAAAOhBAAAwQQAAQEAAAOhBAAAwQQAAgEAAAMBBAAAwwQAAgEAAAMBBAQAMCwEAAwIDAgUEBQQGBgYFDgcIBw4KCQgKCgoJDAsIBw0JBgQNBwkADQsCAA0ECgEODAMBDgUAAAAAAAAAAAAAAAAAAAAAAAD4QQAA+EEAAPhBAAD4QQAA+EEAAPhBAAD4QQAA+EEAAPhBAAD4QQAA+EEAAPhBAAD4QQAA+EEAAKBAAACgQAAAgEAAAIBAAAABAAEAAgACAAMAAwAEAAQABQAFAAYABgAHAAcAAAADAAkACQAIAAgABgAAAAoABwAKAAEACwACAAsAAAAMAAcADAABAA0AAgANAAoACwAMAA0ACAAKAAkACwAFAAwABAANAA4ADwAPABAAEAARABEADgA="
+      "uri": "data:application/octet-stream;base64,AACQwQAAAAAAACBCAACQQQAAAAAAACBCAADwQQAAAAAAAMDBAADwQQAAAAAAACDCAACQQQAA4MAAACDCAACQwQAA4MAAACDCAADwwQAAAAAAACDCAADwwQAAAAAAAMDBAACQwQAA4EAAACDCAACQQQAA4EAAACDCAACQwQAA4EAAAFBBAACQQQAA4EAAAFBBAACQwQAA4MAAAFBBAACQQQAA4MAAAFBBAAAwwZ0dN0BLtudBAAAwQZ0dN0BLtudBAAAwQTFxhEC1ScBBAAAwwTFxhEC1ScBBCgAAAAEAAQALAAoAAAAMAA0ADQABAAAAAgALAAEADQACAAEACwACAAMAAwAJAAsAAgANAAQABAADAAIACAAGAAcABwAKAAgABgAFAAwADAAHAAYACgAHAAAABwAMAAAACQAIAAoACgALAAkABQAEAA0ADQAMAAUAAwAEAAUAAwAFAAYAAwAGAAgACAAJAAMAAAABAAEAAgACAAMAAwAEAAQABQAFAAYABgAHAAAABwADAAkACAAJAAYACAAAAAoABwAKAAEACwACAAsAAAAMAAcADAABAA0AAgANAAoACwAMAA0ACAAKAAkACwAFAAwABAANAA4ADwAPABAAEAARAA4AEQA="
     }
   ]
 }

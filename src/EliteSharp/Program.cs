@@ -54,7 +54,7 @@ void ToggleFullScreen() =>
 
 window.Load += () =>
 {
-    renderer = new VulkanRenderer(window, options.FourByThreeFrame ? WorldFraming.FourByThree : WorldFraming.Wide);
+    renderer = new VulkanRenderer(window, Path.Combine(ShipCatalogue.AssetFolder, "Models"), options.FourByThreeFrame ? WorldFraming.FourByThree : WorldFraming.Wide);
     var input = window.CreateInput();
     foreach (var kb in input.Keyboards)
     {
@@ -121,7 +121,7 @@ window.Render += _ =>
     if (renderer != null)
     {
         hud.SideMargin = renderer.SideMargin;
-        renderer.Draw(exchange.Latest);
+        renderer.Draw(exchange.TakeLatest());
     }
 
     if (gameError != null || closeRequested)

@@ -3,7 +3,7 @@
     "version": "2.0",
     "generator": "EliteSharp tools/export_ships.py",
     "extras": {
-      "description": "Elite ship wireframe. Coordinates are in the original's left-handed space (x right, y up, z forward); the node mirrors x to convert to glTF's right-handed space."
+      "description": "Elite ship model. Coordinates are in the original's left-handed space (x right, y up, z forward); the node mirrors x to convert to glTF's right-handed space."
     }
   },
   "scene": 0,
@@ -24,92 +24,71 @@
       "name": "Thargoid",
       "primitives": [
         {
+          "mode": 4,
+          "attributes": {
+            "POSITION": 0
+          },
+          "indices": 1,
+          "extras": {
+            "role": "surface"
+          }
+        },
+        {
           "mode": 1,
           "attributes": {
-            "POSITION": 0,
-            "_FACES": 1,
-            "_VISIBILITY": 2
+            "POSITION": 0
           },
-          "indices": 3
+          "indices": 2,
+          "extras": {
+            "role": "structure"
+          }
+        },
+        {
+          "mode": 1,
+          "attributes": {
+            "POSITION": 0
+          },
+          "indices": 3,
+          "extras": {
+            "role": "details"
+          }
         }
       ],
       "extras": {
         "elite": {
-          "normalScale": 2,
           "dotDistance": 55,
-          "maxVisibleEdges": 26,
           "gunVertex": 15,
-          "explosionVertices": 8,
-          "edges": [
-            {"faces": [4, 8], "visibility": 31},
-            {"faces": [0, 4], "visibility": 31},
-            {"faces": [1, 4], "visibility": 31},
-            {"faces": [2, 4], "visibility": 31},
-            {"faces": [3, 4], "visibility": 31},
-            {"faces": [4, 5], "visibility": 31},
-            {"faces": [4, 6], "visibility": 31},
-            {"faces": [4, 7], "visibility": 31},
-            {"faces": [0, 8], "visibility": 31},
-            {"faces": [0, 1], "visibility": 31},
-            {"faces": [1, 2], "visibility": 31},
-            {"faces": [2, 3], "visibility": 31},
-            {"faces": [3, 5], "visibility": 31},
-            {"faces": [5, 6], "visibility": 31},
-            {"faces": [6, 7], "visibility": 31},
-            {"faces": [7, 8], "visibility": 31},
-            {"faces": [8, 9], "visibility": 31},
-            {"faces": [0, 9], "visibility": 31},
-            {"faces": [1, 9], "visibility": 31},
-            {"faces": [2, 9], "visibility": 31},
-            {"faces": [3, 9], "visibility": 31},
-            {"faces": [5, 9], "visibility": 31},
-            {"faces": [6, 9], "visibility": 31},
-            {"faces": [7, 9], "visibility": 31},
-            {"faces": [9, 9], "visibility": 30},
-            {"faces": [9, 9], "visibility": 30}
-          ],
-          "faces": [
-            {"normal": [103, -60, 25], "visibility": 31},
-            {"normal": [103, -60, -25], "visibility": 31},
-            {"normal": [103, -25, -60], "visibility": 31},
-            {"normal": [103, 25, -60], "visibility": 31},
-            {"normal": [64, 0, 0], "visibility": 31},
-            {"normal": [103, 60, -25], "visibility": 31},
-            {"normal": [103, 60, 25], "visibility": 31},
-            {"normal": [103, 25, 60], "visibility": 31},
-            {"normal": [103, -25, 60], "visibility": 31},
-            {"normal": [-48, 0, 0], "visibility": 31}
-          ]
+          "explosionVertices": 8
         }
       }
     }
   ],
   "accessors": [
     {
-      "bufferView": 0,
       "componentType": 5126,
       "count": 20,
       "type": "VEC3",
-      "min": [-24, -164, -164],
-      "max": [32, 164, 164]
+      "min": [-24.0, -164.0, -164.0],
+      "max": [32.0, 164.0, 164.0],
+      "bufferView": 0
     },
     {
-      "bufferView": 1,
-      "componentType": 5121,
-      "count": 20,
-      "type": "VEC4"
-    },
-    {
-      "bufferView": 2,
-      "componentType": 5126,
-      "count": 20,
-      "type": "SCALAR"
-    },
-    {
-      "bufferView": 3,
       "componentType": 5123,
-      "count": 52,
-      "type": "SCALAR"
+      "count": 84,
+      "type": "SCALAR",
+      "bufferView": 1
+    },
+    {
+      "componentType": 5123,
+      "count": 48,
+      "type": "SCALAR",
+      "bufferView": 2
+    },
+    {
+      "componentType": 5123,
+      "count": 4,
+      "type": "SCALAR",
+      "bufferView": 3
     }
   ],
   "bufferViews": [
@@ -122,26 +101,26 @@
     {
       "buffer": 0,
       "byteOffset": 240,
-      "byteLength": 80,
-      "target": 34962
+      "byteLength": 168,
+      "target": 34963
     },
     {
       "buffer": 0,
-      "byteOffset": 320,
-      "byteLength": 80,
-      "target": 34962
+      "byteOffset": 408,
+      "byteLength": 96,
+      "target": 34963
     },
     {
       "buffer": 0,
-      "byteOffset": 400,
-      "byteLength": 104,
+      "byteOffset": 504,
+      "byteLength": 8,
       "target": 34963
     }
   ],
   "buffers": [
     {
-      "byteLength": 504,
-      "uri": "data:application/octet-stream;base64,AAAAQgAAQMIAAEBCAAAAQgAAiMIAAAAAAAAAQgAAQMIAAEDCAAAAQgAAAAAAAIjCAAAAQgAAQEIAAEDCAAAAQgAAiEIAAAAAAAAAQgAAQEIAAEBCAAAAQgAAAAAAAIhCAADAwQAA6MIAAOhCAADAwQAAJMMAAAAAAADAwQAA6MIAAOjCAADAwQAAAAAAACTDAADAwQAA6EIAAOjCAADAwQAAJEMAAAAAAADAwQAA6EIAAOhCAADAwQAAAAAAACRDAADAwQAAgEIAAKBCAADAwQAAgEIAAKDCAADAwQAAgMIAAKDCAADAwQAAgMIAAKBCAAQICAABBAQBAgQEAgMEBAMEBQUEBQYGBAYHBwQHCAgACAkJAAEJCQECCQkCAwkJAwUJCQUGCQkGBwkJBwgJCQkJCQkJCQkJCQkJCQkJCQkAAPhBAAD4QQAA+EEAAPhBAAD4QQAA+EEAAPhBAAD4QQAA+EEAAPhBAAD4QQAA+EEAAPhBAAD4QQAA+EEAAPhBAADwQQAA8EEAAPBBAADwQQAABwAAAAEAAQACAAIAAwADAAQABAAFAAUABgAGAAcAAAAIAAEACQACAAoAAwALAAQADAAFAA0ABgAOAAcADwAIAA8ACAAJAAkACgAKAAsACwAMAAwADQANAA4ADgAPABAAEQASABMA"
+      "byteLength": 512,
+      "uri": "data:application/octet-stream;base64,AAAAQgAAQMIAAEBCAAAAQgAAiMIAAAAAAAAAQgAAQMIAAEDCAAAAQgAAAAAAAIjCAAAAQgAAQEIAAEDCAAAAQgAAiEIAAAAAAAAAQgAAQEIAAEBCAAAAQgAAAAAAAIhCAADAwQAA6MIAAOhCAADAwQAAJMMAAAAAAADAwQAA6MIAAOjCAADAwQAAAAAAACTDAADAwQAA6EIAAOjCAADAwQAAJEMAAAAAAADAwQAA6EIAAOhCAADAwQAAAAAAACRDAADAwQAAgEIAAKBCAADAwQAAgEIAAKDCAADAwQAAgMIAAKDCAADAwQAAgMIAAKBCCAABAAAAAQAIAAkACQACAAEAAgAJAAoACgADAAIAAwAKAAsACwAEAAMABAALAAwAAAAGAAcAAAAFAAYAAAAEAAUAAAADAAQAAAACAAMAAgAAAAEADAAFAAQABQAMAA0ADQAGAAUABgANAA4ABgAPAAcADwAGAA4ABwAIAAAACAAHAA8ACAAKAAkACAALAAoACAAMAAsACAANAAwACAAOAA0ADgAIAA8AAAAHAAAAAQABAAIAAgADAAMABAAEAAUABQAGAAYABwAAAAgAAQAJAAIACgADAAsABAAMAAUADQAGAA4ABwAPAAgADwAIAAkACQAKAAoACwALAAwADAANAA0ADgAOAA8AEAARABIAEwA="
     }
   ]
 }

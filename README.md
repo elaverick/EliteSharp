@@ -24,7 +24,7 @@ fills a widescreen display.
 ## What you need
 
 - A 64-bit Windows 10 or 11 PC
-- A graphics card with Vulkan support (almost any card from the last ten years,
+- A graphics card with Vulkan 1.3 support (almost any card from the last ten years,
   with up-to-date drivers)
 - Optionally, an Xbox controller (or any controller Windows recognises)
 

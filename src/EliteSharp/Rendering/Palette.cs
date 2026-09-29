@@ -47,29 +47,22 @@ public readonly record struct Palette(SpacePalette Space, bool EscapePod)
     private const uint Cyan = 0xFFFFFF00;
     private const uint White = 0xFFFFFFFF;
 
-    /// <summary>The patterns for every combination of palette and escape pod, built once.</summary>
-    private static readonly Dictionary<Palette, uint[]> Cache = [];
+    /// <summary>
+    /// The patterns for every combination of space palette and escape pod
+    /// (there are only ten), built once, at the index given by <see cref="Index"/>.
+    /// </summary>
+    private static readonly uint[][] Table =
+        [.. from space in Enum.GetValues<SpacePalette>()
+            from pod in new[] { false, true }
+            select new Palette(space, pod).Build()];
+
+    private int Index => (int)Space * 2 + (EscapePod ? 1 : 0);
 
     /// <summary>
     /// The colours of every ink, as packed RGBA8 (red in the low byte), with
     /// <see cref="PatternLength"/> colours per ink, in the order of <see cref="Ink"/>.
     /// </summary>
-    public uint[] Patterns
-    {
-        get
-        {
-            lock (Cache)
-            {
-                if (!Cache.TryGetValue(this, out var patterns))
-                {
-                    patterns = Build();
-                    Cache[this] = patterns;
-                }
-
-                return patterns;
-            }
-        }
-    }
+    public ReadOnlySpan<uint> Patterns => Table[Index];
 
     private uint[] Build()
     {

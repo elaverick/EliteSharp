@@ -18,10 +18,11 @@ public enum WorldFraming
 }
 
 /// <summary>
-/// Draws frames with Vulkan. The renderer owns the device, the swapchain and
+/// Draws frames with Vulkan 1.3. The renderer owns the device, the swapchain and
 /// the depth buffer, and each frame it draws the 3D world (if there is one)
 /// with the <see cref="WorldRenderer"/>, and then the 2D display over the top
-/// with the <see cref="HudRenderer"/>.
+/// with the <see cref="HudRenderer"/>, using dynamic rendering (so there are no
+/// render passes or framebuffers) and synchronization2 barriers.
 ///
 /// The 2D display is letterboxed into the window at the original's 256 x 248
 /// proportions. The world is drawn into its own viewport, which covers the
@@ -61,9 +62,7 @@ public sealed unsafe class VulkanRenderer : IDisposable
     private Image _depthImage;
     private DeviceMemory _depthMemory;
     private ImageView _depthView;
-    private Framebuffer[] _framebuffers = [];
     private VkSemaphore[] _renderFinished = [];
-    private RenderPass _renderPass;
     private HudRenderer _hud = null!;
     private WorldRenderer _world = null!;
     private readonly FrameResources[] _frames = new FrameResources[FramesInFlight];
@@ -77,7 +76,8 @@ public sealed unsafe class VulkanRenderer : IDisposable
     /// <summary>Ask the renderer to save the next frame it draws to a PNG file.</summary>
     public void RequestCapture(string path) => Volatile.Write(ref _capturePath, path);
 
-    public VulkanRenderer(IWindow window, WorldFraming framing = WorldFraming.Wide)
+    /// <summary>Create the renderer, loading the ship models from the given folder.</summary>
+    public VulkanRenderer(IWindow window, string shipModelFolder, WorldFraming framing = WorldFraming.Wide)
     {
         _window = window;
         _framing = framing;
@@ -89,12 +89,11 @@ public sealed unsafe class VulkanRenderer : IDisposable
         _gpu = new GpuDevice(_vk, _physicalDevice, _device, _queue, _commandPool);
         _depthFormat = ChooseDepthFormat();
         CreateSwapchain();
-        CreateRenderPass();
         CreateDepthBuffer();
-        CreateFramebuffers();
         CreateFrameResources();
-        _hud = new HudRenderer(_gpu, _renderPass, FramesInFlight);
-        _world = new WorldRenderer(_gpu, _renderPass, FramesInFlight);
+        var targets = new RenderTargetFormats(_swapchainFormat, _depthFormat);
+        _hud = new HudRenderer(_gpu, targets, FramesInFlight);
+        _world = new WorldRenderer(_gpu, targets, FramesInFlight, shipModelFolder);
     }
 
     public void Resize() => _swapchainDirty = true;
@@ -109,7 +108,7 @@ public sealed unsafe class VulkanRenderer : IDisposable
             ApplicationVersion = new Version32(1, 0, 0),
             PEngineName = appName,
             EngineVersion = new Version32(1, 0, 0),
-            ApiVersion = Vk.Version11,
+            ApiVersion = Vk.Version13,
         };
 
         var extensions = _window.VkSurface!.GetRequiredExtensions(out uint extensionCount);
@@ -173,12 +172,12 @@ public sealed unsafe class VulkanRenderer : IDisposable
                 }
 
                 _khrSurface.GetPhysicalDeviceSurfaceSupport(device, i, _surface, out var supported);
-                if (!supported)
+                _vk.GetPhysicalDeviceProperties(device, out var properties);
+                if (!supported || properties.ApiVersion < Vk.Version13 || !SupportsRequiredFeatures(device))
                 {
                     continue;
                 }
 
-                _vk.GetPhysicalDeviceProperties(device, out var properties);
                 int score = properties.DeviceType switch
                 {
                     PhysicalDeviceType.DiscreteGpu => 3,
@@ -197,13 +196,22 @@ public sealed unsafe class VulkanRenderer : IDisposable
             }
         }
 
-        _physicalDevice = best ?? throw new InvalidOperationException("No suitable Vulkan device found");
+        _physicalDevice = best ?? throw new InvalidOperationException("No suitable Vulkan device found (Vulkan 1.3 is required)");
         _queueFamily = bestFamily;
 
         _vk.GetPhysicalDeviceFeatures(_physicalDevice, out var features);
         _vk.GetPhysicalDeviceProperties(_physicalDevice, out var props);
         _wideLines = features.WideLines;
         _maxLineWidth = _wideLines ? props.Limits.LineWidthRange[1] : 1;
+    }
+
+    /// <summary>Whether a device supports dynamic rendering and synchronization2 (which Vulkan 1.3 requires, but check anyway).</summary>
+    private bool SupportsRequiredFeatures(PhysicalDevice device)
+    {
+        var features13 = new PhysicalDeviceVulkan13Features { SType = StructureType.PhysicalDeviceVulkan13Features };
+        var features = new PhysicalDeviceFeatures2 { SType = StructureType.PhysicalDeviceFeatures2, PNext = &features13 };
+        _vk.GetPhysicalDeviceFeatures2(device, &features);
+        return features13.DynamicRendering && features13.Synchronization2;
     }
 
     private void CreateDevice()
@@ -217,14 +225,25 @@ public sealed unsafe class VulkanRenderer : IDisposable
             PQueuePriorities = &priority,
         };
 
-        var features = new PhysicalDeviceFeatures { WideLines = _wideLines };
+        var features13 = new PhysicalDeviceVulkan13Features
+        {
+            SType = StructureType.PhysicalDeviceVulkan13Features,
+            DynamicRendering = true,
+            Synchronization2 = true,
+        };
+        var features = new PhysicalDeviceFeatures2
+        {
+            SType = StructureType.PhysicalDeviceFeatures2,
+            PNext = &features13,
+            Features = new PhysicalDeviceFeatures { WideLines = _wideLines },
+        };
         var extensionName = (byte*)SilkMarshal.StringToPtr(KhrSwapchain.ExtensionName);
         var createInfo = new DeviceCreateInfo
         {
             SType = StructureType.DeviceCreateInfo,
+            PNext = &features,
             QueueCreateInfoCount = 1,
             PQueueCreateInfos = &queueInfo,
-            PEnabledFeatures = &features,
             EnabledExtensionCount = 1,
             PpEnabledExtensionNames = &extensionName,
         };
@@ -367,7 +386,7 @@ public sealed unsafe class VulkanRenderer : IDisposable
         return view;
     }
 
-    /// <summary>Create the depth buffer, which is shared by the frames in flight (the render pass orders their use of it).</summary>
+    /// <summary>Create the depth buffer, which is shared by the frames in flight (a barrier orders their use of it).</summary>
     private void CreateDepthBuffer()
     {
         var imageInfo = new ImageCreateInfo
@@ -396,90 +415,6 @@ public sealed unsafe class VulkanRenderer : IDisposable
         GpuDevice.Check(_vk.AllocateMemory(_device, in memoryInfo, null, out _depthMemory), "vkAllocateMemory");
         GpuDevice.Check(_vk.BindImageMemory(_device, _depthImage, _depthMemory, 0), "vkBindImageMemory");
         _depthView = CreateImageView(_depthImage, _depthFormat, ImageAspectFlags.DepthBit);
-    }
-
-    private void CreateRenderPass()
-    {
-        var attachments = stackalloc AttachmentDescription[2];
-        attachments[0] = new AttachmentDescription
-        {
-            Format = _swapchainFormat,
-            Samples = SampleCountFlags.Count1Bit,
-            LoadOp = AttachmentLoadOp.Clear,
-            StoreOp = AttachmentStoreOp.Store,
-            StencilLoadOp = AttachmentLoadOp.DontCare,
-            StencilStoreOp = AttachmentStoreOp.DontCare,
-            InitialLayout = ImageLayout.Undefined,
-            FinalLayout = ImageLayout.PresentSrcKhr,
-        };
-        attachments[1] = new AttachmentDescription
-        {
-            Format = _depthFormat,
-            Samples = SampleCountFlags.Count1Bit,
-            LoadOp = AttachmentLoadOp.Clear,
-            StoreOp = AttachmentStoreOp.DontCare,
-            StencilLoadOp = AttachmentLoadOp.DontCare,
-            StencilStoreOp = AttachmentStoreOp.DontCare,
-            InitialLayout = ImageLayout.Undefined,
-            FinalLayout = ImageLayout.DepthStencilAttachmentOptimal,
-        };
-
-        var colourReference = new AttachmentReference(0, ImageLayout.ColorAttachmentOptimal);
-        var depthReference = new AttachmentReference(1, ImageLayout.DepthStencilAttachmentOptimal);
-        var subpass = new SubpassDescription
-        {
-            PipelineBindPoint = PipelineBindPoint.Graphics,
-            ColorAttachmentCount = 1,
-            PColorAttachments = &colourReference,
-            PDepthStencilAttachment = &depthReference,
-        };
-
-        // Wait for the previous frame's use of the colour and depth attachments
-        var stages = PipelineStageFlags.ColorAttachmentOutputBit | PipelineStageFlags.EarlyFragmentTestsBit | PipelineStageFlags.LateFragmentTestsBit;
-        var dependency = new SubpassDependency
-        {
-            SrcSubpass = Vk.SubpassExternal,
-            DstSubpass = 0,
-            SrcStageMask = stages,
-            SrcAccessMask = AccessFlags.DepthStencilAttachmentWriteBit,
-            DstStageMask = stages,
-            DstAccessMask = AccessFlags.ColorAttachmentWriteBit | AccessFlags.DepthStencilAttachmentReadBit | AccessFlags.DepthStencilAttachmentWriteBit,
-        };
-
-        var createInfo = new RenderPassCreateInfo
-        {
-            SType = StructureType.RenderPassCreateInfo,
-            AttachmentCount = 2,
-            PAttachments = attachments,
-            SubpassCount = 1,
-            PSubpasses = &subpass,
-            DependencyCount = 1,
-            PDependencies = &dependency,
-        };
-
-        GpuDevice.Check(_vk.CreateRenderPass(_device, in createInfo, null, out _renderPass), "vkCreateRenderPass");
-    }
-
-    private void CreateFramebuffers()
-    {
-        _framebuffers = new Framebuffer[_imageViews.Length];
-        var attachments = stackalloc ImageView[2];
-        for (int i = 0; i < _imageViews.Length; i++)
-        {
-            attachments[0] = _imageViews[i];
-            attachments[1] = _depthView;
-            var createInfo = new FramebufferCreateInfo
-            {
-                SType = StructureType.FramebufferCreateInfo,
-                RenderPass = _renderPass,
-                AttachmentCount = 2,
-                PAttachments = attachments,
-                Width = _extent.Width,
-                Height = _extent.Height,
-                Layers = 1,
-            };
-            GpuDevice.Check(_vk.CreateFramebuffer(_device, in createInfo, null, out _framebuffers[i]), "vkCreateFramebuffer");
-        }
     }
 
     private void CreateFrameResources()
@@ -511,11 +446,6 @@ public sealed unsafe class VulkanRenderer : IDisposable
 
     private void DestroySwapchain()
     {
-        foreach (var framebuffer in _framebuffers)
-        {
-            _vk.DestroyFramebuffer(_device, framebuffer, null);
-        }
-
         _vk.DestroyImageView(_device, _depthView, null);
         _vk.DestroyImage(_device, _depthImage, null);
         _vk.FreeMemory(_device, _depthMemory, null);
@@ -545,7 +475,6 @@ public sealed unsafe class VulkanRenderer : IDisposable
         DestroySwapchain();
         CreateSwapchain();
         CreateDepthBuffer();
-        CreateFramebuffers();
         _swapchainDirty = false;
     }
 
@@ -619,21 +548,8 @@ public sealed unsafe class VulkanRenderer : IDisposable
         var beginInfo = new CommandBufferBeginInfo { SType = StructureType.CommandBufferBeginInfo, Flags = CommandBufferUsageFlags.OneTimeSubmitBit };
         GpuDevice.Check(_vk.BeginCommandBuffer(commandBuffer, in beginInfo), "vkBeginCommandBuffer");
 
-        // Clear to black, and the depth buffer to 0 (the far distance, as the
-        // depth is reversed)
-        var clearValues = stackalloc ClearValue[2];
-        clearValues[0] = new ClearValue(new ClearColorValue(0f, 0f, 0f, 1f));
-        clearValues[1] = new ClearValue(depthStencil: new ClearDepthStencilValue(0f, 0));
-        var renderPassInfo = new RenderPassBeginInfo
-        {
-            SType = StructureType.RenderPassBeginInfo,
-            RenderPass = _renderPass,
-            Framebuffer = _framebuffers[imageIndex],
-            RenderArea = new Rect2D(new Offset2D(0, 0), _extent),
-            ClearValueCount = 2,
-            PClearValues = clearValues,
-        };
-        _vk.CmdBeginRenderPass(commandBuffer, in renderPassInfo, SubpassContents.Inline);
+        var image = _images[imageIndex];
+        BeginRendering(commandBuffer, image, _imageViews[imageIndex]);
 
         if (frameData != null)
         {
@@ -641,7 +557,7 @@ public sealed unsafe class VulkanRenderer : IDisposable
             float lineWidth = _wideLines ? Math.Clamp(layout.Scale * 0.75f, 1f, _maxLineWidth) : 1f;
 
             var worldViewport = WorldViewport(layout);
-            if (frameData.World != null)
+            if (frameData.HasWorld)
             {
                 _world.Draw(commandBuffer, _currentFrame, frameData.World, worldViewport, layout.Scale, lineWidth, frameData.Palette);
             }
@@ -659,42 +575,70 @@ public sealed unsafe class VulkanRenderer : IDisposable
             _hud.Draw(commandBuffer, _currentFrame, frameData, layout, lineWidth, wideArea);
         }
 
-        _vk.CmdEndRenderPass(commandBuffer);
+        _vk.CmdEndRendering(commandBuffer);
 
-        // Copy the image into a buffer if we have been asked for a screenshot
+        // Copy the image into a buffer if we have been asked for a screenshot,
+        // and get it ready to present
         string? capturePath = _canCapture ? Interlocked.Exchange(ref _capturePath, null) : null;
         GpuBuffer? captureBuffer = null;
         ulong captureSize = (ulong)_extent.Width * _extent.Height * 4;
         if (capturePath != null)
         {
             captureBuffer = _gpu.CreateHostBuffer(captureSize, BufferUsageFlags.TransferDstBit);
-            TransitionImage(commandBuffer, _images[imageIndex], ImageLayout.PresentSrcKhr, ImageLayout.TransferSrcOptimal);
+            ColourBarrier(
+                commandBuffer, image,
+                ImageLayout.ColorAttachmentOptimal, PipelineStageFlags2.ColorAttachmentOutputBit, AccessFlags2.ColorAttachmentWriteBit,
+                ImageLayout.TransferSrcOptimal, PipelineStageFlags2.CopyBit, AccessFlags2.TransferReadBit);
             var region = new BufferImageCopy
             {
                 ImageSubresource = new ImageSubresourceLayers(ImageAspectFlags.ColorBit, 0, 0, 1),
                 ImageExtent = new Extent3D(_extent.Width, _extent.Height, 1),
             };
-            _vk.CmdCopyImageToBuffer(commandBuffer, _images[imageIndex], ImageLayout.TransferSrcOptimal, captureBuffer.Buffer, 1, in region);
-            TransitionImage(commandBuffer, _images[imageIndex], ImageLayout.TransferSrcOptimal, ImageLayout.PresentSrcKhr);
+            _vk.CmdCopyImageToBuffer(commandBuffer, image, ImageLayout.TransferSrcOptimal, captureBuffer.Buffer, 1, in region);
+            ColourBarrier(
+                commandBuffer, image,
+                ImageLayout.TransferSrcOptimal, PipelineStageFlags2.CopyBit, AccessFlags2.None,
+                ImageLayout.PresentSrcKhr, PipelineStageFlags2.None, AccessFlags2.None);
+        }
+        else
+        {
+            ColourBarrier(
+                commandBuffer, image,
+                ImageLayout.ColorAttachmentOptimal, PipelineStageFlags2.ColorAttachmentOutputBit, AccessFlags2.ColorAttachmentWriteBit,
+                ImageLayout.PresentSrcKhr, PipelineStageFlags2.None, AccessFlags2.None);
         }
 
         GpuDevice.Check(_vk.EndCommandBuffer(commandBuffer), "vkEndCommandBuffer");
 
-        var waitSemaphore = frame.ImageAvailable;
         var signalSemaphore = _renderFinished[imageIndex];
-        var waitStage = PipelineStageFlags.ColorAttachmentOutputBit;
-        var submitInfo = new SubmitInfo
+        var waitInfo = new SemaphoreSubmitInfo
         {
-            SType = StructureType.SubmitInfo,
-            WaitSemaphoreCount = 1,
-            PWaitSemaphores = &waitSemaphore,
-            PWaitDstStageMask = &waitStage,
-            CommandBufferCount = 1,
-            PCommandBuffers = &commandBuffer,
-            SignalSemaphoreCount = 1,
-            PSignalSemaphores = &signalSemaphore,
+            SType = StructureType.SemaphoreSubmitInfo,
+            Semaphore = frame.ImageAvailable,
+            StageMask = PipelineStageFlags2.ColorAttachmentOutputBit,
         };
-        GpuDevice.Check(_vk.QueueSubmit(_queue, 1, in submitInfo, frame.InFlight), "vkQueueSubmit");
+        var signalInfo = new SemaphoreSubmitInfo
+        {
+            SType = StructureType.SemaphoreSubmitInfo,
+            Semaphore = signalSemaphore,
+            StageMask = PipelineStageFlags2.AllCommandsBit,
+        };
+        var commandBufferInfo = new CommandBufferSubmitInfo
+        {
+            SType = StructureType.CommandBufferSubmitInfo,
+            CommandBuffer = commandBuffer,
+        };
+        var submitInfo = new SubmitInfo2
+        {
+            SType = StructureType.SubmitInfo2,
+            WaitSemaphoreInfoCount = 1,
+            PWaitSemaphoreInfos = &waitInfo,
+            CommandBufferInfoCount = 1,
+            PCommandBufferInfos = &commandBufferInfo,
+            SignalSemaphoreInfoCount = 1,
+            PSignalSemaphoreInfos = &signalInfo,
+        };
+        GpuDevice.Check(_vk.QueueSubmit2(_queue, 1, in submitInfo, frame.InFlight), "vkQueueSubmit2");
 
         var swapchain = _swapchain;
         var presentInfo = new PresentInfoKHR
@@ -740,21 +684,104 @@ public sealed unsafe class VulkanRenderer : IDisposable
         PngWriter.Write(path, (int)_extent.Width, (int)_extent.Height, rgb);
     }
 
-    private void TransitionImage(CommandBuffer commandBuffer, Image image, ImageLayout from, ImageLayout to)
+    /// <summary>
+    /// Get the swapchain image and the depth buffer ready to draw into, and
+    /// begin rendering into them, clearing the image to black and the depth
+    /// buffer to 0 (the far distance, as the depth is reversed).
+    /// </summary>
+    private void BeginRendering(CommandBuffer commandBuffer, Image image, ImageView imageView)
     {
-        var barrier = new ImageMemoryBarrier
+        // The image's old contents are discarded; the wait for the image to be
+        // acquired is at the colour output stage, so the transition is too
+        ColourBarrier(
+            commandBuffer, image,
+            ImageLayout.Undefined, PipelineStageFlags2.ColorAttachmentOutputBit, AccessFlags2.None,
+            ImageLayout.ColorAttachmentOptimal, PipelineStageFlags2.ColorAttachmentOutputBit, AccessFlags2.ColorAttachmentWriteBit);
+
+        // The depth buffer is shared by the frames in flight, so wait for the
+        // previous frame's depth tests before clearing it
+        var depthStages = PipelineStageFlags2.EarlyFragmentTestsBit | PipelineStageFlags2.LateFragmentTestsBit;
+        Barrier(commandBuffer, new ImageMemoryBarrier2
         {
-            SType = StructureType.ImageMemoryBarrier,
+            SType = StructureType.ImageMemoryBarrier2,
+            SrcStageMask = depthStages,
+            SrcAccessMask = AccessFlags2.DepthStencilAttachmentWriteBit,
+            DstStageMask = depthStages,
+            DstAccessMask = AccessFlags2.DepthStencilAttachmentReadBit | AccessFlags2.DepthStencilAttachmentWriteBit,
+            OldLayout = ImageLayout.Undefined,
+            NewLayout = ImageLayout.DepthAttachmentOptimal,
+            SrcQueueFamilyIndex = Vk.QueueFamilyIgnored,
+            DstQueueFamilyIndex = Vk.QueueFamilyIgnored,
+            Image = _depthImage,
+            SubresourceRange = new ImageSubresourceRange(ImageAspectFlags.DepthBit, 0, 1, 0, 1),
+        });
+
+        var colourAttachment = new RenderingAttachmentInfo
+        {
+            SType = StructureType.RenderingAttachmentInfo,
+            ImageView = imageView,
+            ImageLayout = ImageLayout.ColorAttachmentOptimal,
+            LoadOp = AttachmentLoadOp.Clear,
+            StoreOp = AttachmentStoreOp.Store,
+            ClearValue = new ClearValue(new ClearColorValue(0f, 0f, 0f, 1f)),
+        };
+        var depthAttachment = new RenderingAttachmentInfo
+        {
+            SType = StructureType.RenderingAttachmentInfo,
+            ImageView = _depthView,
+            ImageLayout = ImageLayout.DepthAttachmentOptimal,
+            LoadOp = AttachmentLoadOp.Clear,
+            StoreOp = AttachmentStoreOp.DontCare,
+            ClearValue = new ClearValue(depthStencil: new ClearDepthStencilValue(0f, 0)),
+        };
+        var renderingInfo = new RenderingInfo
+        {
+            SType = StructureType.RenderingInfo,
+            RenderArea = new Rect2D(new Offset2D(0, 0), _extent),
+            LayerCount = 1,
+            ColorAttachmentCount = 1,
+            PColorAttachments = &colourAttachment,
+            PDepthAttachment = &depthAttachment,
+        };
+        _vk.CmdBeginRendering(commandBuffer, in renderingInfo);
+    }
+
+    /// <summary>Move a swapchain image from one layout to another, between the given stages.</summary>
+    private void ColourBarrier(
+        CommandBuffer commandBuffer,
+        Image image,
+        ImageLayout from,
+        PipelineStageFlags2 srcStage,
+        AccessFlags2 srcAccess,
+        ImageLayout to,
+        PipelineStageFlags2 dstStage,
+        AccessFlags2 dstAccess)
+    {
+        Barrier(commandBuffer, new ImageMemoryBarrier2
+        {
+            SType = StructureType.ImageMemoryBarrier2,
+            SrcStageMask = srcStage,
+            SrcAccessMask = srcAccess,
+            DstStageMask = dstStage,
+            DstAccessMask = dstAccess,
             OldLayout = from,
             NewLayout = to,
             SrcQueueFamilyIndex = Vk.QueueFamilyIgnored,
             DstQueueFamilyIndex = Vk.QueueFamilyIgnored,
             Image = image,
             SubresourceRange = new ImageSubresourceRange(ImageAspectFlags.ColorBit, 0, 1, 0, 1),
-            SrcAccessMask = from == ImageLayout.TransferSrcOptimal ? AccessFlags.TransferReadBit : AccessFlags.ColorAttachmentWriteBit,
-            DstAccessMask = to == ImageLayout.TransferSrcOptimal ? AccessFlags.TransferReadBit : 0,
+        });
+    }
+
+    private void Barrier(CommandBuffer commandBuffer, ImageMemoryBarrier2 barrier)
+    {
+        var dependency = new DependencyInfo
+        {
+            SType = StructureType.DependencyInfo,
+            ImageMemoryBarrierCount = 1,
+            PImageMemoryBarriers = &barrier,
         };
-        _vk.CmdPipelineBarrier(commandBuffer, PipelineStageFlags.AllCommandsBit, PipelineStageFlags.AllCommandsBit, 0, 0, null, 0, null, 1, in barrier);
+        _vk.CmdPipelineBarrier2(commandBuffer, in dependency);
     }
 
     public void Dispose()
@@ -775,7 +802,6 @@ public sealed unsafe class VulkanRenderer : IDisposable
         _world.Dispose();
         _hud.Dispose();
         DestroySwapchain();
-        _vk.DestroyRenderPass(_device, _renderPass, null);
         _vk.DestroyCommandPool(_device, _commandPool, null);
         _vk.DestroyDevice(_device, null);
         _khrSurface.DestroySurface(_instance, _surface, null);

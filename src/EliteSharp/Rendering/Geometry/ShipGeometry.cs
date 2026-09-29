@@ -1,5 +1,4 @@
 using System.Numerics;
-using EliteSharp.Game.Ships;
 
 namespace EliteSharp.Rendering.Geometry;
 
@@ -9,27 +8,25 @@ namespace EliteSharp.Rendering.Geometry;
 /// ship's own far side), and the edges that are drawn as its wireframe.
 /// </summary>
 /// <param name="Points">The points that the surface and edges index into.</param>
-/// <param name="Surface">The triangles of the surface.</param>
+/// <param name="Surface">The triangles of the surface, wound anticlockwise when seen from outside.</param>
 /// <param name="Edges">The wireframe's edges, as pairs of indices into the points.</param>
 public sealed record ShipLevel(IReadOnlyList<Vector3> Points, IReadOnlyList<Triangle> Surface, IReadOnlyList<(int A, int B)> Edges);
 
 /// <summary>
 /// The 3D geometry of a ship model at each level of detail, from the full
 /// model for ships that are close by, down to a simple solid for ships that
-/// are far away.
+/// are far away. The levels are:
 ///
-/// Elite's ships are all convex, or very nearly (the missile's fins and a few
-/// other parts stick out by a few units at most), so the surface of each
-/// level is the convex hull of its points. The levels are:
-///
-/// 0. The full model: every edge, including the surface details (such as
-///    vents and windows).
-/// 1. The model's structural edges, leaving out the details that are drawn
-///    on a flat part of the surface.
-/// 2. A simplified solid: the hull of half of the hull's corners, chosen to
-///    keep as much of the ship's volume as possible, with an edge wherever
-///    its surface bends.
+/// 0. The full model: its surface, and all its lines, including the details
+///    drawn on its faces (such as vents and windows).
+/// 1. The model's surface and structure, without the details.
+/// 2. A simplified solid: the convex hull of half of the model's corners,
+///    chosen to keep as much of the ship's volume as possible, with an edge
+///    wherever its surface bends.
 /// 3. A minimal solid, made the same way from six corners.
+///
+/// Levels 2 and 3 are only used when the ship is a few pixels across, where
+/// its outline is all that can be seen.
 /// </summary>
 public sealed class ShipGeometry
 {
@@ -42,21 +39,6 @@ public sealed class ShipGeometry
     /// faces that are meant to be flat slightly bent.
     /// </summary>
     private const float FlatAngle = 4;
-
-    /// <summary>How close a point must be to a face of the hull to be on it.</summary>
-    private const float OnSurface = 0.5f;
-
-    /// <summary>
-    /// How far inside the hull a point can be and still be moved out onto its
-    /// surface (see <see cref="SnapToSurface"/>).
-    /// </summary>
-    private const float SnapDepth = 8;
-
-    /// <summary>
-    /// The number of pieces that an edge is split into when it dips inside the
-    /// hull (see <see cref="FollowSurface"/>).
-    /// </summary>
-    private const int EdgePieces = 8;
 
     /// <summary>The number of hull corners in the minimal solid (level 3).</summary>
     private const int MinimalCorners = 6;
@@ -77,126 +59,19 @@ public sealed class ShipGeometry
     public float Radius { get; }
 
     /// <summary>Build the levels of detail for a model.</summary>
-    public static ShipGeometry Build(ShipModel model)
+    public static ShipGeometry Build(ShipMeshAsset asset)
     {
-        var points = model.Vertices.Select(v => new Vector3(v.X, v.Y, v.Z)).ToList();
-        var edges = model.Edges.Select(e => (e.Vertex1, e.Vertex2)).Where(e => e.Vertex1 != e.Vertex2).ToList();
-        var hull = ConvexHull.Build(points);
+        var points = asset.Points;
         float radius = points.Count == 0 ? 0 : points.Max(p => p.Length());
 
-        // The full model and its structural edges are drawn from the vertices
-        // moved onto the hull's surface, so the surface hides only what is
-        // really behind it
-        var planes = hull.Triangles.Select(t => new Plane(hull.Normal(t), -Vector3.Dot(hull.Normal(t), hull.Points[t.A]))).ToList();
-        var surfacePoints = points.Select(p => SnapToSurface(planes, p)).ToList();
         var levels = new ShipLevel[LevelCount];
-        levels[0] = FollowSurface(planes, surfacePoints, hull.Triangles, edges);
+        levels[0] = new ShipLevel(points, asset.Surface, [.. asset.Structure, .. asset.Details]);
+        levels[1] = new ShipLevel(points, asset.Surface, asset.Structure);
 
-        // A flat model (such as a plate of alloy) has no bends, so it keeps all its edges
-        var structural = edges.Where(e => IsStructural(hull, points[e.Vertex1], points[e.Vertex2])).ToList();
-        levels[1] = FollowSurface(planes, surfacePoints, hull.Triangles, structural.Count > 0 ? structural : edges);
-
-        var corners = hull.Corners.ToList();
+        var corners = ConvexHull.Build(points).Corners.ToList();
         levels[2] = Simplify(points, corners, Math.Max(SimplifiedCorners, (corners.Count + 1) / 2)) ?? levels[1];
         levels[3] = Simplify(points, corners, MinimalCorners) ?? levels[2];
         return new ShipGeometry(levels, radius);
-    }
-
-    /// <summary>
-    /// A point, moved out onto the hull's surface if it is a little inside it.
-    /// The surface details (vents, windows and so on) are drawn on the ships'
-    /// faces, but the models' whole-number coordinates put some of them a few
-    /// units inside the hull (and the parts that aren't quite convex, such as
-    /// the missile's body inside its fins, are inside it too). Moving them onto
-    /// the surface keeps them in front of it, so the surface only has to be
-    /// pushed back a little to keep the lines on it visible, and hidden edges
-    /// don't show through near the corners.
-    /// </summary>
-    private static Vector3 SnapToSurface(List<Plane> planes, Vector3 point)
-    {
-        // The nearest face is the one whose plane the point is least far behind
-        var nearest = planes[0];
-        float nearestDistance = float.NegativeInfinity;
-        foreach (var plane in planes)
-        {
-            float distance = Plane.DotCoordinate(plane, point);
-            if (distance > nearestDistance)
-            {
-                (nearest, nearestDistance) = (plane, distance);
-            }
-        }
-
-        bool inside = nearestDistance < 0 && nearestDistance >= -SnapDepth;
-        return inside ? point - nearest.Normal * nearestDistance : point;
-    }
-
-    /// <summary>
-    /// A level of detail whose edges follow the hull's surface. Some of the
-    /// models' faces aren't quite flat, so an edge between two corners can dip
-    /// inside the hull in the middle, where the surface would hide it; these
-    /// edges are split into pieces whose ends are moved onto the surface.
-    /// </summary>
-    private static ShipLevel FollowSurface(List<Plane> planes, List<Vector3> points, IReadOnlyList<Triangle> surface, List<(int A, int B)> edges)
-    {
-        if (planes.Count == 0)
-        {
-            return new ShipLevel(points, surface, edges);
-        }
-
-        var allPoints = new List<Vector3>(points);
-        var allEdges = new List<(int A, int B)>();
-        foreach (var (a, b) in edges)
-        {
-            bool dips = false;
-            for (int i = 1; i < EdgePieces && !dips; i++)
-            {
-                var point = Vector3.Lerp(points[a], points[b], i / (float)EdgePieces);
-                dips = planes.Max(p => Plane.DotCoordinate(p, point)) < -OnSurface;
-            }
-
-            if (!dips)
-            {
-                allEdges.Add((a, b));
-                continue;
-            }
-
-            int previous = a;
-            for (int i = 1; i < EdgePieces; i++)
-            {
-                allPoints.Add(SnapToSurface(planes, Vector3.Lerp(points[a], points[b], i / (float)EdgePieces)));
-                allEdges.Add((previous, allPoints.Count - 1));
-                previous = allPoints.Count - 1;
-            }
-
-            allEdges.Add((previous, b));
-        }
-
-        return new ShipLevel(allPoints, surface, allEdges);
-    }
-
-    /// <summary>
-    /// Whether an edge of the model is part of its structure, rather than a
-    /// detail drawn on a flat part of its surface. Edges on a bend in the
-    /// hull's surface (whose midpoint is on two faces of the hull that aren't
-    /// in the same plane) are structural, as are edges that aren't on the
-    /// hull's surface at all (which belong to the parts that aren't quite
-    /// convex, such as the missile's body inside its fins).
-    /// </summary>
-    private static bool IsStructural(ConvexHull hull, Vector3 a, Vector3 b)
-    {
-        var middle = (a + b) / 2;
-        var normals = new List<Vector3>();
-        foreach (var triangle in hull.Triangles)
-        {
-            var normal = hull.Normal(triangle);
-            if (MathF.Abs(Vector3.Dot(normal, middle - hull.Points[triangle.A])) <= OnSurface)
-            {
-                normals.Add(normal);
-            }
-        }
-
-        float flat = MathF.Cos(FlatAngle * MathF.PI / 180);
-        return normals.Count == 0 || normals.Any(n => normals.Any(m => Vector3.Dot(n, m) < flat));
     }
 
     /// <summary>
@@ -219,7 +94,7 @@ public sealed class ShipGeometry
             double bestVolume = double.NegativeInfinity;
             for (int i = 0; i < kept.Count; i++)
             {
-                double volume = ConvexHull.Build(kept.Where((_, j) => j != i).Select(k => points[k]).ToList()).Volume;
+                double volume = ConvexHull.Build([.. kept.Where((_, j) => j != i).Select(k => points[k])]).Volume;
                 if (volume > bestVolume)
                 {
                     bestVolume = volume;
@@ -255,9 +130,8 @@ public sealed class ShipGeometry
         }
 
         float flat = MathF.Cos(FlatAngle * MathF.PI / 180);
-        return faces
+        return [.. faces
             .Where(f => f.Value.Count != 2 || Vector3.Dot(hull.Normal(f.Value[0]), hull.Normal(f.Value[1])) < flat)
-            .Select(f => f.Key)
-            .ToList();
+            .Select(f => f.Key)];
     }
 }

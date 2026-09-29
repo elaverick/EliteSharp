@@ -923,11 +923,11 @@ public sealed partial class EliteGame
         }
 
         BeginWorldDrawing(_view);
-        var beams = new List<LineSegment>();
+        Span<LineSegment> beams = stackalloc LineSegment[4];
         _laserEndY -= 2;
-        DrawLaserLines(beams, 32, 224);
+        DrawLaserLines(beams[..2], 32, 224);
         _laserEndY += 2;
-        DrawLaserLines(beams, 48, 208);
+        DrawLaserLines(beams[2..], 48, 208);
         _world.SetLines(_laserOwner, beams);
     }
 
@@ -936,13 +936,11 @@ public sealed partial class EliteGame
     /// view to (LASX, LASY). In the 3D world, the beams start just in front of
     /// us at those corners, and reach into the distance towards (LASX, LASY).
     /// </summary>
-    private void DrawLaserLines(List<LineSegment> beams, int left, int right)
+    private void DrawLaserLines(Span<LineSegment> beams, int left, int right)
     {
         var target = ScreenPointToWorld(_laserEndX, _laserEndY, LaserRange);
-        foreach (int corner in (ReadOnlySpan<int>)[left, right])
-        {
-            beams.Add(new LineSegment(ScreenPointToWorld(corner, 2 * CentreY - 1, ScreenEdgeDistance), target, Red));
-        }
+        beams[0] = new LineSegment(ScreenPointToWorld(left, 2 * CentreY - 1, ScreenEdgeDistance), target, Red);
+        beams[1] = new LineSegment(ScreenPointToWorld(right, 2 * CentreY - 1, ScreenEdgeDistance), target, Red);
     }
 
     // ------------------------------------------------------------------------

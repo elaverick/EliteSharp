@@ -269,7 +269,7 @@ public sealed partial class EliteGame
         }
 
         BeginWorldDrawing(_view);
-        var particles = new List<Particle>();
+        Span<Particle> particles = stackalloc Particle[_stardustCount];
         for (int particle = _stardustCount; particle > 0; particle--)
         {
             // The stardust's coordinates are its position on the screen (in
@@ -279,7 +279,7 @@ public sealed partial class EliteGame
             int screenY = EliteMaths.FromSignMagnitude(_dustY[particle]);
             float distance = Math.Max(_dustZ[particle], 4);
             var position = ViewToWorld(screenX * distance / 256, screenY * distance / 256, distance);
-            particles.Add(new Particle(position, 2, _dustZ[particle] >= 80 ? 1 : 2, DustColour, Stardust: true));
+            particles[particle - 1] = new Particle(position, 2, _dustZ[particle] >= 80 ? 1 : 2, DustColour, Stardust: true);
         }
 
         _world.SetParticles(_dustOwner, particles);

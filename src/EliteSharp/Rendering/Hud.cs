@@ -119,8 +119,8 @@ public sealed class Hud
     /// <summary>Called when building each frame, to add the dashboard.</summary>
     public Action<HudBuilder>? DashboardRenderer { get; set; }
 
-    /// <summary>Called when building each frame, to take a snapshot of the 3D world.</summary>
-    public Func<SceneFrame>? WorldSnapshot { get; set; }
+    /// <summary>Called when building each frame, to copy the 3D world into it.</summary>
+    public Action<SceneFrame>? CopyWorld { get; set; }
 
     /// <summary>Clear the space view: all its text, lines and rectangles, and the border.</summary>
     public void ClearSpaceView()
@@ -259,8 +259,10 @@ public sealed class Hud
     /// <summary>Build the current frame and hand it to the renderer.</summary>
     public void Present()
     {
+        var frame = _exchange.Writing;
+        frame.Clear();
         var builder = _builder;
-        builder.Clear();
+        builder.Begin(frame);
 
         foreach (var rect in _rects)
         {
@@ -300,6 +302,14 @@ public sealed class Hud
             DashboardRenderer?.Invoke(builder);
         }
 
-        _exchange.Publish(builder.Build(WorldSnapshot?.Invoke(), new Palette(HyperspaceColours ? SpacePalette.Hyperspace : Palette, EscapePodFitted), DashboardVisible));
+        if (CopyWorld != null)
+        {
+            CopyWorld(frame.World);
+            frame.HasWorld = true;
+        }
+
+        frame.Palette = new Palette(HyperspaceColours ? SpacePalette.Hyperspace : Palette, EscapePodFitted);
+        frame.DashboardVisible = DashboardVisible;
+        _exchange.Publish();
     }
 }

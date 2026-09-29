@@ -60,23 +60,20 @@ internal static class WorldShaders
         """;
 
     /// <summary>
-    /// The vertex shader for solid surfaces (the ships' hulls and the planet's
-    /// sphere), which are drawn into the depth buffer so they hide whatever is
-    /// behind them. Each vertex is pushed back along the line of sight from the
-    /// camera (which is at the origin of world space) by parameters.x, which
-    /// moves the surface away from the camera by that distance without
-    /// changing its outline, so the lines drawn on the surface (and details
-    /// drawn just inside it) pass the depth test.
+    /// The vertex shader for the depth pre-pass, which draws the solid
+    /// surfaces (the ships' hulls and the planet's sphere) into the depth
+    /// buffer only, so they hide whatever is behind them. Each vertex is pushed
+    /// back along the line of sight from the camera (which is at the origin of
+    /// world space) by parameters.x, which moves the surface away from the
+    /// camera by that distance without changing its outline, so the lines
+    /// drawn on the surface pass the depth test.
     /// </summary>
-    public static readonly string SurfaceVertex = Common + """
+    public static readonly string DepthVertex = Common + """
 
         layout(location = 0) in vec3 inPosition;
 
-        layout(location = 0) flat out uint outInk;
-
         void main()
         {
-            outInk = draw.inks.x;
             vec3 world = (draw.model * vec4(inPosition, 1.0)).xyz;
             float distance = length(world);
             if (distance > 0.0)

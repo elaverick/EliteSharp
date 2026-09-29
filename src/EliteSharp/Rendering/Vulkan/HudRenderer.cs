@@ -64,7 +64,7 @@ public sealed unsafe class HudRenderer : IDisposable
     private readonly Pipeline _linePipeline;
     private readonly FrameResources[] _frames;
 
-    public HudRenderer(GpuDevice gpu, RenderPass renderPass, int framesInFlight)
+    public HudRenderer(GpuDevice gpu, RenderTargetFormats targets, int framesInFlight)
     {
         _gpu = gpu;
         var vk = gpu.Vk;
@@ -123,7 +123,7 @@ public sealed unsafe class HudRenderer : IDisposable
         var lineVertex = gpu.CreateShaderModule(ShaderCompiler.Compile(HudShaders.LineVertex, ShaderKind.VertexShader, "hud-line.vert"));
         var fragment = gpu.CreateShaderModule(ShaderCompiler.Compile(HudShaders.Fragment, ShaderKind.FragmentShader, "hud.frag"));
 
-        _quadPipeline = PipelineFactory.Create(gpu, renderPass, new PipelineDescription
+        _quadPipeline = PipelineFactory.Create(gpu, targets, new PipelineDescription
         {
             VertexShader = quadVertex,
             FragmentShader = fragment,
@@ -139,7 +139,7 @@ public sealed unsafe class HudRenderer : IDisposable
             Depth = DepthMode.None,
         });
 
-        _linePipeline = PipelineFactory.Create(gpu, renderPass, new PipelineDescription
+        _linePipeline = PipelineFactory.Create(gpu, targets, new PipelineDescription
         {
             VertexShader = lineVertex,
             FragmentShader = fragment,
@@ -215,14 +215,19 @@ public sealed unsafe class HudRenderer : IDisposable
 
         // Upload this frame's inks and instances
         frame.Palette.Patterns.CopyTo(new Span<uint>(resources.Inks.Mapped, Inks.Count * Palette.PatternLength));
-        if (frame.Quads.Length > 0)
+        int spaceQuads = frame.SpaceQuads.Count, spaceLines = frame.SpaceLines.Count;
+        if (spaceQuads + frame.DashboardQuads.Count > 0)
         {
-            resources.Quads.Write<HudQuad>(frame.Quads);
+            var quads = resources.Quads.Map<HudQuad>(spaceQuads + frame.DashboardQuads.Count);
+            CollectionsMarshal.AsSpan(frame.SpaceQuads).CopyTo(quads);
+            CollectionsMarshal.AsSpan(frame.DashboardQuads).CopyTo(quads[spaceQuads..]);
         }
 
-        if (frame.Lines.Length > 0)
+        if (spaceLines + frame.WideLines.Count > 0)
         {
-            resources.Lines.Write<HudLine>(frame.Lines);
+            var lines = resources.Lines.Map<HudLine>(spaceLines + frame.WideLines.Count);
+            CollectionsMarshal.AsSpan(frame.SpaceLines).CopyTo(lines);
+            CollectionsMarshal.AsSpan(frame.WideLines).CopyTo(lines[spaceLines..]);
         }
 
         var descriptorSet = resources.DescriptorSet;
@@ -241,19 +246,19 @@ public sealed unsafe class HudRenderer : IDisposable
 
         // The space view, clipped to its rows
         SetArea(commandBuffer, area, SpaceView(area, layout), constants);
-        DrawQuads(commandBuffer, resources, 0, frame.SpaceQuadCount);
-        DrawLines(commandBuffer, resources, 0, frame.SpaceLineCount);
+        DrawQuads(commandBuffer, resources, 0, spaceQuads);
+        DrawLines(commandBuffer, resources, 0, spaceLines);
 
         // The wide lines, stretched across the widened space view
         var wide = wideArea ?? area;
         SetArea(commandBuffer, wide, SpaceView(wide, layout), constants);
-        DrawLines(commandBuffer, resources, frame.SpaceLineCount, frame.WideLineCount);
+        DrawLines(commandBuffer, resources, spaceLines, frame.WideLines.Count);
 
         // The dashboard
         if (frame.DashboardVisible)
         {
             SetArea(commandBuffer, area, area, constants);
-            DrawQuads(commandBuffer, resources, frame.SpaceQuadCount, frame.DashboardQuadCount);
+            DrawQuads(commandBuffer, resources, spaceQuads, frame.DashboardQuads.Count);
         }
     }
 

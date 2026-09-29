@@ -3,7 +3,7 @@
     "version": "2.0",
     "generator": "EliteSharp tools/export_ships.py",
     "extras": {
-      "description": "Elite ship wireframe. Coordinates are in the original's left-handed space (x right, y up, z forward); the node mirrors x to convert to glTF's right-handed space."
+      "description": "Elite ship model. Coordinates are in the original's left-handed space (x right, y up, z forward); the node mirrors x to convert to glTF's right-handed space."
     }
   },
   "scene": 0,
@@ -24,99 +24,71 @@
       "name": "Shuttle",
       "primitives": [
         {
+          "mode": 4,
+          "attributes": {
+            "POSITION": 0
+          },
+          "indices": 1,
+          "extras": {
+            "role": "surface"
+          }
+        },
+        {
           "mode": 1,
           "attributes": {
-            "POSITION": 0,
-            "_FACES": 1,
-            "_VISIBILITY": 2
+            "POSITION": 0
           },
-          "indices": 3
+          "indices": 2,
+          "extras": {
+            "role": "structure"
+          }
+        },
+        {
+          "mode": 1,
+          "attributes": {
+            "POSITION": 0
+          },
+          "indices": 3,
+          "extras": {
+            "role": "details"
+          }
         }
       ],
       "extras": {
         "elite": {
-          "normalScale": 2,
           "dotDistance": 22,
-          "maxVisibleEdges": 28,
           "gunVertex": 0,
-          "explosionVertices": 8,
-          "edges": [
-            {"faces": [2, 0], "visibility": 31},
-            {"faces": [10, 4], "visibility": 31},
-            {"faces": [11, 6], "visibility": 31},
-            {"faces": [12, 8], "visibility": 31},
-            {"faces": [8, 1], "visibility": 31},
-            {"faces": [2, 1], "visibility": 24},
-            {"faces": [3, 2], "visibility": 31},
-            {"faces": [4, 3], "visibility": 24},
-            {"faces": [5, 4], "visibility": 31},
-            {"faces": [6, 5], "visibility": 12},
-            {"faces": [7, 6], "visibility": 31},
-            {"faces": [8, 7], "visibility": 24},
-            {"faces": [9, 3], "visibility": 31},
-            {"faces": [9, 5], "visibility": 31},
-            {"faces": [9, 7], "visibility": 31},
-            {"faces": [9, 1], "visibility": 31},
-            {"faces": [12, 0], "visibility": 16},
-            {"faces": [10, 0], "visibility": 16},
-            {"faces": [11, 10], "visibility": 16},
-            {"faces": [12, 11], "visibility": 16},
-            {"faces": [9, 9], "visibility": 16},
-            {"faces": [9, 9], "visibility": 7},
-            {"faces": [9, 9], "visibility": 9},
-            {"faces": [9, 9], "visibility": 7},
-            {"faces": [11, 11], "visibility": 5},
-            {"faces": [11, 11], "visibility": 8},
-            {"faces": [11, 11], "visibility": 7},
-            {"faces": [10, 10], "visibility": 5},
-            {"faces": [10, 10], "visibility": 8},
-            {"faces": [10, 10], "visibility": 7}
-          ],
-          "faces": [
-            {"normal": [-55, -55, 40], "visibility": 31},
-            {"normal": [0, -74, 4], "visibility": 31},
-            {"normal": [-51, -51, 23], "visibility": 31},
-            {"normal": [-74, 0, 4], "visibility": 31},
-            {"normal": [-51, 51, 23], "visibility": 31},
-            {"normal": [0, 74, 4], "visibility": 31},
-            {"normal": [51, 51, 23], "visibility": 31},
-            {"normal": [74, 0, 4], "visibility": 31},
-            {"normal": [51, -51, 23], "visibility": 31},
-            {"normal": [0, 0, -107], "visibility": 31},
-            {"normal": [-41, 41, 90], "visibility": 31},
-            {"normal": [41, 41, 90], "visibility": 31},
-            {"normal": [55, -55, 40], "visibility": 31}
-          ]
+          "explosionVertices": 8
         }
       }
     }
   ],
   "accessors": [
     {
-      "bufferView": 0,
       "componentType": 5126,
       "count": 19,
       "type": "VEC3",
-      "min": [-20, -20, -27],
-      "max": [20, 20, 35]
+      "min": [-20.0, -20.0, -27.0],
+      "max": [20.0, 20.0, 35.0],
+      "bufferView": 0
     },
     {
-      "bufferView": 1,
-      "componentType": 5121,
-      "count": 19,
-      "type": "VEC4"
-    },
-    {
-      "bufferView": 2,
-      "componentType": 5126,
-      "count": 19,
-      "type": "SCALAR"
-    },
-    {
-      "bufferView": 3,
       "componentType": 5123,
-      "count": 60,
-      "type": "SCALAR"
+      "count": 42,
+      "type": "SCALAR",
+      "bufferView": 1
+    },
+    {
+      "componentType": 5123,
+      "count": 40,
+      "type": "SCALAR",
+      "bufferView": 2
+    },
+    {
+      "componentType": 5123,
+      "count": 20,
+      "type": "SCALAR",
+      "bufferView": 3
     }
   ],
   "bufferViews": [
@@ -129,26 +101,26 @@
     {
       "buffer": 0,
       "byteOffset": 228,
-      "byteLength": 76,
-      "target": 34962
+      "byteLength": 84,
+      "target": 34963
     },
     {
       "buffer": 0,
-      "byteOffset": 304,
-      "byteLength": 76,
-      "target": 34962
+      "byteOffset": 312,
+      "byteLength": 80,
+      "target": 34963
     },
     {
       "buffer": 0,
-      "byteOffset": 380,
-      "byteLength": 120,
+      "byteOffset": 392,
+      "byteLength": 40,
       "target": 34963
     }
   ],
   "buffers": [
     {
-      "byteLength": 500,
-      "uri": "data:application/octet-stream;base64,AAAAAAAAiMEAALhBAACIwQAAAAAAALhBAAAAAAAAkEEAALhBAACQQQAAAAAAALhBAACgwQAAoMEAANjBAACgwQAAoEEAANjBAACgQQAAoEEAANjBAACgQQAAoMEAANjBAACgQAAAAAAAANjBAAAAAAAAAMAAANjBAACgwAAAAAAAANjBAAAAAAAAQEAAANjBAAAAAAAAEMEAAAxCAABAQAAAgL8AAPhBAACAQAAAMEEAAMhBAAAwQQAAgEAAAMhBAABAwAAAgL8AAPhBAABAwAAAMEEAAMhBAAAgwQAAgEAAAMhBDw8PDw8PDw8PDw8PDw8PDwIBCQMEAwkFBgUJBwcBCQgJCQkJCQkJCQkJCQkJCQkJCgAMCw8PAgABAAQPAQoPAwsGAwIIDwAMDwQIAQAA+EEAAPhBAAD4QQAA+EEAAPhBAAD4QQAA+EEAAPhBAACAQQAAgEEAABBBAAAQQQAAgEEAAOBAAAAAQQAAAEEAAOBAAAAAQQAAAEEAAAEAAQACAAIAAwAAAAMAAAAHAAAABAABAAQAAQAFAAIABQACAAYAAwAGAAMABwAEAAUABQAGAAYABwAEAAcAAAAMAAEADAACAAwAAwAMAAgACQAJAAoACgALAAgACwANAA4ADgAPAA0ADwAQABEAEQASABAAEgA="
+      "byteLength": 432,
+      "uri": "data:application/octet-stream;base64,AAAAAAAAiMEAALhBAACIwQAAAAAAALhBAAAAAAAAkEEAALhBAACQQQAAAAAAALhBAACgwQAAoMEAANjBAACgwQAAoEEAANjBAACgQQAAoEEAANjBAACgQQAAoMEAANjBAACgQAAAAAAAANjBAAAAAAAAAMAAANjBAACgwAAAAAAAANjBAAAAAAAAQEAAANjBAAAAAAAAEMEAAAxCSOAtQG8/pL8U5/JBNmhyQA6aLEFPLcRBDposQTZockBPLcRBBXgrwPfHpr/hi/JBYp45wEl+LkESTsZBAW8dwQJOdkDxRcVBAAAMAAEAAAAEAAcABAAAAAEABAABAAUABQABAAIAAgAGAAUABgACAAMABgADAAcAAwAAAAcABQAHAAQABwAFAAYAAgABAAwAAgAMAAMAAAADAAwAAAABAAEAAgACAAMAAAADAAAABwAAAAQAAQAEAAEABQACAAUAAgAGAAMABgADAAcABAAFAAUABgAGAAcABAAHAAAADAABAAwAAgAMAAMADAAIAAkACQAKAAoACwAIAAsADQAOAA4ADwANAA8AEAARABEAEgAQABIA"
     }
   ]
 }

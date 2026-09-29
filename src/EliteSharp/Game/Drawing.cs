@@ -1,3 +1,4 @@
+using System.Runtime.InteropServices;
 using System.Numerics;
 using EliteSharp.Data;
 using EliteSharp.Game.Ships;
@@ -7,41 +8,17 @@ using EliteSharp.Rendering.Scene;
 namespace EliteSharp.Game;
 
 /// <summary>
-/// Drawing ships, explosions, planets and the sun. The calculations that the
-/// rest of the game depends on (projecting ships onto the screen, which faces
-/// are visible, the explosion clouds and the sun's random fringe) are exact
-/// ports of the original, but rather than plotting pixels, each object is
-/// described to the 3D world (see WorldScene.cs), which the GPU draws.
+/// Drawing ships, explosions, planets and the sun. Each object is described to
+/// the 3D world (see WorldScene.cs) as what it is and where it is, and the
+/// renderer decides how to draw it and what can be seen. The original's
+/// drawing routines also make decisions that the rest of the game depends on
+/// (whether a ship is in the original's field of view, which decides whether
+/// its explosion cloud is drawn, and the explosion clouds and the sun's
+/// fringe, which take random numbers), and those parts are exact ports of the
+/// original.
 /// </summary>
 public sealed partial class EliteGame
 {
-    /// <summary>XX3: the screen x-coordinate of each vertex (a 16-bit two's complement word).</summary>
-    private readonly int[] _projectedX = new int[64];
-
-    /// <summary>XX3: the screen y-coordinate of each vertex (a 16-bit two's complement word).</summary>
-    private readonly int[] _projectedY = new int[64];
-
-    /// <summary>The x-coordinate of each vertex, relative to our ship, as calculated in LL9.</summary>
-    private readonly int[] VertexX = new int[64];
-
-    /// <summary>The y-coordinate of each vertex, relative to our ship, as calculated in LL9.</summary>
-    private readonly int[] VertexY = new int[64];
-
-    /// <summary>The z-coordinate of each vertex, relative to our ship, as calculated in LL9.</summary>
-    private readonly int[] VertexZ = new int[64];
-
-    /// <summary>
-    /// XX2: the visibility of each face, which is zero if the face is hidden
-    /// (this shares memory with K3 in the original).
-    /// </summary>
-    private int[] FaceVisibility => _faceVisibility;
-
-    /// <summary>The storage for <see cref="FaceVisibility"/>.</summary>
-    private readonly int[] _faceVisibility = new int[16];
-
-    /// <summary>XX4: the distance of the ship, used for level of detail.</summary>
-    private int _shipDistance;
-
     /// <summary>COL: the current colour.</summary>
     private Ink _colour;
 
@@ -49,60 +26,14 @@ public sealed partial class EliteGame
     // LL9: drawing ships
     // ------------------------------------------------------------------------
 
-    /// <summary>A sign-magnitude byte pair used by the original's 8-bit vector maths.</summary>
-    private struct SignMagnitudeByte(int magnitude, bool negative)
-    {
-        /// <summary>The magnitude (0-255).</summary>
-        public int Magnitude = magnitude & 0xFF;
-
-        /// <summary>True if the value is negative (bit 7 of the sign byte).</summary>
-        public bool Negative = negative;
-    }
-
     /// <summary>
-    /// LL38: (S A) = (S R) + (A Q), adding two sign-magnitude bytes, returning
-    /// the overflow in the C flag.
+    /// LL9: draw the ship in INWK. The ship goes into the 3D world as its model
+    /// and its position and orientation, and the renderer works out what can be
+    /// seen of it. The game still tracks what the original's drawing decides
+    /// about the ship (whether it is in the original's field of view, and so
+    /// drawn, and whether its laser has been drawn), as these decide whether an
+    /// explosion's cloud is drawn, which takes random numbers.
     /// </summary>
-    private static SignMagnitudeByte AddSignMagnitudeBytes(SignMagnitudeByte first, SignMagnitudeByte second, out bool overflow)
-    {
-        overflow = false;
-        if (first.Negative == second.Negative)
-        {
-            int sum = first.Magnitude + second.Magnitude;
-            overflow = sum > 0xFF;
-            return new SignMagnitudeByte(sum, first.Negative);
-        }
-
-        int difference = first.Magnitude - second.Magnitude;
-        if (difference >= 0)
-        {
-            return new SignMagnitudeByte(difference, first.Negative);
-        }
-
-        return new SignMagnitudeByte(-difference, !first.Negative);
-    }
-
-    /// <summary>
-    /// LL51: calculate the dot products of a vector (three sign-magnitude
-    /// bytes) with the three rows of the XX16 matrix.
-    /// </summary>
-    private static void MultiplyByMatrix(ReadOnlySpan<SignMagnitudeByte> vector, SignMagnitudeByte[] matrix, Span<SignMagnitudeByte> result)
-    {
-        for (int row = 0; row < 3; row++)
-        {
-            int rowStart = row * 3;
-            var sum = new SignMagnitudeByte(EliteMaths.MultiplyFraction(vector[0].Magnitude, matrix[rowStart].Magnitude), vector[0].Negative ^ matrix[rowStart].Negative);
-            var term = new SignMagnitudeByte(EliteMaths.MultiplyFraction(vector[1].Magnitude, matrix[rowStart + 1].Magnitude), vector[1].Negative ^ matrix[rowStart + 1].Negative);
-            sum = AddSignMagnitudeBytes(sum, term, out _);
-            term = new SignMagnitudeByte(EliteMaths.MultiplyFraction(vector[2].Magnitude, matrix[rowStart + 2].Magnitude), vector[2].Negative ^ matrix[rowStart + 2].Negative);
-            result[row] = AddSignMagnitudeBytes(sum, term, out _);
-        }
-    }
-
-    /// <summary>XX16: the orientation matrix, scaled for use in LL51.</summary>
-    private readonly SignMagnitudeByte[] _orientationMatrix = new SignMagnitudeByte[9];
-
-    /// <summary>LL9: draw the ship in INWK.</summary>
     private void DrawShip()
     {
         // Work out which view INWK is in (see _drawView)
@@ -118,7 +49,6 @@ public sealed partial class EliteGame
 
         var owner = _currentShip.DisplayOwner;
         _colour = ShipCatalogue.Get(_shipType).Colour;
-        _shipDistance = 31;
 
         if ((_currentShip.Behaviour & 0x80) != 0)
         {
@@ -147,71 +77,15 @@ public sealed partial class EliteGame
             }
         }
 
-        // EE28
-        if (_currentShip.Z < 0)
-        {
-            DrawShipOutOfView(owner);
-            return;
-        }
-
-        // LL10: check whether the ship is in the field of view
-        if (_currentShip.ZHi >= 192)
-        {
-            DrawShipOutOfView(owner);
-            return;
-        }
-
+        // EE28 and LL10: is the ship in the original's field of view (in front
+        // of us, not too far away, and within 45 degrees of straight ahead)?
         int zMagnitude = Math.Abs(_currentShip.Z) & 0xFFFF;
-        if ((Math.Abs(_currentShip.X) & 0xFFFF) >= zMagnitude || (Math.Abs(_currentShip.Y) & 0xFFFF) >= zMagnitude)
+        if (_currentShip.Z < 0 || _currentShip.ZHi >= 192
+            || (Math.Abs(_currentShip.X) & 0xFFFF) >= zMagnitude || (Math.Abs(_currentShip.Y) & 0xFFFF) >= zMagnitude)
         {
             DrawShipOutOfView(owner);
             return;
         }
-
-        // Mark the gun vertex as not yet projected
-        int gun = _blueprint!.GunVertex;
-        _projectedX[gun] = 0xFFFF;
-
-        // Calculate the distance for the level of detail
-        if ((_currentShip.ZHi >> 4) == 0)
-        {
-            _shipDistance = (zMagnitude >> 7) & 0x1F;
-        }
-        else if (_blueprint.VisibilityDistance < _currentShip.ZHi && (_currentShip.Flags & Ship.FlagExploding) == 0)
-        {
-            // LL13: the ship is too far away, so draw it as a dot
-            DrawShipAsDot(owner);
-            return;
-        }
-
-        // LL17: set up the orientation matrix in XX16 (sidev, roofv, nosev as rows)
-        SetUpMatrixRow(0, _currentShip.Side);
-        SetUpMatrixRow(1, _currentShip.Roof);
-        SetUpMatrixRow(2, _currentShip.Nose);
-
-        FaceVisibility[15] = 255;
-        var blueprint = _blueprint;
-        if ((_currentShip.Flags & Ship.FlagExploding) != 0)
-        {
-            // All faces are visible when exploding
-            for (int f = 0; f < blueprint.Faces.Count; f++)
-            {
-                FaceVisibility[f] = 255;
-            }
-
-            _shipDistance = 0;
-        }
-        else
-        {
-            CalculateFaceVisibility(blueprint);
-        }
-
-        // LL42: transpose the matrix so we can rotate the vertices into our frame
-        (_orientationMatrix[1], _orientationMatrix[3]) = (_orientationMatrix[3], _orientationMatrix[1]);
-        (_orientationMatrix[2], _orientationMatrix[6]) = (_orientationMatrix[6], _orientationMatrix[2]);
-        (_orientationMatrix[5], _orientationMatrix[7]) = (_orientationMatrix[7], _orientationMatrix[5]);
-
-        ProjectVertices(blueprint);
 
         // LL72
         if ((_currentShip.Flags & Ship.FlagExploding) != 0)
@@ -221,265 +95,36 @@ public sealed partial class EliteGame
             return;
         }
 
-        _currentShip.Flags |= Ship.FlagDrawn;
-        var transform = CurrentShipTransform();
-        List<LineSegment>? worldLines = null;
-
-        if ((_currentShip.Flags & Ship.FlagFiring) != 0)
+        if ((_currentShip.ZHi >> 4) != 0 && _blueprint!.VisibilityDistance < _currentShip.ZHi)
         {
-            _currentShip.Flags &= ~Ship.FlagFiring;
-            int gunX = _projectedX[gun], gunY = _projectedY[gun];
-            if ((gunX & 0xFF) != 0xFF && ((gunX >> 8) & 0xFF) != 0xFF)
-            {
-                // The ship's laser beam goes from its gun to one of the bottom
-                // corners of the screen (or thereabouts)
-                int x2 = _currentShip.X < 0 ? 255 : 0;
-                int y2 = _currentShip.ZLo;
-                var gunVertex = blueprint.Vertices[gun];
-                var gunPosition = Vector3.Transform(new Vector3(gunVertex.X, gunVertex.Y, gunVertex.Z), transform);
-                worldLines = [new LineSegment(gunPosition, ScreenPointToWorld(x2, y2, ScreenEdgeDistance), _colour)];
-            }
-        }
-
-        // In the 3D world, the ship is its model and its transform, and the
-        // renderer draws its geometry, with the depth buffer hiding the parts
-        // that are out of sight
-        _world.SetShip(owner, new ShipInstance(blueprint.Model, transform, _colour), worldLines);
-    }
-
-    /// <summary>Set up one row of XX16 from an orientation vector, scaling each coordinate by 256 / 197.</summary>
-    private void SetUpMatrixRow(int row, IntVector3 v)
-    {
-        for (int axis = 0; axis < 3; axis++)
-        {
-            int value = v[axis];
-            int magnitude = (Math.Abs(value) >> 7) & 0xFF;
-            _orientationMatrix[row * 3 + axis] = new SignMagnitudeByte(EliteMaths.DivideFraction(magnitude, 197), value < 0);
-        }
-    }
-
-    /// <summary>LL9 part 5: calculate the visibility of each of the ship's faces.</summary>
-    private void CalculateFaceVisibility(ShipBlueprint blueprint)
-    {
-        int faceCount = blueprint.Faces.Count;
-        if (faceCount == 0)
-        {
+            // LL13: the original draws the ship as a dot this far away
+            DrawShipAsDot(owner);
             return;
         }
 
-        // Scale the ship's position down until z_hi is zero, counting the
-        // number of shifts on top of the normal scale factor
-        int shifts = blueprint.NormalScale;
-        int x = Math.Abs(_currentShip.X) & 0xFFFF;
-        int y = Math.Abs(_currentShip.Y) & 0xFFFF;
-        int z = Math.Abs(_currentShip.Z) & 0xFFFF;
-        while ((z >> 8) != 0)
+        _currentShip.Flags |= Ship.FlagDrawn;
+        var beam = default(LineSegment);
+        bool firing = (_currentShip.Flags & Ship.FlagFiring) != 0;
+        if (firing)
         {
-            shifts++;
-            x >>= 1;
-            y >>= 1;
-            z >>= 1;
+            // The ship's laser beam goes from its gun to one of the bottom
+            // corners of the screen (or thereabouts)
+            _currentShip.Flags &= ~Ship.FlagFiring;
+            var gun = _blueprint!.Vertices[_blueprint.GunVertex];
+            int cornerX = _currentShip.X < 0 ? 255 : 0;
+            int cornerY = _currentShip.ZLo;
+            beam = new LineSegment(Vector3.Transform(gun, CurrentShipTransform()), ScreenPointToWorld(cornerX, cornerY, ScreenEdgeDistance), _colour);
         }
 
-        int scaleShifts = shifts;
-
-        // Rotate the ship's position into the ship's own frame of reference
-        Span<SignMagnitudeByte> position = stackalloc SignMagnitudeByte[3];
-        Span<SignMagnitudeByte> vector = stackalloc SignMagnitudeByte[3];
-        vector[0] = new SignMagnitudeByte(x, _currentShip.X < 0);
-        vector[1] = new SignMagnitudeByte(y, _currentShip.Y < 0);
-        vector[2] = new SignMagnitudeByte(z, _currentShip.Z < 0);
-        MultiplyByMatrix(vector, _orientationMatrix, position);
-
-        for (int f = 0; f < faceCount; f++)
-        {
-            var face = blueprint.Faces[f];
-            if (face.Visibility < _shipDistance)
-            {
-                // The face is always visible at this distance
-                FaceVisibility[f] = 255;
-                continue;
-            }
-
-            // LL87
-            var normalX = new SignMagnitudeByte(Math.Abs(face.NormalX), face.NormalX < 0);
-            var normalY = new SignMagnitudeByte(Math.Abs(face.NormalY), face.NormalY < 0);
-            var normalZ = new SignMagnitudeByte(Math.Abs(face.NormalZ), face.NormalZ < 0);
-
-            SignMagnitudeByte vectorX, vectorY, vectorZ;
-            if (scaleShifts >= 4)
-            {
-                // LL143: the normal is insignificant compared to the distance
-                vectorX = position[0];
-                vectorY = position[1];
-                vectorZ = position[2];
-            }
-            else
-            {
-                int shift = scaleShifts;
-                while (true)
-                {
-                    // LL92
-                    int scaledNormalX = normalX.Magnitude >> shift;
-                    int scaledNormalY = normalY.Magnitude >> shift;
-                    int scaledNormalZ = normalZ.Magnitude >> shift;
-
-                    vectorZ = AddSignMagnitudeBytes(new SignMagnitudeByte(scaledNormalZ, normalZ.Negative), position[2], out bool overflowZ);
-                    if (!overflowZ)
-                    {
-                        vectorX = AddSignMagnitudeBytes(new SignMagnitudeByte(scaledNormalX, normalX.Negative), position[0], out bool overflowX);
-                        if (!overflowX)
-                        {
-                            vectorY = AddSignMagnitudeBytes(new SignMagnitudeByte(scaledNormalY, normalY.Negative), position[1], out bool overflowY);
-                            if (!overflowY)
-                            {
-                                break;
-                            }
-                        }
-                    }
-
-                    // ovflw: halve the position and try again
-                    position[0] = new SignMagnitudeByte(position[0].Magnitude >> 1, position[0].Negative);
-                    position[2] = new SignMagnitudeByte(position[2].Magnitude >> 1, position[2].Negative);
-                    position[1] = new SignMagnitudeByte(position[1].Magnitude >> 1, position[1].Negative);
-                    shift = 1;
-                }
-            }
-
-            // LL89: the dot product of the normal with the vector
-            var sum = new SignMagnitudeByte(EliteMaths.MultiplyFraction(vectorX.Magnitude, normalX.Magnitude), normalX.Negative ^ vectorX.Negative);
-            var term = new SignMagnitudeByte(EliteMaths.MultiplyFraction(vectorY.Magnitude, normalY.Magnitude), normalY.Negative ^ vectorY.Negative);
-            sum = AddSignMagnitudeBytes(sum, term, out _);
-            term = new SignMagnitudeByte(EliteMaths.MultiplyFraction(vectorZ.Magnitude, normalZ.Magnitude), vectorZ.Negative ^ normalZ.Negative);
-            var dot = AddSignMagnitudeBytes(sum, term, out _);
-            FaceVisibility[f] = dot.Negative ? dot.Magnitude : 0;
-        }
+        ShowShip(owner, firing ? new ReadOnlySpan<LineSegment>(in beam) : []);
     }
 
-    /// <summary>LL9 parts 6 to 8: calculate the 3D and screen coordinates of each visible vertex.</summary>
-    private void ProjectVertices(ShipBlueprint blueprint)
-    {
-        Span<SignMagnitudeByte> vector = stackalloc SignMagnitudeByte[3];
-        Span<SignMagnitudeByte> rotated = stackalloc SignMagnitudeByte[3];
-
-        for (int i = 0; i < blueprint.Vertices.Count; i++)
-        {
-            var vertex = blueprint.Vertices[i];
-            if (vertex.Visibility < _shipDistance)
-            {
-                continue;
-            }
-
-            if (FaceVisibility[vertex.Face1] == 0 && FaceVisibility[vertex.Face2] == 0 && FaceVisibility[vertex.Face3] == 0 && FaceVisibility[vertex.Face4] == 0)
-            {
-                continue;
-            }
-
-            // LL49: rotate the vertex into our frame of reference
-            vector[0] = new SignMagnitudeByte(Math.Abs(vertex.X), vertex.X < 0);
-            vector[1] = new SignMagnitudeByte(Math.Abs(vertex.Y), vertex.Y < 0);
-            vector[2] = new SignMagnitudeByte(Math.Abs(vertex.Z), vertex.Z < 0);
-            MultiplyByMatrix(vector, _orientationMatrix, rotated);
-
-            // Add the ship's position (as 16-bit sign-magnitude values)
-            int x = AddSigned16(_currentShip.X, rotated[0]);
-            int y = AddSigned16(_currentShip.Y, rotated[1]);
-
-            // LL55: z, which is clamped to a minimum of 4
-            int zPos = Math.Abs(_currentShip.Z) & 0xFFFF;
-            int z = rotated[2].Negative ? zPos - rotated[2].Magnitude : zPos + rotated[2].Magnitude;
-            if (z < 4)
-            {
-                z = 4;
-            }
-
-            VertexX[i] = x;
-            VertexY[i] = y;
-            VertexZ[i] = z;
-
-            // LL57: scale down until everything fits into a byte
-            int xScaled = Math.Abs(x), yScaled = Math.Abs(y), zScaled = z;
-            while (((zScaled >> 8) | (xScaled >> 8) | (yScaled >> 8)) != 0)
-            {
-                xScaled >>= 1;
-                yScaled >>= 1;
-                zScaled >>= 1;
-            }
-
-            // LL60: project onto the screen
-            int low = ProjectCoordinate(xScaled, zScaled, out int high);
-            int value = (low | (high << 8)) & 0xFFFF;
-            _projectedX[i] = x < 0 ? (128 - value) & 0xFFFF : (128 + value) & 0xFFFF;
-
-            low = ProjectCoordinate(yScaled, zScaled, out high);
-            value = (low | (high << 8)) & 0xFFFF;
-            _projectedY[i] = y < 0 ? (CentreY + value) & 0xFFFF : (CentreY - value) & 0xFFFF;
-        }
-    }
-
-    /// <summary>(U R) = 256 * a / q, using LL28 if a &lt; q, or LL61 otherwise.</summary>
-    private static int ProjectCoordinate(int numerator, int denominator, out int high)
-    {
-        high = 0;
-        if (numerator < denominator)
-        {
-            return EliteMaths.DivideFraction(numerator, denominator);
-        }
-
-        // LL61
-        if (denominator == 0)
-        {
-            high = 50;
-            return 50;
-        }
-
-        int shifts = 0;
-        do
-        {
-            numerator >>= 1;
-            shifts++;
-        }
-        while (numerator >= denominator);
-
-        int result = EliteMaths.DivideFraction(numerator, denominator);
-        int highByte = 0;
-        for (int i = 0; i < shifts; i++)
-        {
-            int carry = (result >> 7) & 1;
-            result = (result << 1) & 0xFF;
-            highByte = ((highByte << 1) | carry) & 0xFF;
-            if ((highByte & 0x80) != 0)
-            {
-                high = 50;
-                return 50;
-            }
-        }
-
-        high = highByte;
-        return result;
-    }
-
-    /// <summary>Add a rotated vertex coordinate to a ship coordinate using 16-bit sign-magnitude arithmetic.</summary>
-    private static int AddSigned16(int coordinate, SignMagnitudeByte offset)
-    {
-        int magnitude = Math.Abs(coordinate) & 0xFFFF;
-        bool negative = coordinate < 0;
-        if (negative == offset.Negative)
-        {
-            magnitude = (magnitude + offset.Magnitude) & 0xFFFF;
-        }
-        else
-        {
-            magnitude -= offset.Magnitude;
-            if (magnitude < 0)
-            {
-                magnitude = -magnitude;
-                negative = !negative;
-            }
-        }
-
-        return negative ? -magnitude : magnitude;
-    }
+    /// <summary>
+    /// Put the ship in INWK into the 3D world (with its laser beam, if it's
+    /// firing), where the renderer decides how much of it can be seen.
+    /// </summary>
+    private void ShowShip(object owner, ReadOnlySpan<LineSegment> beam = default) =>
+        _world.SetShip(owner, new ShipInstance(_blueprint!.Model.Name, CurrentShipTransform(), _colour), beam);
 
     /// <summary>Convert a 16-bit two's complement word to a signed value.</summary>
     private static int ToSigned16(int value) => (short)(value & 0xFFFF);
@@ -533,16 +178,20 @@ public sealed partial class EliteGame
         return Clip(-dx, x1 + margin) && Clip(dx, 255 + margin - x1) && Clip(-dy, y1 - 0) && Clip(dy, 2 * CentreY - 1 - y1);
     }
 
-    /// <summary>LL14: the ship is not in view, so draw the explosion cloud if it's exploding, or erase it.</summary>
+    /// <summary>
+    /// LL14: the ship is out of the original's field of view, so it isn't
+    /// drawn (though the 3D view, which can be wider, may show it), but if it's
+    /// exploding, its explosion carries on.
+    /// </summary>
     private void DrawShipOutOfView(object owner)
     {
+        _currentShip.Flags &= ~Ship.FlagDrawn;
         if ((_currentShip.Flags & Ship.FlagExploding) == 0)
         {
-            RemoveShipFromScreen(owner);
+            ShowShip(owner);
             return;
         }
 
-        _currentShip.Flags &= ~Ship.FlagDrawn;
         DrawExplosion(owner);
     }
 
@@ -558,10 +207,9 @@ public sealed partial class EliteGame
     }
 
     /// <summary>
-    /// SHPPT: draw a distant ship as a dot. The game still works out whether
-    /// the dot is on the original's screen, but in the 3D world the ship stays
-    /// a 3D object, which the renderer draws in less detail the further away it
-    /// is.
+    /// SHPPT: the original draws a distant ship as a dot, and the ship counts
+    /// as drawn if the dot is on its screen. The ship stays a 3D object in the
+    /// 3D world, which the renderer draws in less detail the further away it is.
     /// </summary>
     private void DrawShipAsDot(object owner)
     {
@@ -576,7 +224,7 @@ public sealed partial class EliteGame
             _currentShip.Flags &= ~Ship.FlagDrawn;
         }
 
-        _world.SetShip(owner, new ShipInstance(_blueprint!.Model, CurrentShipTransform(), _colour));
+        ShowShip(owner);
     }
 
     /// <summary>
@@ -621,7 +269,15 @@ public sealed partial class EliteGame
     // Explosions
     // ------------------------------------------------------------------------
 
-    /// <summary>DOEXP: draw an exploding ship.</summary>
+    /// <summary>The particles of the explosion cloud being drawn (reused for each cloud).</summary>
+    private readonly List<Particle> _cloudParticles = [];
+
+    /// <summary>
+    /// DOEXP: draw an exploding ship. The original erases and redraws the
+    /// explosion cloud, which takes random numbers, only while the ship is in
+    /// its field of view; the game does the same, and the 3D world gets the
+    /// cloud wherever the ship is.
+    /// </summary>
     private void DrawExplosion(object owner)
     {
         var cloud = _currentShip.Explosion;
@@ -630,7 +286,6 @@ public sealed partial class EliteGame
             // Erase the existing cloud (which, as in the original, reseeds the
             // random number generator)
             DrawExplosionCloud(null);
-            RemoveFromScreen(owner);
         }
 
         // Work out the cloud's size from its distance and counter
@@ -653,6 +308,7 @@ public sealed partial class EliteGame
         {
             // EX2: the explosion has finished
             _currentShip.Flags |= 0b10100000;
+            RemoveFromScreen(owner);
             return;
         }
 
@@ -670,27 +326,36 @@ public sealed partial class EliteGame
 
         cloud.Size = size;
         _currentShip.Flags &= ~Ship.FlagOnScreenCloud;
-
-        if ((_currentShip.Flags & Ship.FlagDrawn) == 0)
+        _cloudParticles.Clear();
+        if ((_currentShip.Flags & Ship.FlagDrawn) != 0)
         {
-            return;
+            _currentShip.Flags |= Ship.FlagOnScreenCloud;
+            DrawExplosionCloud(_cloudParticles);
+        }
+        else
+        {
+            // The original doesn't draw the cloud when the ship is out of its
+            // field of view, and so doesn't take the random numbers for it, but
+            // the 3D view may still show it
+            DrawExplosionCloudWithoutSideEffects(_cloudParticles);
         }
 
-        // Copy the screen coordinates of the explosion vertices into the heap,
-        // along with their positions in space for the 3D world
-        cloud.Origins.Clear();
-        cloud.ViewOrigins.Clear();
-        int vertices = (cloud.CountByte - 6) / 4;
-        for (int i = 0; i < vertices; i++)
-        {
-            cloud.Origins.Add((_projectedX[i], _projectedY[i]));
-            cloud.ViewOrigins.Add(new Vector3(VertexX[i], VertexY[i], VertexZ[i]));
-        }
+        _world.SetParticles(owner, CollectionsMarshal.AsSpan(_cloudParticles));
+    }
 
-        _currentShip.Flags |= Ship.FlagOnScreenCloud;
-        var particles = new List<Particle>();
+    /// <summary>
+    /// Work out the explosion cloud's particles without changing any of the
+    /// game's state, by putting back the random number generator (and the
+    /// current colour) afterwards.
+    /// </summary>
+    private void DrawExplosionCloudWithoutSideEffects(List<Particle> particles)
+    {
+        Span<int> seeds = stackalloc int[4];
+        _randomSeeds.CopyTo(seeds);
+        var (carry, overflow, randomX, colour) = (_carry, _overflow, _randomX, _colour);
         DrawExplosionCloud(particles);
-        _world.SetParticles(owner, particles);
+        seeds.CopyTo(_randomSeeds);
+        (_carry, _overflow, _randomX, _colour) = (carry, overflow, randomX, colour);
     }
 
     /// <summary>
@@ -698,10 +363,11 @@ public sealed partial class EliteGame
     /// is seeded from the cloud data so the same cloud is produced each time.
     ///
     /// Each particle is added to the list of particles for the 3D world (if
-    /// one is given, as erasing the cloud doesn't need them), at the same
-    /// offset from its vertex as the original draws it on the screen, and at
-    /// the vertex's distance. This takes exactly the same random numbers as
-    /// the original, so the game's random number sequence is unaffected.
+    /// one is given, as erasing the cloud doesn't need them). The original
+    /// scatters the particles around the ship's vertices on the screen, and
+    /// here each is at the same offset from its vertex, at the vertex's
+    /// distance. This takes exactly the same random numbers as the original,
+    /// so the game's random number sequence is unaffected.
     /// </summary>
     private void DrawExplosionCloud(List<Particle>? particles)
     {
@@ -715,10 +381,13 @@ public sealed partial class EliteGame
         int particleCount = (counter >> 4) | 1;
         int savedSeed1 = _randomSeeds[1];
 
-        for (int v = 0; v < cloud.Origins.Count; v++)
+        var vertices = _blueprint!.Vertices;
+        for (int v = 0; v < cloud.VertexCount; v++)
         {
-            var (originX, originY) = cloud.Origins[v];
-            var viewOrigin = cloud.ViewOrigins[v];
+            // The explosion count can be more than the number of vertices (the
+            // rock hermit's is), in which case the original uses whatever is
+            // left over in its heap; here the vertices are used again
+            var viewOrigin = particles != null ? ShipPointInView(vertices[v % vertices.Count]) : default;
             int heapOffset = 6 + 4 * (v + 1);
 
             // Seed the random number generator from the cloud's seeds
@@ -736,17 +405,19 @@ public sealed partial class EliteGame
                 // the bottom of the screen, but still takes a random number
                 // (EX11), which is the only random number RandomCloudCoordinate
                 // takes, so we can work out the x-coordinate either way (the
-                // 3D view can show particles that the original's screen can't)
-                int y = RandomCloudCoordinate(originY, cloud.Size);
-                int x = RandomCloudCoordinate(originX, cloud.Size);
+                // 3D view can show particles that the original's screen can't).
+                // The offsets from the vertex don't depend on where the vertex
+                // is on the screen, so they are worked out from the origin.
+                int y = RandomCloudCoordinate(0, cloud.Size);
+                int x = RandomCloudCoordinate(0, cloud.Size);
 
                 if (particles != null && viewOrigin.Z > 0)
                 {
                     // Convert the particle's offset on the screen into an offset in
                     // space at the vertex's distance
                     float scale = viewOrigin.Z / 256;
-                    float dx = ToSigned16(x - originX) * scale;
-                    float dy = ToSigned16(y - originY) * scale;
+                    float dx = ToSigned16(x) * scale;
+                    float dy = ToSigned16(y) * scale;
                     particles.Add(new Particle(ViewToWorld(viewOrigin.X + dx, viewOrigin.Y - dy, viewOrigin.Z), 2, random >= 80 ? 1 : 2, _colour));
                 }
             }
@@ -787,6 +458,14 @@ public sealed partial class EliteGame
         int low = difference & 0xFF;
         int high = (originHigh - (difference < 0 ? 1 : 0)) & 0xFF;
         return (high << 8) | low;
+    }
+
+    /// <summary>A point on the ship in INWK (in the ship's own coordinates), in the space of the view it is in.</summary>
+    private Vector3 ShipPointInView(Vector3 point)
+    {
+        static Vector3 Unit(IntVector3 v) => Vector3.Normalize(new Vector3(v.X, v.Y, v.Z));
+        return new Vector3(_currentShip.X, _currentShip.Y, _currentShip.Z)
+            + Unit(_currentShip.Side) * point.X + Unit(_currentShip.Roof) * point.Y + Unit(_currentShip.Nose) * point.Z;
     }
 
     /// <summary>

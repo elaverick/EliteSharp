@@ -26,11 +26,11 @@ catch (Exception e) when (e is InvalidDataException or IOException)
 }
 
 var exchange = new FrameExchange();
-var screen = new Screen(exchange);
+var hud = new Hud(exchange);
 var keyboard = new BbcKeyboard();
 using var sound = options.Sound ? SoundEngine.TryCreate() : null;
 using var gamepad = options.Gamepad ? Gamepad.TryCreate(keyboard) : null;
-var game = new EliteGame(screen, keyboard, sound, options, gamepad);
+var game = new EliteGame(hud, keyboard, sound, options, gamepad);
 
 var windowOptions = WindowOptions.DefaultVulkan with
 {
@@ -120,7 +120,7 @@ window.Render += _ =>
 
     if (renderer != null)
     {
-        screen.SideMargin = renderer.SideMargin;
+        hud.SideMargin = renderer.SideMargin;
         renderer.Draw(exchange.Latest);
     }
 

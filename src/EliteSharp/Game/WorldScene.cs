@@ -68,7 +68,7 @@ public sealed partial class EliteGame
     }
 
     /// <summary>Connect the 3D world to the screen, so each frame includes a snapshot of it.</summary>
-    private void ConnectWorld() => _screen.WorldSnapshot = _world.Snapshot;
+    private void ConnectWorld() => _hud.WorldSnapshot = _world.Snapshot;
 
     /// <summary>Rotate a point or direction from the current view's space into world space.</summary>
     private Vector3 ViewToWorld(float x, float y, float z) => Camera.ViewToWorld(_drawView, new Vector3(x, y, z));

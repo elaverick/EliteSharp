@@ -12,7 +12,7 @@
   "canisters": 0,
   "scoopedAs": "Minerals",
   "killPoints": 0.0390625,
-  "colour": "0xF0",
-  "scannerColour": "0x03",
+  "colour": "red",
+  "scannerColour": "red",
   "flags": []
 }

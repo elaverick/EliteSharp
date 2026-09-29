@@ -1,5 +1,6 @@
 using System.Globalization;
 using System.Text.Json.Serialization;
+using EliteSharp.Rendering;
 
 namespace EliteSharp.Game.Ships;
 
@@ -60,10 +61,10 @@ public sealed record ShipAttributes
     /// <summary>The kill points awarded for destroying the ship (in 256ths).</summary>
     public double KillPoints { get; init; }
 
-    /// <summary>The ship's colour, as a mode 1 screen byte in hex.</summary>
+    /// <summary>The ship's colour in the space view (see <see cref="ShipBlueprint.Colour"/>).</summary>
     public required string Colour { get; init; }
 
-    /// <summary>The colour of the ship on the scanner, as a mode 2 screen byte in hex.</summary>
+    /// <summary>The colour of the ship on the scanner (see <see cref="ShipBlueprint.ScannerColour"/>).</summary>
     public required string ScannerColour { get; init; }
 
     /// <summary>The default NEWB flags (see <see cref="ShipBlueprint.FlagNames"/>).</summary>
@@ -123,8 +124,8 @@ public sealed class ShipBlueprint
         KillInteger = killPoints >> 8;
         KillFraction = killPoints & 0xFF;
 
-        Colour = ParseByte(attributes.Colour, "colour");
-        ScannerColour = ParseByte(attributes.ScannerColour, "scannerColour");
+        Colour = ParseColour(attributes.Colour, "colour", SpaceColours);
+        ScannerColour = ParseColour(attributes.ScannerColour, "scannerColour", ScannerColours);
 
         foreach (string flag in attributes.Flags)
         {
@@ -203,11 +204,35 @@ public sealed class ShipBlueprint
 
     public IReadOnlyList<ShipFace> Faces => Model.Faces;
 
-    /// <summary>shpcol: the ship's colour (a mode 1 screen byte).</summary>
-    public int Colour { get; }
+    /// <summary>shpcol: the ship's colour in the space view.</summary>
+    public Ink Colour { get; }
 
-    /// <summary>scacol: the ship's colour on the scanner (a mode 2 screen byte).</summary>
-    public int ScannerColour { get; }
+    /// <summary>scacol: the ship's colour on the scanner (none if it doesn't show up on the scanner).</summary>
+    public Ink ScannerColour { get; }
+
+    /// <summary>The names of the colours a ship can be in the space view.</summary>
+    private static readonly Dictionary<string, Ink> SpaceColours = new(StringComparer.OrdinalIgnoreCase)
+    {
+        ["yellow"] = Ink.Yellow,
+        ["red"] = Ink.Red,
+        ["cyan"] = Ink.Cyan,
+        ["green"] = Ink.Green,
+        ["white"] = Ink.White,
+        ["moray"] = Ink.Moray,
+    };
+
+    /// <summary>The names of the colours a ship can be on the scanner.</summary>
+    private static readonly Dictionary<string, Ink> ScannerColours = new(StringComparer.OrdinalIgnoreCase)
+    {
+        ["none"] = Ink.None,
+        ["red"] = Ink.DashboardRed,
+        ["green"] = Ink.DashboardGreen,
+        ["yellow"] = Ink.DashboardYellow,
+        ["blue"] = Ink.DashboardBlue,
+        ["magenta"] = Ink.DashboardMagenta,
+        ["cyan"] = Ink.DashboardCyan,
+        ["white"] = Ink.DashboardWhite,
+    };
 
     /// <summary>E%: the ship's default NEWB flags.</summary>
     public int DefaultBehaviour { get; }
@@ -236,11 +261,8 @@ public sealed class ShipBlueprint
         return whole;
     }
 
-    private static int ParseByte(string text, string what)
-    {
-        string digits = text.StartsWith("0x", StringComparison.OrdinalIgnoreCase) ? text[2..] : text;
-        return int.TryParse(digits, NumberStyles.HexNumber, CultureInfo.InvariantCulture, out int value) && value is >= 0 and <= 255
-            ? value
-            : throw new InvalidDataException($"{what} '{text}' must be a hex byte such as \"0xFF\"");
-    }
+    private static Ink ParseColour(string name, string what, Dictionary<string, Ink> colours) =>
+        colours.TryGetValue(name, out var ink)
+            ? ink
+            : throw new InvalidDataException($"{what} '{name}' must be one of {string.Join(", ", colours.Keys)}");
 }

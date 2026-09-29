@@ -1,138 +1,152 @@
+using System.Numerics;
 using System.Runtime.InteropServices;
 using EliteSharp.Rendering.Scene;
 
 namespace EliteSharp.Rendering;
 
 /// <summary>
-/// A vertex of the 2D display as sent to the GPU, in logical BBC screen pixels
-/// (256 x 248, origin top-left).
+/// A rectangle of the HUD, drawn from a region of the <see cref="HudAtlas"/>:
+/// a character, an image, or (from the atlas's solid texel) a filled
+/// rectangle. The GPU draws each one as an instance of a quad.
+///
+/// Positions are in the HUD's layout units, which are the original's pixels
+/// (the display is 256 by 248 of them, with the origin at the top-left), so
+/// the HUD keeps the original's proportions at any size.
 /// </summary>
-[StructLayout(LayoutKind.Sequential, Pack = 4)]
-public struct Vertex(float x, float y, uint colour, uint flags)
+[StructLayout(LayoutKind.Sequential)]
+public struct HudQuad(Vector4 rectangle, Vector4 source, Ink ink)
 {
-    public float X = x;
-    public float Y = y;
+    /// <summary>The rectangle on the screen: x, y, width and height.</summary>
+    public Vector4 Rectangle = rectangle;
 
-    /// <summary>The BBC colour byte (a mode 1 or mode 2 pixel pattern).</summary>
-    public uint Colour = colour;
+    /// <summary>The region of the atlas: x, y, width and height in texels.</summary>
+    public Vector4 Source = source;
 
-    /// <summary>See <see cref="VertexFlags"/>.</summary>
-    public uint Flags = flags;
-
-    public static readonly uint SizeInBytes = (uint)Marshal.SizeOf<Vertex>();
+    /// <summary>The ink for the atlas's <see cref="HudAtlas.QuadInk"/> texels.</summary>
+    public uint Ink = (uint)ink;
 }
 
-public static class VertexFlags
+/// <summary>A line of the HUD, from the centre of one pixel to the centre of another. The GPU draws each one as an instance.</summary>
+[StructLayout(LayoutKind.Sequential)]
+public struct HudLine(Vector4 ends, Ink ink)
 {
-    /// <summary>Decode the colour byte as a mode 2 (dashboard) pattern rather than mode 1.</summary>
-    public const uint Mode2 = 1;
+    /// <summary>The ends of the line: x1, y1, x2 and y2.</summary>
+    public Vector4 Ends = ends;
 
-    /// <summary>The primitive belongs to the dashboard rather than the space view (for clipping).</summary>
-    public const uint Dashboard = 4;
+    public uint Ink = (uint)ink;
 }
 
 /// <summary>
-/// A complete frame to be drawn: the 3D world, and the 2D display as vertices for the triangle list and the
-/// line list, plus the palette state. Built on the game thread, drawn by the
-/// renderer.
+/// A complete frame to be drawn: the 3D world, the HUD, and the palette that
+/// both are drawn with. Built on the game thread, drawn by the renderer.
+///
+/// The HUD is in three parts, each drawn with its own clipping: the space
+/// view (the top 192 rows, over the 3D world), the lines that span the full
+/// width of a widened space view (the border and the tunnels), and the
+/// dashboard (the bottom 56 rows).
 /// </summary>
 public sealed class FrameData
 {
     /// <summary>The 3D world, or null if there isn't one.</summary>
     public SceneFrame? World;
 
-    public Vertex[] Triangles = [];
-    public int TriangleVertexCount;
+    /// <summary>The HUD's rectangles: the space view's, then the dashboard's.</summary>
+    public HudQuad[] Quads = [];
 
-    public Vertex[] Lines = [];
-    public int LineVertexCount;
+    public int SpaceQuadCount;
+
+    public int DashboardQuadCount;
 
     /// <summary>
-    /// The lines that span the full width of the space view (a line list): the
-    /// space view's border, and the hangar. These are kept separate so the
+    /// The HUD's lines: the space view's, then the wide lines, whose logical
+    /// x-coordinates 0 and 256 are at the edges of a widened space view (so the
     /// renderer can stretch them to the edges of a window that is wider than
-    /// the 2D display, where logical x-coordinates 0 and 255 are at the left
-    /// and right edges of the window.
+    /// the HUD).
     /// </summary>
-    public Vertex[] WideLines = [];
-    public int WideLineVertexCount;
+    public HudLine[] Lines = [];
 
-    /// <summary>The sixteen physical colours (0-7) of the ULA palette for the space view.</summary>
-    public int[] SpacePalette = new int[16];
+    public int SpaceLineCount;
 
-    /// <summary>The sixteen physical colours (0-7) for mode 2 logical colours 0-15.</summary>
-    public int[] DashboardPalette = new int[16];
+    public int WideLineCount;
 
-    /// <summary>The hyperspace colour effect (the space view is decoded as mode 2).</summary>
-    public bool HyperspaceColours;
+    /// <summary>What the inks look like.</summary>
+    public Palette Palette;
 
-    /// <summary>Whether the dashboard is visible (it is hidden on the death screen).</summary>
+    /// <summary>Whether the dashboard is shown (it is hidden on the death screen).</summary>
     public bool DashboardVisible = true;
 }
 
-/// <summary>
-/// Accumulates primitives for a frame.
-/// </summary>
-public sealed class FrameBuilder
+/// <summary>Which part of the HUD a <see cref="HudBuilder"/> is adding to.</summary>
+public enum HudLayer
 {
-    private readonly List<Vertex> _triangles = new(16384);
-    private readonly List<Vertex> _lines = new(8192);
-    private readonly List<Vertex> _wideLines = new(16);
+    /// <summary>The space view, clipped to its 192 rows.</summary>
+    SpaceView,
+
+    /// <summary>The dashboard.</summary>
+    Dashboard,
+}
+
+/// <summary>Collects the HUD's rectangles and lines for a frame.</summary>
+public sealed class HudBuilder
+{
+    private readonly List<HudQuad> _spaceQuads = new(1024);
+    private readonly List<HudQuad> _dashboardQuads = new(256);
+    private readonly List<HudLine> _spaceLines = new(1024);
+    private readonly List<HudLine> _wideLines = new(256);
+
+    /// <summary>The part of the HUD that rectangles and images are added to.</summary>
+    public HudLayer Layer { get; set; }
+
+    private List<HudQuad> Quads => Layer == HudLayer.Dashboard ? _dashboardQuads : _spaceQuads;
 
     public void Clear()
     {
-        _triangles.Clear();
-        _lines.Clear();
+        _spaceQuads.Clear();
+        _dashboardQuads.Clear();
+        _spaceLines.Clear();
         _wideLines.Clear();
+        Layer = HudLayer.SpaceView;
     }
 
-    /// <summary>Add a 2D line in logical screen coordinates, drawn to the pixel centres.</summary>
-    public void Line(float x1, float y1, float x2, float y2, int colour, uint flags = 0)
-    {
-        _lines.Add(new Vertex(x1 + 0.5f, y1 + 0.5f, (uint)colour, flags));
-        _lines.Add(new Vertex(x2 + 0.5f, y2 + 0.5f, (uint)colour, flags));
-    }
+    /// <summary>Add a filled rectangle.</summary>
+    public void Rect(float x, float y, float width, float height, Ink ink) =>
+        Quads.Add(new HudQuad(new Vector4(x, y, width, height), Source(HudAtlas.Solid), ink));
 
-    /// <summary>Add a line that spans the full width of the space view (see <see cref="FrameData.WideLines"/>).</summary>
-    public void WideLine(float x1, float y1, float x2, float y2, int colour)
-    {
-        _wideLines.Add(new Vertex(x1 + 0.5f, y1 + 0.5f, (uint)colour, 0));
-        _wideLines.Add(new Vertex(x2 + 0.5f, y2 + 0.5f, (uint)colour, 0));
-    }
+    /// <summary>Add an image from the atlas, with its top-left at (x, y), one texel per pixel.</summary>
+    public void Image(AtlasRegion region, float x, float y) =>
+        Quads.Add(new HudQuad(new Vector4(x, y, region.Width, region.Height), Source(region), Ink.None));
 
-    /// <summary>Add a filled rectangle in logical screen coordinates.</summary>
-    public void Rect(float x, float y, float width, float height, int colour, uint flags = 0)
+    /// <summary>Add a character, with its top-left at (x, y).</summary>
+    public void Character(char character, float x, float y, Ink ink)
     {
-        var c = (uint)colour;
-        var a = new Vertex(x, y, c, flags);
-        var b = new Vertex(x + width, y, c, flags);
-        var d = new Vertex(x, y + height, c, flags);
-        var e = new Vertex(x + width, y + height, c, flags);
-        _triangles.Add(a);
-        _triangles.Add(b);
-        _triangles.Add(d);
-        _triangles.Add(b);
-        _triangles.Add(e);
-        _triangles.Add(d);
-    }
-
-    public FrameData Build(SceneFrame? world, int[] spacePalette, int[] dashboardPalette, bool hyperspaceColours, bool dashboardVisible)
-    {
-        return new FrameData
+        if (HudAtlas.Glyph(character) is { } glyph)
         {
-            World = world,
-            WideLines = _wideLines.ToArray(),
-            WideLineVertexCount = _wideLines.Count,
-            Triangles = _triangles.ToArray(),
-            TriangleVertexCount = _triangles.Count,
-            Lines = _lines.ToArray(),
-            LineVertexCount = _lines.Count,
-            SpacePalette = (int[])spacePalette.Clone(),
-            DashboardPalette = (int[])dashboardPalette.Clone(),
-            HyperspaceColours = hyperspaceColours,
-            DashboardVisible = dashboardVisible,
-        };
+            Quads.Add(new HudQuad(new Vector4(x, y, glyph.Width, glyph.Height), Source(glyph), ink));
+        }
     }
+
+    /// <summary>Add a line between the centres of two of the space view's pixels.</summary>
+    public void Line(float x1, float y1, float x2, float y2, Ink ink) =>
+        _spaceLines.Add(new HudLine(new Vector4(x1 + 0.5f, y1 + 0.5f, x2 + 0.5f, y2 + 0.5f), ink));
+
+    /// <summary>Add a line that spans the full width of the space view (see <see cref="FrameData.Lines"/>).</summary>
+    public void WideLine(float x1, float y1, float x2, float y2, Ink ink) =>
+        _wideLines.Add(new HudLine(new Vector4(x1 + 0.5f, y1 + 0.5f, x2 + 0.5f, y2 + 0.5f), ink));
+
+    private static Vector4 Source(AtlasRegion region) => new(region.X, region.Y, region.Width, region.Height);
+
+    public FrameData Build(SceneFrame? world, Palette palette, bool dashboardVisible) => new()
+    {
+        World = world,
+        Quads = [.. _spaceQuads, .. _dashboardQuads],
+        SpaceQuadCount = _spaceQuads.Count,
+        DashboardQuadCount = _dashboardQuads.Count,
+        Lines = [.. _spaceLines, .. _wideLines],
+        SpaceLineCount = _spaceLines.Count,
+        WideLineCount = _wideLines.Count,
+        Palette = palette,
+        DashboardVisible = dashboardVisible,
+    };
 }
 
 /// <summary>

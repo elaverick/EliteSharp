@@ -94,13 +94,13 @@ public sealed partial class EliteGame
         {
             DisarmMissile(DashboardGreen);
             Boop();
-            _missileArmed = 0;
+            _missileArmed = false;
         }
 
         // MA20
         if ((_missileTarget & 0x80) != 0 && _keyTargetMissile && _missiles != 0)
         {
-            _missileArmed = 0xFF;
+            _missileArmed = true;
             SetMissileIndicator(_missiles, DashboardYellow);
         }
 
@@ -238,7 +238,7 @@ public sealed partial class EliteGame
             _energyBomb = (_energyBomb << 1) & 0xFF;
             if ((_energyBomb & 0x80) == 0)
             {
-                ToggleBombBolt();
+                HideBombBolt();
             }
         }
 
@@ -473,7 +473,7 @@ public sealed partial class EliteGame
             TransformForView();
             if (IsInCrosshairs())
             {
-                if (_missileArmed != 0)
+                if (_missileArmed)
                 {
                     Beep();
                     SetMissileTarget(_currentSlot, DashboardRed);
@@ -954,19 +954,27 @@ public sealed partial class EliteGame
     /// <summary>BOMBTBY: the y-coordinates of the points in the energy bomb's lightning bolt.</summary>
     private readonly int[] _bombBoltY = new int[10];
 
-    /// <summary>BOMBOFF: draw (or erase) the zig-zag lightning bolt of the energy bomb.</summary>
-    private void ToggleBombBolt()
+    /// <summary>
+    /// BOMBOFF: draw the zig-zag lightning bolt of the energy bomb. The
+    /// original draws and erases the bolt with EOR logic; here it is a group in
+    /// the HUD, which is replaced each time it's drawn.
+    /// </summary>
+    private void DrawBombBolt()
     {
         if (_viewType != 0)
         {
             return;
         }
 
+        using var group = _hud.Group(HudGroup.BombBolt);
         for (int y = 1; y < 10; y++)
         {
-            _screen.DrawLine(_bombBoltX[y - 1], _bombBoltY[y - 1], _bombBoltX[y], _bombBoltY[y], Cyan);
+            _hud.DrawLine(_bombBoltX[y - 1], _bombBoltY[y - 1], _bombBoltX[y], _bombBoltY[y], Cyan);
         }
     }
+
+    /// <summary>BOMBOFF (when the bolt is on-screen): erase the energy bomb's lightning bolt.</summary>
+    private void HideBombBolt() => _hud.ClearGroup(HudGroup.BombBolt);
 
     /// <summary>BOMBEFF2: erase the energy bomb's lightning bolt and draw a new one, four times.</summary>
     private void AnimateEnergyBomb()
@@ -981,7 +989,7 @@ public sealed partial class EliteGame
     private void EnergyBombEffect()
     {
         MakeSound(SoundBomb);
-        ToggleBombBolt();
+        HideBombBolt();
         RandomiseBombBolt();
     }
 
@@ -997,6 +1005,6 @@ public sealed partial class EliteGame
 
         _bombBoltX[9] = 0;
         _bombBoltX[0] = 255;
-        ToggleBombBolt();
+        DrawBombBolt();
     }
 }

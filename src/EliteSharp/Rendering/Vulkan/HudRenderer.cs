@@ -1,3 +1,4 @@
+using System.Numerics;
 using System.Runtime.InteropServices;
 using Silk.NET.Shaderc;
 using Silk.NET.Vulkan;
@@ -5,201 +6,316 @@ using Silk.NET.Vulkan;
 namespace EliteSharp.Rendering.Vulkan;
 
 /// <summary>
-/// The position and size of the 2D display (the original's 256 x 248 screen)
-/// in the window, letterboxed to keep square pixels.
+/// The position and size of the HUD (the original's 256 x 248 pixel screen) in
+/// the window, letterboxed to keep square pixels.
 /// </summary>
 public readonly record struct HudLayout(float OriginX, float OriginY, float Scale)
 {
-    public float Width => Screen.Width * Scale;
+    public float Width => Hud.Width * Scale;
 
-    public float Height => Screen.Height * Scale;
+    public float Height => Hud.Height * Scale;
 
     public static HudLayout For(uint windowWidth, uint windowHeight)
     {
-        float scale = Math.Min(windowWidth / (float)Screen.Width, windowHeight / (float)Screen.Height);
+        float scale = Math.Min(windowWidth / (float)Hud.Width, windowHeight / (float)Hud.Height);
         return new HudLayout(
-            MathF.Floor((windowWidth - Screen.Width * scale) / 2),
-            MathF.Floor((windowHeight - Screen.Height * scale) / 2),
+            MathF.Floor((windowWidth - Hud.Width * scale) / 2),
+            MathF.Floor((windowHeight - Hud.Height * scale) / 2),
             scale);
     }
 }
 
 /// <summary>
-/// Draws the 2D parts of the display (the HUD): text, the dashboard, charts,
-/// crosshairs and so on, in the original's screen layout, decoding the BBC's
-/// colour bytes and palettes in the fragment shader.
+/// Draws the HUD: text, the dashboard, the charts, the crosshairs and so on.
+/// Everything is an instance of a rectangle or a line, so each part of the HUD
+/// is one instanced draw from buffers that are written once per frame. The
+/// images (the font, the dashboard and its bulbs) are in one texture that is
+/// uploaded when the renderer starts, and the colours come from a small
+/// uniform buffer of the current palette's inks.
 /// </summary>
 public sealed unsafe class HudRenderer : IDisposable
 {
+    /// <summary>The push constants (see HudShaders.Common).</summary>
     [StructLayout(LayoutKind.Sequential)]
-    private struct PushConstants
+    private struct LayoutConstants
     {
-        public float OriginX, OriginY;
-        public float ScaleX, ScaleY;
-        public uint SpacePalette0, SpacePalette1;
-        public uint DashPalette0, DashPalette1;
-        public uint Options;
+        public Vector2 Size;
+        public Vector2 PatternOrigin;
+        public float PixelSize;
     }
 
+    /// <summary>The per-frame resources for each frame in flight.</summary>
+    private sealed class FrameResources(GpuDevice gpu)
+    {
+        public GpuBuffer Inks = null!;
+        public DescriptorSet DescriptorSet;
+        public DynamicBuffer Quads = new(gpu, BufferUsageFlags.VertexBufferBit);
+        public DynamicBuffer Lines = new(gpu, BufferUsageFlags.VertexBufferBit);
+    }
+
+    private static readonly int InkBufferSize = Inks.Count * Palette.PatternLength * sizeof(uint);
+
     private readonly GpuDevice _gpu;
+    private readonly GpuTexture _atlas;
+    private readonly DescriptorSetLayout _descriptorSetLayout;
+    private readonly DescriptorPool _descriptorPool;
     private readonly PipelineLayout _pipelineLayout;
+    private readonly Pipeline _quadPipeline;
     private readonly Pipeline _linePipeline;
-    private readonly Pipeline _trianglePipeline;
-    private readonly DynamicBuffer[] _vertexBuffers;
+    private readonly FrameResources[] _frames;
 
     public HudRenderer(GpuDevice gpu, RenderPass renderPass, int framesInFlight)
     {
         _gpu = gpu;
-        var pushRange = new PushConstantRange(ShaderStageFlags.FragmentBit, 0, (uint)sizeof(PushConstants));
+        var vk = gpu.Vk;
+        _atlas = gpu.CreateByteTexture(HudAtlas.Width, HudAtlas.Height, HudAtlas.Build());
+
+        // The inks (binding 0) and the atlas (binding 1)
+        var bindings = stackalloc DescriptorSetLayoutBinding[2];
+        bindings[0] = new DescriptorSetLayoutBinding
+        {
+            Binding = 0,
+            DescriptorType = DescriptorType.UniformBuffer,
+            DescriptorCount = 1,
+            StageFlags = ShaderStageFlags.FragmentBit,
+        };
+        bindings[1] = new DescriptorSetLayoutBinding
+        {
+            Binding = 1,
+            DescriptorType = DescriptorType.CombinedImageSampler,
+            DescriptorCount = 1,
+            StageFlags = ShaderStageFlags.FragmentBit,
+        };
+        var setLayoutInfo = new DescriptorSetLayoutCreateInfo
+        {
+            SType = StructureType.DescriptorSetLayoutCreateInfo,
+            BindingCount = 2,
+            PBindings = bindings,
+        };
+        GpuDevice.Check(vk.CreateDescriptorSetLayout(gpu.Device, in setLayoutInfo, null, out _descriptorSetLayout), "vkCreateDescriptorSetLayout");
+
+        var poolSizes = stackalloc DescriptorPoolSize[2];
+        poolSizes[0] = new DescriptorPoolSize(DescriptorType.UniformBuffer, (uint)framesInFlight);
+        poolSizes[1] = new DescriptorPoolSize(DescriptorType.CombinedImageSampler, (uint)framesInFlight);
+        var poolInfo = new DescriptorPoolCreateInfo
+        {
+            SType = StructureType.DescriptorPoolCreateInfo,
+            MaxSets = (uint)framesInFlight,
+            PoolSizeCount = 2,
+            PPoolSizes = poolSizes,
+        };
+        GpuDevice.Check(vk.CreateDescriptorPool(gpu.Device, in poolInfo, null, out _descriptorPool), "vkCreateDescriptorPool");
+
+        var pushRange = new PushConstantRange(ShaderStageFlags.VertexBit | ShaderStageFlags.FragmentBit, 0, (uint)sizeof(LayoutConstants));
+        var descriptorSetLayout = _descriptorSetLayout;
         var layoutInfo = new PipelineLayoutCreateInfo
         {
             SType = StructureType.PipelineLayoutCreateInfo,
+            SetLayoutCount = 1,
+            PSetLayouts = &descriptorSetLayout,
             PushConstantRangeCount = 1,
             PPushConstantRanges = &pushRange,
         };
-        GpuDevice.Check(gpu.Vk.CreatePipelineLayout(gpu.Device, in layoutInfo, null, out _pipelineLayout), "vkCreatePipelineLayout");
+        GpuDevice.Check(vk.CreatePipelineLayout(gpu.Device, in layoutInfo, null, out _pipelineLayout), "vkCreatePipelineLayout");
 
-        var vertexShader = gpu.CreateShaderModule(ShaderCompiler.Compile(HudShaders.VertexSource, ShaderKind.VertexShader, "hud.vert"));
-        var fragmentShader = gpu.CreateShaderModule(ShaderCompiler.Compile(HudShaders.FragmentSource, ShaderKind.FragmentShader, "hud.frag"));
+        // The pipelines, whose vertex data is one instance per rectangle or line
+        var quadVertex = gpu.CreateShaderModule(ShaderCompiler.Compile(HudShaders.QuadVertex, ShaderKind.VertexShader, "hud-quad.vert"));
+        var lineVertex = gpu.CreateShaderModule(ShaderCompiler.Compile(HudShaders.LineVertex, ShaderKind.VertexShader, "hud-line.vert"));
+        var fragment = gpu.CreateShaderModule(ShaderCompiler.Compile(HudShaders.Fragment, ShaderKind.FragmentShader, "hud.frag"));
 
-        PipelineDescription Description(PrimitiveTopology topology) => new()
+        _quadPipeline = PipelineFactory.Create(gpu, renderPass, new PipelineDescription
         {
-            VertexShader = vertexShader,
-            FragmentShader = fragmentShader,
-            Topology = topology,
+            VertexShader = quadVertex,
+            FragmentShader = fragment,
+            Topology = PrimitiveTopology.TriangleList,
             Layout = _pipelineLayout,
-            Bindings = [new(0, Vertex.SizeInBytes, VertexInputRate.Vertex)],
+            Bindings = [new(0, (uint)sizeof(HudQuad), VertexInputRate.Instance)],
             Attributes =
             [
-                new(0, 0, Format.R32G32Sfloat, 0),
-                new(1, 0, Format.R32Uint, 8),
-                new(2, 0, Format.R32Uint, 12),
+                new(0, 0, Format.R32G32B32A32Sfloat, 0),
+                new(1, 0, Format.R32G32B32A32Sfloat, 16),
+                new(2, 0, Format.R32Uint, 32),
             ],
             Depth = DepthMode.None,
-        };
+        });
 
-        _linePipeline = PipelineFactory.Create(gpu, renderPass, Description(PrimitiveTopology.LineList));
-        _trianglePipeline = PipelineFactory.Create(gpu, renderPass, Description(PrimitiveTopology.TriangleList));
-        gpu.Vk.DestroyShaderModule(gpu.Device, vertexShader, null);
-        gpu.Vk.DestroyShaderModule(gpu.Device, fragmentShader, null);
+        _linePipeline = PipelineFactory.Create(gpu, renderPass, new PipelineDescription
+        {
+            VertexShader = lineVertex,
+            FragmentShader = fragment,
+            Topology = PrimitiveTopology.LineList,
+            Layout = _pipelineLayout,
+            Bindings = [new(0, (uint)sizeof(HudLine), VertexInputRate.Instance)],
+            Attributes =
+            [
+                new(0, 0, Format.R32G32B32A32Sfloat, 0),
+                new(1, 0, Format.R32Uint, 16),
+            ],
+            Depth = DepthMode.None,
+        });
 
-        _vertexBuffers = new DynamicBuffer[framesInFlight];
+        foreach (var module in new[] { quadVertex, lineVertex, fragment })
+        {
+            vk.DestroyShaderModule(gpu.Device, module, null);
+        }
+
+        // The per-frame resources
+        var writes = stackalloc WriteDescriptorSet[2];
+        _frames = new FrameResources[framesInFlight];
         for (int i = 0; i < framesInFlight; i++)
         {
-            _vertexBuffers[i] = new DynamicBuffer(gpu, BufferUsageFlags.VertexBufferBit);
+            var frame = new FrameResources(gpu)
+            {
+                Inks = gpu.CreateHostBuffer((ulong)InkBufferSize, BufferUsageFlags.UniformBufferBit),
+            };
+
+            var allocInfo = new DescriptorSetAllocateInfo
+            {
+                SType = StructureType.DescriptorSetAllocateInfo,
+                DescriptorPool = _descriptorPool,
+                DescriptorSetCount = 1,
+                PSetLayouts = &descriptorSetLayout,
+            };
+            GpuDevice.Check(vk.AllocateDescriptorSets(gpu.Device, in allocInfo, out frame.DescriptorSet), "vkAllocateDescriptorSets");
+
+            var bufferInfo = new DescriptorBufferInfo(frame.Inks.Buffer, 0, (ulong)InkBufferSize);
+            var imageInfo = new DescriptorImageInfo(_atlas.Sampler, _atlas.View, ImageLayout.ShaderReadOnlyOptimal);
+            writes[0] = new WriteDescriptorSet
+            {
+                SType = StructureType.WriteDescriptorSet,
+                DstSet = frame.DescriptorSet,
+                DstBinding = 0,
+                DescriptorCount = 1,
+                DescriptorType = DescriptorType.UniformBuffer,
+                PBufferInfo = &bufferInfo,
+            };
+            writes[1] = new WriteDescriptorSet
+            {
+                SType = StructureType.WriteDescriptorSet,
+                DstSet = frame.DescriptorSet,
+                DstBinding = 1,
+                DescriptorCount = 1,
+                DescriptorType = DescriptorType.CombinedImageSampler,
+                PImageInfo = &imageInfo,
+            };
+            vk.UpdateDescriptorSets(gpu.Device, 2, writes, 0, null);
+            _frames[i] = frame;
         }
     }
 
     /// <summary>
-    /// Record the commands to draw the 2D display. The wide lines (the border
-    /// and the hangar) are drawn across the given area if there is one (when
-    /// the 3D view is wider
-    /// than the 2D display), stretching it horizontally to fit, or around the
-    /// 2D display's space view otherwise.
+    /// Record the commands to draw the HUD. The wide lines (the border and the
+    /// tunnels) are drawn across the given area if there is one (when the 3D
+    /// view is wider than the HUD), or across the HUD's space view otherwise.
     /// </summary>
     public void Draw(CommandBuffer commandBuffer, int frameIndex, FrameData frame, HudLayout layout, float lineWidth, Rect2D? wideArea)
     {
-        int triangleCount = frame.TriangleVertexCount;
-        int lineCount = frame.LineVertexCount;
-        int wideCount = frame.WideLineVertexCount;
-        if (triangleCount + lineCount + wideCount == 0)
+        var resources = _frames[frameIndex];
+        var vk = _gpu.Vk;
+
+        // Upload this frame's inks and instances
+        frame.Palette.Patterns.CopyTo(new Span<uint>(resources.Inks.Mapped, Inks.Count * Palette.PatternLength));
+        if (frame.Quads.Length > 0)
         {
-            return;
+            resources.Quads.Write<HudQuad>(frame.Quads);
         }
 
-        // Upload the vertices: triangles first, then lines, then the wide lines
-        var vertices = new Vertex[triangleCount + lineCount + wideCount];
-        frame.Triangles.AsSpan(0, triangleCount).CopyTo(vertices);
-        frame.Lines.AsSpan(0, lineCount).CopyTo(vertices.AsSpan(triangleCount));
-        frame.WideLines.AsSpan(0, wideCount).CopyTo(vertices.AsSpan(triangleCount + lineCount));
-        var vertexBuffer = _vertexBuffers[frameIndex];
-        vertexBuffer.Write<Vertex>(vertices);
+        if (frame.Lines.Length > 0)
+        {
+            resources.Lines.Write<HudLine>(frame.Lines);
+        }
 
-        var vk = _gpu.Vk;
+        var descriptorSet = resources.DescriptorSet;
+        vk.CmdBindDescriptorSets(commandBuffer, PipelineBindPoint.Graphics, _pipelineLayout, 0, 1, in descriptorSet, 0, null);
         vk.CmdSetLineWidth(commandBuffer, lineWidth);
-        ulong offset = 0;
-        var buffer = vertexBuffer.Buffer;
-        vk.CmdBindVertexBuffers(commandBuffer, 0, 1, in buffer, in offset);
 
         var area = new Rect2D(
             new Offset2D((int)layout.OriginX, (int)layout.OriginY),
             new Extent2D((uint)MathF.Ceiling(layout.Width), (uint)MathF.Ceiling(layout.Height)));
-        SetArea(commandBuffer, frame, area, layout.Scale, layout.Scale);
-
-        if (triangleCount > 0)
+        var constants = new LayoutConstants
         {
-            vk.CmdBindPipeline(commandBuffer, PipelineBindPoint.Graphics, _trianglePipeline);
-            vk.CmdDraw(commandBuffer, (uint)triangleCount, 1, 0, 0);
-        }
+            Size = new Vector2(Hud.Width, Hud.Height),
+            PatternOrigin = new Vector2(layout.OriginX, layout.OriginY),
+            PixelSize = layout.Scale,
+        };
 
-        vk.CmdBindPipeline(commandBuffer, PipelineBindPoint.Graphics, _linePipeline);
-        if (lineCount > 0)
+        // The space view, clipped to its rows
+        SetArea(commandBuffer, area, SpaceView(area, layout), constants);
+        DrawQuads(commandBuffer, resources, 0, frame.SpaceQuadCount);
+        DrawLines(commandBuffer, resources, 0, frame.SpaceLineCount);
+
+        // The wide lines, stretched across the widened space view
+        var wide = wideArea ?? area;
+        SetArea(commandBuffer, wide, SpaceView(wide, layout), constants);
+        DrawLines(commandBuffer, resources, frame.SpaceLineCount, frame.WideLineCount);
+
+        // The dashboard
+        if (frame.DashboardVisible)
         {
-            vk.CmdDraw(commandBuffer, (uint)lineCount, 1, (uint)triangleCount, 0);
-        }
-
-        if (wideCount > 0)
-        {
-            var area2 = wideArea ?? area;
-            if (wideArea is { } stretched)
-            {
-                SetArea(commandBuffer, frame, stretched, stretched.Extent.Width / (float)Screen.Width, layout.Scale);
-            }
-
-            // The wide lines (the border, and the tunnels, which are bigger than
-            // the screen) are clipped to the space view, as the original clips
-            // them, so they don't spill onto the dashboard
-            var spaceView = new Rect2D(area2.Offset, new Extent2D(area2.Extent.Width, (uint)MathF.Ceiling(Screen.SpaceViewHeight * layout.Scale)));
-            vk.CmdSetScissor(commandBuffer, 0, 1, in spaceView);
-
-            vk.CmdDraw(commandBuffer, (uint)wideCount, 1, (uint)(triangleCount + lineCount), 0);
+            SetArea(commandBuffer, area, area, constants);
+            DrawQuads(commandBuffer, resources, frame.SpaceQuadCount, frame.DashboardQuadCount);
         }
     }
 
-    /// <summary>
-    /// Map the 2D display's 256 x 248 logical pixels onto an area of the
-    /// window, with the given horizontal and vertical scales.
-    /// </summary>
-    private void SetArea(CommandBuffer commandBuffer, FrameData frame, Rect2D area, float scaleX, float scaleY)
+    /// <summary>The space view's rows of an area (the rows above the dashboard).</summary>
+    private static Rect2D SpaceView(Rect2D area, HudLayout layout) =>
+        new(area.Offset, new Extent2D(area.Extent.Width, (uint)MathF.Ceiling(Hud.SpaceViewHeight * layout.Scale)));
+
+    /// <summary>Map the HUD's layout onto an area of the window, clipped to the given rectangle.</summary>
+    private void SetArea(CommandBuffer commandBuffer, Rect2D area, Rect2D clip, LayoutConstants constants)
     {
         var vk = _gpu.Vk;
         var viewport = new Viewport(area.Offset.X, area.Offset.Y, area.Extent.Width, area.Extent.Height, 0, 1);
         vk.CmdSetViewport(commandBuffer, 0, 1, in viewport);
-        vk.CmdSetScissor(commandBuffer, 0, 1, in area);
-
-        var push = new PushConstants
-        {
-            OriginX = area.Offset.X,
-            OriginY = area.Offset.Y,
-            ScaleX = scaleX,
-            ScaleY = scaleY,
-            Options = (frame.HyperspaceColours ? 1u : 0u) | (frame.DashboardVisible ? 2u : 0u),
-        };
-        PackPalette(frame.SpacePalette, out push.SpacePalette0, out push.SpacePalette1);
-        PackPalette(frame.DashboardPalette, out push.DashPalette0, out push.DashPalette1);
-        vk.CmdPushConstants(commandBuffer, _pipelineLayout, ShaderStageFlags.FragmentBit, 0, (uint)sizeof(PushConstants), &push);
+        vk.CmdSetScissor(commandBuffer, 0, 1, in clip);
+        vk.CmdPushConstants(commandBuffer, _pipelineLayout, ShaderStageFlags.VertexBit | ShaderStageFlags.FragmentBit, 0, (uint)sizeof(LayoutConstants), &constants);
     }
 
-    private static void PackPalette(int[] palette, out uint low, out uint high)
+    private void DrawQuads(CommandBuffer commandBuffer, FrameResources resources, int first, int count)
     {
-        low = 0;
-        high = 0;
-        for (int i = 0; i < 8; i++)
+        if (count == 0)
         {
-            low |= (uint)(palette[i] & 15) << (i * 4);
-            high |= (uint)(palette[i + 8] & 15) << (i * 4);
+            return;
         }
+
+        var vk = _gpu.Vk;
+        vk.CmdBindPipeline(commandBuffer, PipelineBindPoint.Graphics, _quadPipeline);
+        ulong offset = 0;
+        var buffer = resources.Quads.Buffer;
+        vk.CmdBindVertexBuffers(commandBuffer, 0, 1, in buffer, in offset);
+        vk.CmdDraw(commandBuffer, 6, (uint)count, 0, (uint)first);
+    }
+
+    private void DrawLines(CommandBuffer commandBuffer, FrameResources resources, int first, int count)
+    {
+        if (count == 0)
+        {
+            return;
+        }
+
+        var vk = _gpu.Vk;
+        vk.CmdBindPipeline(commandBuffer, PipelineBindPoint.Graphics, _linePipeline);
+        ulong offset = 0;
+        var buffer = resources.Lines.Buffer;
+        vk.CmdBindVertexBuffers(commandBuffer, 0, 1, in buffer, in offset);
+        vk.CmdDraw(commandBuffer, 2, (uint)count, 0, (uint)first);
     }
 
     public void Dispose()
     {
-        foreach (var buffer in _vertexBuffers)
+        var vk = _gpu.Vk;
+        foreach (var frame in _frames)
         {
-            buffer.Dispose();
+            frame.Inks.Dispose();
+            frame.Quads.Dispose();
+            frame.Lines.Dispose();
         }
 
-        _gpu.Vk.DestroyPipeline(_gpu.Device, _linePipeline, null);
-        _gpu.Vk.DestroyPipeline(_gpu.Device, _trianglePipeline, null);
-        _gpu.Vk.DestroyPipelineLayout(_gpu.Device, _pipelineLayout, null);
+        vk.DestroyPipeline(_gpu.Device, _quadPipeline, null);
+        vk.DestroyPipeline(_gpu.Device, _linePipeline, null);
+        vk.DestroyPipelineLayout(_gpu.Device, _pipelineLayout, null);
+        vk.DestroyDescriptorPool(_gpu.Device, _descriptorPool, null);
+        vk.DestroyDescriptorSetLayout(_gpu.Device, _descriptorSetLayout, null);
+        _atlas.Dispose();
     }
 }

@@ -557,7 +557,7 @@ public sealed unsafe class VulkanRenderer : IDisposable
     private Rect2D WorldViewport(HudLayout layout)
     {
         int top = (int)layout.OriginY;
-        uint height = (uint)MathF.Round(Screen.SpaceViewHeight * layout.Scale);
+        uint height = (uint)MathF.Round(Hud.SpaceViewHeight * layout.Scale);
         return _framing == WorldFraming.Wide
             ? new Rect2D(new Offset2D(0, top), new Extent2D(_extent.Width, height))
             : new Rect2D(new Offset2D((int)layout.OriginX, top), new Extent2D((uint)MathF.Round(layout.Width), height));
@@ -578,7 +578,7 @@ public sealed unsafe class VulkanRenderer : IDisposable
             }
 
             float scale = HudLayout.For(_extent.Width, _extent.Height).Scale;
-            return Math.Max(0, (_extent.Width / scale - Screen.Width) / 2);
+            return Math.Max(0, (_extent.Width / scale - Hud.Width) / 2);
         }
     }
 
@@ -643,7 +643,7 @@ public sealed unsafe class VulkanRenderer : IDisposable
             var worldViewport = WorldViewport(layout);
             if (frameData.World != null)
             {
-                _world.Draw(commandBuffer, _currentFrame, frameData.World, worldViewport, layout.Scale, lineWidth, frameData.SpacePalette);
+                _world.Draw(commandBuffer, _currentFrame, frameData.World, worldViewport, layout.Scale, lineWidth, frameData.Palette);
             }
 
             // In the wide framing, the border (and the hangar) spans the whole

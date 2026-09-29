@@ -2,6 +2,7 @@ using EliteSharp.Data;
 using EliteSharp.Game.Ships;
 using EliteSharp.Input;
 using EliteSharp.Rendering.Scene;
+using EliteSharp.Rendering;
 
 namespace EliteSharp.Game;
 
@@ -38,7 +39,7 @@ public sealed partial class EliteGame
         ResetShipAndUniverse();
         ClearKeyLogger();
         ResetWorkspace();
-        SetSpacePalette(32);
+        SetSpacePalette(SpacePalette.Title);
         ClearScreen(13);
         _colour = Red;
         _viewType = 0;
@@ -272,7 +273,7 @@ public sealed partial class EliteGame
     /// <summary>HALL: draw the ships in the hangar, then the hangar itself.</summary>
     private void DrawHangar()
     {
-        SetSpacePalette(0);
+        SetSpacePalette(SpacePalette.Space);
         ClearScreen(0);
         int random = NextRandom();
         if ((random & 0x80) != 0)

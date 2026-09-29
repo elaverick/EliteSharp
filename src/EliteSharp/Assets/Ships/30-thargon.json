@@ -12,7 +12,7 @@
   "canisters": 0,
   "scoopedAs": "Alien Items",
   "killPoints": 0.12890625,
-  "colour": "0xFA",
-  "scannerColour": "0x3C",
+  "colour": "white",
+  "scannerColour": "cyan",
   "flags": ["hostile"]
 }

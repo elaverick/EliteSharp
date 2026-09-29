@@ -1,110 +1,129 @@
 namespace EliteSharp.Rendering.Vulkan;
 
 /// <summary>
-/// The GLSL shaders for the 2D HUD (text, the dashboard, the charts and the
-/// other 2D parts of the display), which reproduce the BBC's screen modes and
-/// palettes.
+/// The GLSL shaders for the HUD. Rectangles (characters, images and filled
+/// rectangles) and lines are drawn as instances, positioned in the HUD's
+/// layout units (the original's pixels), and coloured with inks, whose colours
+/// come from the current palette.
 /// </summary>
 internal static class HudShaders
 {
-    /// <summary>
-    /// The vertex shader. Vertices are in logical BBC pixels (256 x 248, with
-    /// the origin at the top-left).
-    /// </summary>
-    public const string VertexSource = """
+    /// <summary>The declarations shared by the HUD's shaders.</summary>
+    private static readonly string Common = $$"""
         #version 450
 
-        layout(location = 0) in vec2 inPosition;
-        layout(location = 1) in uint inColour;
-        layout(location = 2) in uint inFlags;
-
-        layout(location = 0) flat out uint outColour;
-        layout(location = 1) flat out uint outFlags;
-
-        void main()
+        // The colours of each ink, as a pattern of four packed RGBA8 colours (see Palette)
+        layout(set = 0, binding = 0) uniform Inks
         {
-            gl_Position = vec4(inPosition.x / 128.0 - 1.0, inPosition.y / 124.0 - 1.0, 0.5, 1.0);
-            outColour = inColour;
-            outFlags = inFlags;
+            uvec4 inks[{{Inks.Count}}];
+        };
+
+        // The atlas of the HUD's images, whose texels are inks (see HudAtlas)
+        layout(set = 0, binding = 1) uniform usampler2D atlas;
+
+        layout(push_constant) uniform Layout
+        {
+            vec2 size;           // the size of the area being drawn into, in layout units
+            vec2 patternOrigin;  // where the inks' patterns start, in framebuffer pixels
+            float pixelSize;     // the size of one of the original's pixels in framebuffer pixels
+        } layout_;
+
+        // Layout units to normalised device coordinates for the viewport
+        vec4 toClip(vec2 position)
+        {
+            return vec4(position / layout_.size * 2.0 - 1.0, 0.0, 1.0);
         }
         """;
 
     /// <summary>
-    /// The fragment shader. The colour is a BBC screen byte, which is decoded
-    /// into a ULA palette index exactly as the video ULA does for the pixel's
-    /// position within the byte, in mode 1 (four pixels per byte) for the space
-    /// view or mode 2 (two pixels per byte) for the dashboard, and the index is
-    /// then looked up in the relevant 16-entry palette. Pixels of logical colour
-    /// 0 are transparent, as they don't change screen memory when EOR'd.
+    /// The vertex shader for the HUD's rectangles. Each instance is a
+    /// rectangle on the screen and the region of the atlas to fill it with,
+    /// drawn as two triangles (six vertices).
     /// </summary>
-    public const string FragmentSource = """
-        #version 450
+    public static readonly string QuadVertex = Common + """
 
-        layout(location = 0) flat in uint inColour;
-        layout(location = 1) flat in uint inFlags;
+        layout(location = 0) in vec4 inRectangle;   // x, y, width, height
+        layout(location = 1) in vec4 inSource;      // the atlas region: x, y, width, height
+        layout(location = 2) in uint inInk;
 
-        layout(location = 0) out vec4 outColour;
+        layout(location = 0) out vec2 outTexel;
+        layout(location = 1) flat out vec4 outSource;
+        layout(location = 2) flat out uint outInk;
 
-        layout(push_constant) uniform PushConstants
-        {
-            vec2 origin;          // the top-left of the logical screen in framebuffer pixels
-            vec2 scale;           // framebuffer pixels per logical pixel
-            uvec2 spacePalette;   // 16 x 4-bit physical colours for the space view
-            uvec2 dashPalette;    // 16 x 4-bit physical colours for the dashboard
-            uint options;         // bit 0 = hyperspace effect, bit 1 = dashboard visible
-        } pc;
-
-        uint paletteEntry(uvec2 palette, uint index)
-        {
-            uint word = index < 8u ? palette.x : palette.y;
-            return (word >> ((index & 7u) * 4u)) & 15u;
-        }
+        const vec2 corners[6] = vec2[](
+            vec2(0.0, 0.0), vec2(1.0, 0.0), vec2(0.0, 1.0),
+            vec2(1.0, 0.0), vec2(1.0, 1.0), vec2(0.0, 1.0));
 
         void main()
         {
-            vec2 logical = (gl_FragCoord.xy - pc.origin) / pc.scale;
-            bool dashboard = (inFlags & 4u) != 0u;
+            vec2 corner = corners[gl_VertexIndex];
+            gl_Position = toClip(inRectangle.xy + corner * inRectangle.zw);
+            outTexel = inSource.xy + corner * inSource.zw;
+            outSource = inSource;
+            outInk = inInk;
+        }
+        """;
 
-            if (!dashboard && logical.y >= 192.0)
+    /// <summary>
+    /// The vertex shader for the HUD's lines. Each instance is a line (two
+    /// vertices), which is solid in its ink.
+    /// </summary>
+    public static readonly string LineVertex = Common + $$"""
+
+        layout(location = 0) in vec4 inEnds;        // x1, y1, x2, y2
+        layout(location = 1) in uint inInk;
+
+        layout(location = 0) out vec2 outTexel;
+        layout(location = 1) flat out vec4 outSource;
+        layout(location = 2) flat out uint outInk;
+
+        void main()
+        {
+            gl_Position = toClip(gl_VertexIndex == 0 ? inEnds.xy : inEnds.zw);
+
+            // Lines use the atlas's solid texel
+            outSource = vec4({{HudAtlas.Solid.X}}.0, {{HudAtlas.Solid.Y}}.0, 1.0, 1.0);
+            outTexel = outSource.xy + 0.5;
+            outInk = inInk;
+        }
+        """;
+
+    /// <summary>
+    /// The fragment shader. The texel from the atlas says which ink to use
+    /// (the instance's own ink, for characters and solid rectangles), and the
+    /// ink's pattern repeats across the screen, one colour per original pixel.
+    /// </summary>
+    public static readonly string Fragment = Common + $$"""
+
+        layout(location = 0) in vec2 inTexel;
+        layout(location = 1) flat in vec4 inSource;
+        layout(location = 2) flat in uint inInk;
+
+        layout(location = 0) out vec4 outColour;
+
+        void main()
+        {
+            // Stay inside the region, even at its very edges
+            ivec2 texel = ivec2(clamp(floor(inTexel), inSource.xy, inSource.xy + inSource.zw - 1.0));
+            uint ink = texelFetch(atlas, texel, 0).r;
+            if (ink == 0u)
             {
                 discard;
             }
 
-            if (logical.x < 0.0 || logical.x >= 256.0 || logical.y < 0.0 || logical.y >= 248.0)
+            if (ink == {{HudAtlas.QuadInk}}u)
+            {
+                ink = inInk;
+            }
+
+            uint pixel = uint(floor((gl_FragCoord.x - layout_.patternOrigin.x) / layout_.pixelSize)) & 3u;
+            vec4 colour = unpackUnorm4x8(inks[ink][pixel]);
+            if (colour.a == 0.0)
             {
                 discard;
             }
 
-            uint x = uint(logical.x);
-            bool mode2 = dashboard || (inFlags & 1u) != 0u || (pc.options & 1u) != 0u;
-            uint shift = mode2 ? ((x >> 1) & 1u) : (x & 3u);
-
-            // The ULA forms the palette index from bits 7, 5, 3 and 1 of the byte,
-            // shifting the byte left (with 1s coming in) for each pixel
-            uint value = ((inColour << shift) | ((1u << shift) - 1u)) & 255u;
-            uint index = ((value >> 4u) & 8u) | ((value >> 3u) & 4u) | ((value >> 2u) & 2u) | ((value >> 1u) & 1u);
-
-            // Work out whether this pixel has any bits set in screen memory
-            uint own;
-            if (mode2)
-            {
-                own = shift == 0u ? (inColour & 0xAAu) : (inColour & 0x55u);
-            }
-            else
-            {
-                own = inColour & (0x88u >> shift);
-            }
-
-            if (own == 0u)
-            {
-                discard;
-            }
-
-            uint physical = (dashboard || (pc.options & 1u) != 0u)
-                ? paletteEntry(pc.dashPalette, index)
-                : paletteEntry(pc.spacePalette, index);
-
-            outColour = vec4(float(physical & 1u), float((physical >> 1u) & 1u), float((physical >> 2u) & 1u), 1.0);
+            outColour = vec4(colour.rgb, 1.0);
         }
         """;
 }

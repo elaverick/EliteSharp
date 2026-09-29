@@ -1,4 +1,3 @@
-using EliteSharp.Data;
 using EliteSharp.Game.Ships;
 using EliteSharp.Rendering;
 
@@ -7,7 +6,8 @@ namespace EliteSharp.Game;
 /// <summary>
 /// The dashboard. The original updates the dashboard in screen memory as the
 /// values change; here the dashboard is built for each frame from the game's
-/// state, using the same positions, sizes and colours as the original.
+/// state, as the dashboard image with the bars, indicators and scanner drawn
+/// over it, in the same positions, sizes and colours as the original.
 /// </summary>
 public sealed partial class EliteGame
 {
@@ -15,71 +15,37 @@ public sealed partial class EliteGame
     private const int DashTop = 2 * CentreY;
 
     /// <summary>A ship's dot and stick on the scanner, as drawn by SCAN.</summary>
-    private readonly record struct ScannerBlip(int X, int DotY, int BaseY, int Colour);
+    private readonly record struct ScannerBlip(int X, int DotY, int BaseY, Ink Colour);
 
-    /// <summary>The ships currently shown on the scanner (SCAN draws and erases using EOR logic).</summary>
+    /// <summary>
+    /// The ships currently shown on the scanner. The original's SCAN draws and
+    /// erases each ship with EOR logic, and the game calls it once to draw a
+    /// ship and again to erase it, so here each call adds or removes the ship.
+    /// </summary>
     private readonly Dictionary<object, ScannerBlip> _blips = [];
 
     /// <summary>COMX, COMY, COMC: the compass dot's position and colour.</summary>
-    private int _compassX, _compassY, _compassColour;
+    private int _compassX, _compassY;
+
+    /// <summary>COMC: the compass dot's colour (or none).</summary>
+    private Ink _compassColour;
 
     /// <summary>mscol: the colour of each missile indicator.</summary>
-    private readonly int[] _missileColours = new int[5];
+    private readonly Ink[] _missileColours = new Ink[5];
 
     /// <summary>Whether the E.C.M. and space station bulbs are lit (they are toggled with EOR logic).</summary>
     private bool _ecmBulb, _stationBulb;
-
-    /// <summary>The dashboard bitmap, decoded into rectangles once.</summary>
-    private static readonly List<ScreenRect> DashboardBitmap = DecodeDashboard();
-
-    /// <summary>Decode the dashboard image (P.DIALS2P, in screen mode 2) into rectangles of identical bytes.</summary>
-    private static List<ScreenRect> DecodeDashboard()
-    {
-        var rects = new List<ScreenRect>();
-        var data = GameData.Dashboard;
-        for (int row = 0; row < data.Length / 512; row++)
-        {
-            for (int line = 0; line < 8; line++)
-            {
-                int column = 0;
-                while (column < 64)
-                {
-                    int value = data[row * 512 + column * 8 + line];
-                    if (value == 0)
-                    {
-                        column++;
-                        continue;
-                    }
-
-                    // Merge runs of identical bytes into one rectangle
-                    int start = column;
-                    while (column < 64 && data[row * 512 + column * 8 + line] == value)
-                    {
-                        column++;
-                    }
-
-                    rects.Add(new ScreenRect(start * 4, DashTop + row * 8 + line, (column - start) * 4, 1, value));
-                }
-            }
-        }
-
-        return rects;
-    }
 
     /// <summary>DIALS: update the dashboard (in the original this redraws the bars and the compass).</summary>
     private void UpdateDashboard() => UpdateCompass();
 
     /// <summary>Build the dashboard for the current frame.</summary>
-    private void DrawDashboard(FrameBuilder builder)
+    private void DrawDashboard(HudBuilder builder)
     {
-        const uint flags = VertexFlags.Dashboard | VertexFlags.Mode2;
-        foreach (var rect in DashboardBitmap)
-        {
-            builder.Rect(rect.X, rect.Y, rect.Width, rect.Height, rect.Colour, flags);
-        }
+        builder.Image(HudAtlas.Dashboard, 0, DashTop);
 
         // PZW2 and PZW: the colours for the bars, flashing if FLH is set
-        int danger = ((_mainLoopCounter & 8) & FlashingBars) != 0 ? DashboardGreen : DashboardRed;
+        var danger = ((_mainLoopCounter & 8) & FlashingBars) != 0 ? DashboardGreen : DashboardRed;
 
         // The right-hand side: speed, roll, pitch and energy banks
         DrawBar(builder, 208, 0, _speed >> 1, 14, danger, DashboardWhite);
@@ -122,30 +88,27 @@ public sealed partial class EliteGame
         // MSBAR: the missile indicators
         for (int x = 1; x <= 4; x++)
         {
-            int colour = _missileColours[x];
-            if (colour == 0)
+            var colour = _missileColours[x];
+            if (colour != Ink.None)
             {
-                continue;
+                // Three of the dashboard's pixels (six of the space view's) wide
+                builder.Rect(48 - 8 * x, DashTop + 48 + 1, 6, 5, colour);
             }
-
-            int left = 48 - 8 * x;
-            builder.Rect(left, DashTop + 48 + 1, 4, 5, colour, flags);
-            builder.Rect(left + 4, DashTop + 48 + 1, 2, 5, colour & 0b10101010, flags);
         }
 
         // ECBLB and SPBLB: the E.C.M. and space station bulbs
         if (_ecmBulb)
         {
-            DrawBulb(builder, 56, GameData.EcmBulb);
+            builder.Image(HudAtlas.EcmBulb, 56, DashTop + 40);
         }
 
         if (_stationBulb)
         {
-            DrawBulb(builder, 192, GameData.StationBulb);
+            builder.Image(HudAtlas.StationBulb, 192, DashTop + 40);
         }
 
         // DOT: the compass
-        if (_compassColour != 0)
+        if (_compassColour != Ink.None)
         {
             DrawDash(builder, _compassX, _compassY, _compassColour);
             if (_compassColour == DashboardYellow)
@@ -161,27 +124,28 @@ public sealed partial class EliteGame
             int length = blip.DotY - blip.BaseY;
             if (length > 0)
             {
-                builder.Rect(blip.X + 2, blip.BaseY, 2, length, blip.Colour, flags);
+                builder.Rect(blip.X + 2, blip.BaseY, 2, length, blip.Colour);
             }
             else if (length < 0)
             {
-                builder.Rect(blip.X + 2, blip.DotY + 1, 2, -length, blip.Colour, flags);
+                builder.Rect(blip.X + 2, blip.DotY + 1, 2, -length, blip.Colour);
             }
         }
     }
 
     /// <summary>
-    /// DIL: draw a bar of the given length (in mode 2 pixels, up to 16) on
-    /// the given dashboard row, in the danger colour if the value is at least
-    /// the threshold, or in the safe colour otherwise.
+    /// DIL: draw a bar of the given length (up to 16 of the dashboard's pixels,
+    /// which are two of the space view's wide) on the given dashboard row, in
+    /// the danger colour if the value is at least the threshold, or in the
+    /// safe colour otherwise.
     /// </summary>
-    private static void DrawBar(FrameBuilder builder, int x, int row, int value, int threshold, int danger, int safe)
+    private static void DrawBar(HudBuilder builder, int x, int row, int value, int threshold, Ink danger, Ink safe)
     {
-        int colour = value >= threshold || safe == 0 ? danger : safe;
+        var colour = value >= threshold || safe == Ink.None ? danger : safe;
         int length = Math.Min(value, 16);
         if (length > 0)
         {
-            builder.Rect(x, DashTop + row * 8 + 2, length * 2, 3, colour, VertexFlags.Dashboard | VertexFlags.Mode2);
+            builder.Rect(x, DashTop + row * 8 + 2, length * 2, 3, colour);
         }
     }
 
@@ -190,12 +154,12 @@ public sealed partial class EliteGame
     /// character block holds two pixels, and the bar is always drawn in the
     /// left pixel of the block (as in the original).
     /// </summary>
-    private static void DrawIndicator(FrameBuilder builder, int x, int row, int value)
+    private static void DrawIndicator(HudBuilder builder, int x, int row, int value)
     {
         int block = value >> 1;
         if (block < 8)
         {
-            builder.Rect(x + block * 4, DashTop + row * 8 + 1, 2, 4, DashboardWhite, VertexFlags.Dashboard | VertexFlags.Mode2);
+            builder.Rect(x + block * 4, DashTop + row * 8 + 1, 2, 4, DashboardWhite);
         }
     }
 
@@ -206,23 +170,10 @@ public sealed partial class EliteGame
         return (result >> 8) & 0xFF;
     }
 
-    /// <summary>Draw a bulb bitmap (two columns of eight mode 2 bytes) at the given x on dashboard row 5.</summary>
-    private static void DrawBulb(FrameBuilder builder, int x, byte[] bitmap)
+    /// <summary>CPIXK: draw a four-pixel dash (two of the dashboard's pixels) at (x, y).</summary>
+    private static void DrawDash(HudBuilder builder, int x, int y, Ink colour)
     {
-        for (int i = 0; i < 16; i++)
-        {
-            int value = bitmap[i];
-            if (value != 0)
-            {
-                builder.Rect(x + (i >> 3) * 4, DashTop + 40 + (i & 7), 4, 1, value, VertexFlags.Dashboard | VertexFlags.Mode2);
-            }
-        }
-    }
-
-    /// <summary>CPIXK: draw a four-pixel dash (two mode 2 pixels) at (x, y).</summary>
-    private static void DrawDash(FrameBuilder builder, int x, int y, int colour)
-    {
-        builder.Rect(x & 0xFE, y, 4, 1, colour, VertexFlags.Dashboard | VertexFlags.Mode2);
+        builder.Rect(x & 0xFE, y, 4, 1, colour);
     }
 
     /// <summary>SCAN: draw (or erase) the ship in INWK on the scanner.</summary>
@@ -233,7 +184,7 @@ public sealed partial class EliteGame
             return;
         }
 
-        int colour = ShipCatalogue.Get(_shipType).ScannerColour;
+        var colour = ShipCatalogue.Get(_shipType).ScannerColour;
         if (((_currentShip.XHi | _currentShip.YHi | _currentShip.ZHi) & 0b11000000) != 0)
         {
             return;
@@ -313,7 +264,7 @@ public sealed partial class EliteGame
     }
 
     /// <summary>MSBAR: set the colour of a missile indicator.</summary>
-    private void SetMissileIndicator(int missile, int colour)
+    private void SetMissileIndicator(int missile, Ink colour)
     {
         if (missile >= 1 && missile <= 4)
         {
@@ -326,19 +277,22 @@ public sealed partial class EliteGame
     {
         for (int x = 4; x > 0; x--)
         {
-            SetMissileIndicator(x, x <= _missiles ? DashboardGreen : 0);
+            SetMissileIndicator(x, x <= _missiles ? DashboardGreen : Ink.None);
         }
     }
 
     /// <summary>ABORT: disarm the missiles and update the indicators.</summary>
-    private void DisarmMissile(int colour) => SetMissileTarget(0xFF, colour);
+    private void DisarmMissile(Ink colour) => SetMissileTarget(0xFF, colour);
 
     /// <summary>ABORT2: set the missile target and update the current missile indicator.</summary>
-    private void SetMissileTarget(int target, int colour)
+    private void SetMissileTarget(int target, Ink colour)
     {
         _missileTarget = target;
         SetMissileIndicator(_missiles, colour);
-        _missileArmed = colour;
+
+        // MSAR is set to the indicator's colour, so it is non-zero unless the
+        // indicator is blank
+        _missileArmed = colour != Ink.None;
     }
 
     /// <summary>ECBLB: toggle the E.C.M. bulb.</summary>
@@ -348,5 +302,5 @@ public sealed partial class EliteGame
     private void ToggleStationBulb() => _stationBulb = !_stationBulb;
 
     /// <summary>DET1: show or hide the dashboard (by setting the number of character rows shown).</summary>
-    private void SetDashboardRows(int rows) => _screen.DashboardVisible = rows > 24;
+    private void SetDashboardRows(int rows) => _hud.DashboardVisible = rows > 24;
 }

@@ -126,6 +126,14 @@ SHIP_ORDER = [
 ]
 
 
+# The names of the ships' colours, from the original's colour bytes: shpcol
+# holds mode 1 bytes for the space view, and scacol mode 2 bytes for the
+# scanner (see Rendering/Ink.cs)
+SPACE_COLOURS = {0x0F: "yellow", 0xF0: "red", 0xFF: "cyan", 0xAF: "green", 0xFA: "white", 0xC9: "moray"}
+SCANNER_COLOURS = {0x00: "none", 0x03: "red", 0x0C: "green", 0x0F: "yellow", 0x30: "blue", 0x33: "magenta",
+                   0x3C: "cyan", 0x3F: "white"}
+
+
 def mem(addr):
     """Read a byte from the assembled game data at a BBC memory address."""
     return gen_data.BDATA_BYTES[addr - gen_data.BDATA_BASE]
@@ -347,8 +355,8 @@ def main():
             "canisters": byte0 & 15,
             "scoopedAs": MARKET_ITEMS[scooped + 1] if scooped else None,
             "killPoints": kwh[index] + kwl[index] / 256,
-            "colour": f"0x{shpcol[ship_type]:02X}",
-            "scannerColour": f"0x{scacol[ship_type]:02X}",
+            "colour": SPACE_COLOURS[shpcol[ship_type]],
+            "scannerColour": SCANNER_COLOURS[scacol[ship_type]],
             "flags": flags,
         }
         if attributes["scoopedAs"] is None:

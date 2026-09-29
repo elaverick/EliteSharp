@@ -11,7 +11,7 @@
   "targetRadius": 40,
   "canisters": 0,
   "killPoints": 0.58203125,
-  "colour": "0x0F",
-  "scannerColour": "0x0F",
+  "colour": "yellow",
+  "scannerColour": "yellow",
   "flags": []
 }

@@ -1,4 +1,5 @@
 using EliteSharp.Data;
+using EliteSharp.Rendering;
 
 namespace EliteSharp.Game;
 
@@ -12,7 +13,7 @@ public sealed partial class EliteGame
     private int SystemNumber;
 
     /// <summary>DOVDU19: change the palette of the space view (0 = space, 16 = chart, 32 = title, 48 = trade).</summary>
-    private void SetSpacePalette(int offset) => _screen.PaletteOffset = offset;
+    private void SetSpacePalette(SpacePalette palette) => _hud.Palette = palette;
 
     /// <summary>TRADEMODE: clear the screen and set up a trading screen with the given view type.</summary>
     private void ShowTradingScreen(int view)
@@ -24,7 +25,7 @@ public sealed partial class EliteGame
     /// <summary>TRADEMODE2: switch to the trading screen palette and cyan text.</summary>
     private void SetTradingPalette()
     {
-        SetSpacePalette(48);
+        SetSpacePalette(SpacePalette.Trade);
         _colour = Cyan;
     }
 
@@ -464,7 +465,7 @@ public sealed partial class EliteGame
     private void ShowLongRangeChart()
     {
         ClearScreen(64);
-        SetSpacePalette(16);
+        SetSpacePalette(SpacePalette.Chart);
         _colour = Cyan;
         _cursorX = 7;
         SelectFirstSystem();
@@ -481,7 +482,7 @@ public sealed partial class EliteGame
             int dotY = (_selectedSeeds[1] >> 1) + GalacticChartTop;
             foreach (var rect in PixelRects(dotX, dotY, dotSize, Yellow))
             {
-                _screen.DrawRect(rect.X, rect.Y, rect.Width, rect.Height, rect.Colour);
+                _hud.DrawRect(rect.X, rect.Y, rect.Width, rect.Height, rect.Ink);
             }
 
             NextSystem();
@@ -576,13 +577,20 @@ public sealed partial class EliteGame
         DrawCircle();
         foreach (var line in _circleLines)
         {
-            _screen.DrawLine(line.X1, line.Y1, line.X2, line.Y2, _colour);
+            _hud.DrawLine(line.X1, line.Y1, line.X2, line.Y2, _colour);
         }
     }
 
-    /// <summary>TT103: draw a small set of crosshairs on a chart at the selected system (EOR, so it also erases).</summary>
+    /// <summary>
+    /// TT103: draw a small set of crosshairs on a chart at the selected system.
+    /// The original draws these with EOR logic, and moves them by drawing them
+    /// again (to erase them), moving the selection, and drawing them once more;
+    /// here they are a group in the HUD, which is replaced each time it's drawn,
+    /// so the crosshairs are simply wherever the selection is.
+    /// </summary>
     private void DrawSmallCrosshairs()
     {
+        using var group = _hud.Group(HudGroup.ChartSelection);
         _colour = Green;
         if ((_viewType & 0x80) != 0)
         {
@@ -650,7 +658,7 @@ public sealed partial class EliteGame
     private void ShowShortRangeChart()
     {
         ClearScreen(128);
-        SetSpacePalette(16);
+        SetSpacePalette(SpacePalette.Chart);
         _colour = Cyan;
         _cursorX = 7;
         PrintTitle(190);

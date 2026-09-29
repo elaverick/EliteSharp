@@ -191,7 +191,7 @@ public sealed partial class EliteGame
         _inWitchspace = 0;
         _cabinTemperature = 0;
         _laserBeamPower = 0;
-        _missileArmed = 0;
+        _missileArmed = false;
         _view = 0;
         _laserPulseCounter = 0;
         _laserTemperature = 0;
@@ -518,7 +518,7 @@ public sealed partial class EliteGame
             _speed = 12;
             _legalStatus |= ContrabandBadness();
             _viewType = 0xFF;
-            DrawTunnelCircles();
+            DrawTunnelCircles(erase: true);
         }
 
         // NLUNCH

@@ -5,7 +5,7 @@ namespace EliteSharp.Rendering.Vulkan;
 
 /// <summary>
 /// The Vulkan device and the helpers that the renderers share for creating
-/// buffers and shader modules and uploading data to the GPU.
+/// buffers, textures and shader modules and uploading data to the GPU.
 /// </summary>
 public sealed unsafe class GpuDevice(Vk vk, PhysicalDevice physicalDevice, Device device, Queue queue, CommandPool commandPool)
 {
@@ -58,6 +58,100 @@ public sealed unsafe class GpuDevice(Vk vk, PhysicalDevice physicalDevice, Devic
         });
 
         return buffer;
+    }
+
+    /// <summary>
+    /// Create a texture of one-byte unsigned integer texels containing the
+    /// given data (row by row), by copying it through a staging buffer, ready
+    /// for shaders to read with texelFetch.
+    /// </summary>
+    public GpuTexture CreateByteTexture(int width, int height, ReadOnlySpan<byte> texels)
+    {
+        const Format format = Format.R8Uint;
+        var imageInfo = new ImageCreateInfo
+        {
+            SType = StructureType.ImageCreateInfo,
+            ImageType = ImageType.Type2D,
+            Format = format,
+            Extent = new Extent3D((uint)width, (uint)height, 1),
+            MipLevels = 1,
+            ArrayLayers = 1,
+            Samples = SampleCountFlags.Count1Bit,
+            Tiling = ImageTiling.Optimal,
+            Usage = ImageUsageFlags.SampledBit | ImageUsageFlags.TransferDstBit,
+            SharingMode = SharingMode.Exclusive,
+            InitialLayout = ImageLayout.Undefined,
+        };
+        Check(Vk.CreateImage(Device, in imageInfo, null, out var image), "vkCreateImage");
+
+        Vk.GetImageMemoryRequirements(Device, image, out var requirements);
+        var memoryInfo = new MemoryAllocateInfo
+        {
+            SType = StructureType.MemoryAllocateInfo,
+            AllocationSize = requirements.Size,
+            MemoryTypeIndex = FindMemoryType(requirements.MemoryTypeBits, MemoryPropertyFlags.DeviceLocalBit),
+        };
+        Check(Vk.AllocateMemory(Device, in memoryInfo, null, out var memory), "vkAllocateMemory");
+        Check(Vk.BindImageMemory(Device, image, memory, 0), "vkBindImageMemory");
+
+        using var staging = CreateHostBuffer((ulong)texels.Length, BufferUsageFlags.TransferSrcBit);
+        texels.CopyTo(new Span<byte>(staging.Mapped, texels.Length));
+
+        var range = new ImageSubresourceRange(ImageAspectFlags.ColorBit, 0, 1, 0, 1);
+        RunOnce(commandBuffer =>
+        {
+            void Transition(ImageLayout from, ImageLayout to, AccessFlags srcAccess, AccessFlags dstAccess, PipelineStageFlags srcStage, PipelineStageFlags dstStage)
+            {
+                var barrier = new ImageMemoryBarrier
+                {
+                    SType = StructureType.ImageMemoryBarrier,
+                    OldLayout = from,
+                    NewLayout = to,
+                    SrcAccessMask = srcAccess,
+                    DstAccessMask = dstAccess,
+                    SrcQueueFamilyIndex = Vk.QueueFamilyIgnored,
+                    DstQueueFamilyIndex = Vk.QueueFamilyIgnored,
+                    Image = image,
+                    SubresourceRange = range,
+                };
+                Vk.CmdPipelineBarrier(commandBuffer, srcStage, dstStage, 0, 0, null, 0, null, 1, in barrier);
+            }
+
+            Transition(ImageLayout.Undefined, ImageLayout.TransferDstOptimal, 0, AccessFlags.TransferWriteBit,
+                PipelineStageFlags.TopOfPipeBit, PipelineStageFlags.TransferBit);
+            var region = new BufferImageCopy
+            {
+                ImageSubresource = new ImageSubresourceLayers(ImageAspectFlags.ColorBit, 0, 0, 1),
+                ImageExtent = new Extent3D((uint)width, (uint)height, 1),
+            };
+            Vk.CmdCopyBufferToImage(commandBuffer, staging.Buffer, image, ImageLayout.TransferDstOptimal, 1, in region);
+            Transition(ImageLayout.TransferDstOptimal, ImageLayout.ShaderReadOnlyOptimal, AccessFlags.TransferWriteBit, AccessFlags.ShaderReadBit,
+                PipelineStageFlags.TransferBit, PipelineStageFlags.FragmentShaderBit);
+        });
+
+        var viewInfo = new ImageViewCreateInfo
+        {
+            SType = StructureType.ImageViewCreateInfo,
+            Image = image,
+            ViewType = ImageViewType.Type2D,
+            Format = format,
+            SubresourceRange = range,
+        };
+        Check(Vk.CreateImageView(Device, in viewInfo, null, out var view), "vkCreateImageView");
+
+        // Integer textures can only be read without filtering
+        var samplerInfo = new SamplerCreateInfo
+        {
+            SType = StructureType.SamplerCreateInfo,
+            MagFilter = Filter.Nearest,
+            MinFilter = Filter.Nearest,
+            MipmapMode = SamplerMipmapMode.Nearest,
+            AddressModeU = SamplerAddressMode.ClampToEdge,
+            AddressModeV = SamplerAddressMode.ClampToEdge,
+            AddressModeW = SamplerAddressMode.ClampToEdge,
+        };
+        Check(Vk.CreateSampler(Device, in samplerInfo, null, out var sampler), "vkCreateSampler");
+        return new GpuTexture(this, image, memory, view, sampler);
     }
 
     private GpuBuffer CreateBuffer(ulong size, BufferUsageFlags usage, MemoryPropertyFlags properties, bool map)
@@ -160,6 +254,22 @@ public sealed unsafe class GpuBuffer(GpuDevice gpu, VkBuffer buffer, DeviceMemor
         }
 
         gpu.Vk.DestroyBuffer(gpu.Device, Buffer, null);
+        gpu.Vk.FreeMemory(gpu.Device, memory, null);
+    }
+}
+
+/// <summary>A texture on the GPU: its image, memory, view and sampler.</summary>
+public sealed unsafe class GpuTexture(GpuDevice gpu, Image image, DeviceMemory memory, ImageView view, Sampler sampler) : IDisposable
+{
+    public ImageView View { get; } = view;
+
+    public Sampler Sampler { get; } = sampler;
+
+    public void Dispose()
+    {
+        gpu.Vk.DestroySampler(gpu.Device, Sampler, null);
+        gpu.Vk.DestroyImageView(gpu.Device, View, null);
+        gpu.Vk.DestroyImage(gpu.Device, image, null);
         gpu.Vk.FreeMemory(gpu.Device, memory, null);
     }
 }

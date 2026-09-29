@@ -2,14 +2,15 @@ namespace EliteSharp.Rendering.Vulkan;
 
 /// <summary>
 /// The GLSL shaders for the 3D world. All of them share the per-frame uniforms
-/// (the camera's view-projection matrix and the viewport) and the per-draw push
-/// constants (the model matrix, and parameters that depend on what is being
-/// drawn), which are declared once here and included in each shader.
+/// (the camera's view-projection matrix, the viewport, and the colours of the
+/// inks in the current palette) and the per-draw push constants (the model
+/// matrix, the ink, and parameters that depend on what is being drawn), which
+/// are declared once here and included in each shader.
 /// </summary>
 internal static class WorldShaders
 {
     /// <summary>The declarations shared by all the world shaders.</summary>
-    private const string Common = """
+    private static readonly string Common = $$"""
         #version 450
 
         // Per-frame data
@@ -19,6 +20,8 @@ internal static class WorldShaders
             vec4 viewport;        // x, y = the viewport's top-left in framebuffer pixels,
                                   // z = the size of one of the original's pixels, w = unused
             vec4 viewportSize;    // x, y = the viewport's size in framebuffer pixels
+            uvec4 inks[{{Inks.Count}}];     // the colours of each ink, as a pattern of four
+                                  // packed RGBA8 colours (see Palette)
         } frame;
 
         // Per-draw data
@@ -26,8 +29,16 @@ internal static class WorldShaders
         {
             mat4 model;           // model space to world space
             vec4 parameters;      // meaning depends on the shader
-            uvec4 colours;        // four packed RGBA8 colours (a colour pattern, or shader-specific colours)
+            uvec4 inks;           // x = the ink to draw in (the sun uses x and y)
         } draw;
+
+        // The colour of an ink at a position on the screen: the ink's pattern
+        // repeats across the screen, one colour per pixel of the original's
+        vec4 inkColour(uint ink, vec2 fragCoord)
+        {
+            uint pixel = uint(floor((fragCoord.x - frame.viewport.x) / frame.viewport.z)) & 3u;
+            return unpackUnorm4x8(frame.inks[ink][pixel]);
+        }
         """;
 
     /// <summary>
@@ -35,15 +46,15 @@ internal static class WorldShaders
     /// laser beams, which are line lists. Which parts of the lines are hidden
     /// is left to the depth test.
     /// </summary>
-    public const string WireVertex = Common + """
+    public static readonly string WireVertex = Common + """
 
         layout(location = 0) in vec3 inPosition;
 
-        layout(location = 0) flat out uvec4 outColours;
+        layout(location = 0) flat out uint outInk;
 
         void main()
         {
-            outColours = draw.colours;
+            outInk = draw.inks.x;
             gl_Position = frame.viewProjection * (draw.model * vec4(inPosition, 1.0));
         }
         """;
@@ -57,15 +68,15 @@ internal static class WorldShaders
     /// changing its outline, so the lines drawn on the surface (and details
     /// drawn just inside it) pass the depth test.
     /// </summary>
-    public const string SurfaceVertex = Common + """
+    public static readonly string SurfaceVertex = Common + """
 
         layout(location = 0) in vec3 inPosition;
 
-        layout(location = 0) flat out uvec4 outColours;
+        layout(location = 0) flat out uint outInk;
 
         void main()
         {
-            outColours = draw.colours;
+            outInk = draw.inks.x;
             vec3 world = (draw.model * vec4(inPosition, 1.0)).xyz;
             float distance = length(world);
             if (distance > 0.0)
@@ -78,20 +89,18 @@ internal static class WorldShaders
         """;
 
     /// <summary>
-    /// The fragment shader for colour patterns: the four colours repeat across
-    /// the screen, one per original pixel, as the pixels of a mode 1 screen
-    /// byte do. Transparent pixels are discarded.
+    /// The fragment shader for inks, whose patterns repeat across the screen,
+    /// one colour per original pixel. Transparent pixels are discarded.
     /// </summary>
-    public const string PatternFragment = Common + """
+    public static readonly string InkFragment = Common + """
 
-        layout(location = 0) flat in uvec4 inColours;
+        layout(location = 0) flat in uint inInk;
 
         layout(location = 0) out vec4 outColour;
 
         void main()
         {
-            uint pixel = uint(floor((gl_FragCoord.x - frame.viewport.x) / frame.viewport.z)) & 3u;
-            vec4 colour = unpackUnorm4x8(inColours[pixel]);
+            vec4 colour = inkColour(inInk, gl_FragCoord.xy);
             if (colour.a == 0.0)
             {
                 discard;
@@ -107,13 +116,13 @@ internal static class WorldShaders
     /// particle's projected position (as the original plots its dots). Each
     /// particle is an instance, and each instance is six vertices.
     /// </summary>
-    public const string ParticleVertex = Common + """
+    public static readonly string ParticleVertex = Common + """
 
         layout(location = 0) in vec3 inPosition;
         layout(location = 1) in vec2 inSize;          // in original pixels
-        layout(location = 2) in uvec4 inColours;
+        layout(location = 2) in uint inInk;
 
-        layout(location = 0) flat out uvec4 outColours;
+        layout(location = 0) flat out uint outInk;
 
         const vec2 corners[6] = vec2[](
             vec2(0.0, 0.0), vec2(1.0, 0.0), vec2(0.0, 1.0),
@@ -125,7 +134,7 @@ internal static class WorldShaders
             vec2 offset = corners[gl_VertexIndex] * inSize * frame.viewport.z * 2.0 / frame.viewportSize.xy;
             clip.xy += offset * clip.w;
             gl_Position = clip;
-            outColours = inColours;
+            outInk = inInk;
         }
         """;
 
@@ -135,7 +144,7 @@ internal static class WorldShaders
     /// by parameters.x to leave room for the fringe), and this passes on the
     /// position within the disc in units of the sun's radius.
     /// </summary>
-    public const string SunVertex = Common + """
+    public static readonly string SunVertex = Common + """
 
         layout(location = 0) in vec3 inPosition;
 
@@ -153,11 +162,11 @@ internal static class WorldShaders
     /// drawn in rows of original pixels, each row extended by a random amount
     /// (up to parameters.z pixels) to give the flickering fringe, and filled
     /// with the original's pattern of alternating red and yellow pixels, which
-    /// shifts by a pixel every two rows. colours.x and colours.y are the red
-    /// and yellow, parameters.y is the random seed for the fringe, and
+    /// shifts by a pixel every two rows. inks.x and inks.y are the red and
+    /// yellow inks, parameters.y is the random seed for the fringe, and
     /// parameters.w is the sun's radius in original pixels.
     /// </summary>
-    public const string SunFragment = Common + """
+    public static readonly string SunFragment = Common + """
 
         layout(location = 0) in vec2 inDisc;
 
@@ -192,7 +201,7 @@ internal static class WorldShaders
             }
 
             bool red = ((column + (row >> 1)) & 1u) == 0u;
-            outColour = vec4(unpackUnorm4x8(red ? draw.colours.x : draw.colours.y).rgb, 1.0);
+            outColour = vec4(unpackUnorm4x8(frame.inks[red ? draw.inks.x : draw.inks.y][0]).rgb, 1.0);
         }
         """;
 }

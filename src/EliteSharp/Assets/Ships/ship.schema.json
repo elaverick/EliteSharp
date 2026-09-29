@@ -46,12 +46,12 @@
       "type": "number", "minimum": 0, "maximum": 255.99609375, "multipleOf": 0.00390625
     },
     "colour": {
-      "description": "The ship's colour in the space view, as a BBC mode 1 screen byte (e.g. \"0xFF\" for colour 3 in all four pixels).",
-      "type": "string", "pattern": "^0x[0-9A-Fa-f]{2}$"
+      "description": "The ship's colour in the space view (green is cyan and yellow stripes, white is cyan and red stripes, and moray is the Moray's pattern of cyan, red, a gap and yellow).",
+      "enum": ["yellow", "red", "cyan", "green", "white", "moray"]
     },
     "scannerColour": {
-      "description": "The colour of the ship on the scanner, as a BBC mode 2 screen byte.",
-      "type": "string", "pattern": "^0x[0-9A-Fa-f]{2}$"
+      "description": "The colour of the ship on the scanner (none for a ship that doesn't show up).",
+      "enum": ["none", "red", "green", "yellow", "blue", "magenta", "cyan", "white"]
     },
     "flags": {
       "description": "The ship's default behaviour flags (NEWB).",

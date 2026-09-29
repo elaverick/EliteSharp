@@ -1,5 +1,6 @@
 using EliteSharp.Data;
 using EliteSharp.Game.Ships;
+using EliteSharp.Rendering;
 
 namespace EliteSharp.Game;
 
@@ -733,7 +734,7 @@ public sealed partial class EliteGame
             MakeHostile(target.Type, target);
         }
 
-        DisarmMissile(0);
+        DisarmMissile(Ink.None);
         _missiles--;
         MakeSound(SoundLaunch);
 

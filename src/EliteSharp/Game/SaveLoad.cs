@@ -332,7 +332,7 @@ public sealed partial class EliteGame
     /// </summary>
     private bool ReadLine()
     {
-        int savedColour = _colour;
+        var savedColour = _colour;
         _colour = Red;
         Delay(8);
         var input = new StringBuilder();

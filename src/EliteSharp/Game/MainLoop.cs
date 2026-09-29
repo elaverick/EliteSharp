@@ -1,4 +1,5 @@
 using EliteSharp.Game.Ships;
+using EliteSharp.Rendering;
 
 namespace EliteSharp.Game;
 
@@ -15,7 +16,7 @@ public sealed partial class EliteGame
         _soundDisabled = 0;
         FilingSystemToggle = 0;
         JoystickEnabled = 0;
-        _compassColour = 0;
+        _compassColour = Ink.None;
         Array.Clear(_missileColours);
 
         RestoreDefaultCommander();
@@ -543,9 +544,10 @@ public sealed partial class EliteGame
             return;
         }
 
-        PrintHyperspaceCountdown(_hyperspaceCountdown - 1);
+        // Erase the old count (by printing it again) and print the new one
+        EraseText(() => PrintHyperspaceCountdown(_hyperspaceCountdown));
         _hyperspaceTicks = 5;
-        PrintHyperspaceCountdown(_hyperspaceCountdown);
+        PrintHyperspaceCountdown(_hyperspaceCountdown - 1);
         _hyperspaceCountdown--;
         if (_hyperspaceCountdown != 0)
         {
@@ -594,7 +596,12 @@ public sealed partial class EliteGame
         SetDashboardRows(24);
         ClearScreen(13);
         _viewType = 0;
-        DrawBorderBox();
+
+        // The original draws the border box again, which erases it (with EOR
+        // logic), as the death screen has no border
+        _cursorY = 1;
+        _cursorX = 1;
+        _hud.Border = false;
         CreateStardust();
         _colour = Cyan;
         _cursorX = 12;

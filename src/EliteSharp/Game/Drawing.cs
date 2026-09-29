@@ -42,8 +42,8 @@ public sealed partial class EliteGame
     /// <summary>XX4: the distance of the ship, used for level of detail.</summary>
     private int _shipDistance;
 
-    /// <summary>COL: the current colour byte.</summary>
-    private int _colour;
+    /// <summary>COL: the current colour.</summary>
+    private Ink _colour;
 
     // ------------------------------------------------------------------------
     // LL9: drawing ships
@@ -730,7 +730,7 @@ public sealed partial class EliteGame
             for (int n = particleCount; n >= 0; n--)
             {
                 int random = NextCloudRandom();
-                _colour = GameData.ExplosionColours[random & 3];
+                _colour = ExplosionColours[random & 3];
 
                 // The original skips the x-coordinate if the y-coordinate is off
                 // the bottom of the screen, but still takes a random number
@@ -793,7 +793,7 @@ public sealed partial class EliteGame
     /// PIXEL: the rectangles for a dot at (x, y), which is two pixels wide and
     /// one or two pixels high depending on the distance in zz.
     /// </summary>
-    private static IEnumerable<ScreenRect> PixelRects(int x, int y, int distance, int colour)
+    private static IEnumerable<ScreenRect> PixelRects(int x, int y, int distance, Ink colour)
     {
         // TWOS2 keeps the two pixels within the byte
         int left = (x & 3) == 3 ? x - 1 : x;
@@ -992,7 +992,7 @@ public sealed partial class EliteGame
     private readonly object _sunOwner = new();
 
     /// <summary>The orange colours for each pixel row of the sun.</summary>
-    private static readonly int[] Orange = [0b10100101, 0b10100101, 0b01011010, 0b01011010];
+    private static readonly Ink[] Orange = [Ink.SunStripes, Ink.SunStripes, Ink.SunStripesShifted, Ink.SunStripesShifted];
 
     /// <summary>
     /// SUN: draw the sun, with its fringe of random widths. The 3D world draws
@@ -1121,7 +1121,7 @@ public sealed partial class EliteGame
         {
             if (_sunHalfWidths[row] != 0 && SunEdges(centre, _sunHalfWidths[row], out int x1, out int x2) && x2 > x1)
             {
-                _screen.DrawRect(x1, row, x2 - x1, 1, Orange[row & 3]);
+                _hud.DrawRect(x1, row, x2 - x1, 1, Orange[row & 3]);
             }
         }
     }
@@ -1171,13 +1171,14 @@ public sealed partial class EliteGame
     }
 
     /// <summary>
-    /// HFS1: draw the tunnel as eight sets of concentric circles (using EOR
-    /// logic, so drawing it again erases it). The circles carry on out to the
-    /// sides of a space view that is wider than the original's.
+    /// HFS1: draw the tunnel as eight sets of concentric circles, or erase it
+    /// (the original draws it with EOR logic, and erases it by drawing it
+    /// again). The circles carry on out to the sides of a space view that is
+    /// wider than the original's.
     /// </summary>
-    private void DrawTunnelCircles()
+    private void DrawTunnelCircles(bool erase = false)
     {
-        float sideMargin = _screen.SideMargin;
+        float sideMargin = _hud.SideMargin;
         _circleMargin = (int)sideMargin;
         _circleX = CentreX;
         _circleY = CentreY;
@@ -1191,7 +1192,14 @@ public sealed partial class EliteGame
                 DrawCircle();
                 foreach (var line in _circleLines)
                 {
-                    _screen.DrawWideLine(line.X1, line.Y1, line.X2, line.Y2, _colour, sideMargin);
+                    if (erase)
+                    {
+                        _hud.EraseWideLine(line.X1, line.Y1, line.X2, line.Y2, _colour);
+                    }
+                    else
+                    {
+                        _hud.DrawWideLine(line.X1, line.Y1, line.X2, line.Y2, _colour, sideMargin);
+                    }
                 }
 
                 // The original draws the circles slowly enough for them to be

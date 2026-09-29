@@ -11,7 +11,7 @@
   "targetRadius": 99,
   "canisters": 0,
   "killPoints": 0.1953125,
-  "colour": "0xFF",
-  "scannerColour": "0x30",
+  "colour": "cyan",
+  "scannerColour": "blue",
   "flags": ["trader", "hostile"]
 }

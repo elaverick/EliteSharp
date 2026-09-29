@@ -22,6 +22,9 @@ public sealed unsafe class WorldRenderer : IDisposable
         public Matrix4x4 ViewProjection;
         public Vector4 Viewport;
         public Vector4 ViewportSize;
+
+        /// <summary>The colours of each ink (see <see cref="Palette.Patterns"/>).</summary>
+        public fixed uint Inks[Rendering.Inks.Count * Palette.PatternLength];
     }
 
     /// <summary>The per-draw push constants (see WorldShaders.Common).</summary>
@@ -30,7 +33,7 @@ public sealed unsafe class WorldRenderer : IDisposable
     {
         public Matrix4x4 Model;
         public Vector4 Parameters;
-        public uint Colour0, Colour1, Colour2, Colour3;
+        public uint Ink, SecondInk, Unused1, Unused2;
     }
 
     /// <summary>A particle as sent to the GPU (one instance per particle).</summary>
@@ -39,7 +42,7 @@ public sealed unsafe class WorldRenderer : IDisposable
     {
         public Vector3 Position;
         public Vector2 Size;
-        public uint Colour0, Colour1, Colour2, Colour3;
+        public uint Ink;
     }
 
     /// <summary>The per-frame resources for each frame in flight.</summary>
@@ -91,10 +94,6 @@ public sealed unsafe class WorldRenderer : IDisposable
     /// </summary>
     private const float MinimumShipSize = 2;
 
-    /// <summary>The original's pattern of red and yellow pixels for the sun (the first row of <c>Orange</c> in SUN).</summary>
-    private const int SunColourByte = 0b10100101;
-
-    private static readonly uint Black = 0xFF000000;
 
     private readonly GpuDevice _gpu;
     private readonly MeshLibrary _meshes;
@@ -154,7 +153,7 @@ public sealed unsafe class WorldRenderer : IDisposable
         // The pipelines
         var wireVertex = gpu.CreateShaderModule(ShaderCompiler.Compile(WorldShaders.WireVertex, ShaderKind.VertexShader, "wire.vert"));
         var surfaceVertex = gpu.CreateShaderModule(ShaderCompiler.Compile(WorldShaders.SurfaceVertex, ShaderKind.VertexShader, "surface.vert"));
-        var patternFragment = gpu.CreateShaderModule(ShaderCompiler.Compile(WorldShaders.PatternFragment, ShaderKind.FragmentShader, "pattern.frag"));
+        var patternFragment = gpu.CreateShaderModule(ShaderCompiler.Compile(WorldShaders.InkFragment, ShaderKind.FragmentShader, "ink.frag"));
         var sunVertex = gpu.CreateShaderModule(ShaderCompiler.Compile(WorldShaders.SunVertex, ShaderKind.VertexShader, "sun.vert"));
         var sunFragment = gpu.CreateShaderModule(ShaderCompiler.Compile(WorldShaders.SunFragment, ShaderKind.FragmentShader, "sun.frag"));
         var particleVertex = gpu.CreateShaderModule(ShaderCompiler.Compile(WorldShaders.ParticleVertex, ShaderKind.VertexShader, "particle.vert"));
@@ -207,7 +206,7 @@ public sealed unsafe class WorldRenderer : IDisposable
             [
                 new(0, 0, Format.R32G32B32Sfloat, 0),
                 new(1, 0, Format.R32G32Sfloat, 12),
-                new(2, 0, Format.R32G32B32A32Uint, 20),
+                new(2, 0, Format.R32Uint, 20),
             ],
             Depth = DepthMode.Test,
         });
@@ -253,21 +252,20 @@ public sealed unsafe class WorldRenderer : IDisposable
     /// <summary>
     /// Record the commands to draw the world into the given viewport, where
     /// pixelSize is the size of one of the original's pixels (1/192 of the
-    /// space view's height), and palette is the current space view palette.
+    /// space view's height), and palette says what the inks look like.
     /// </summary>
-    public void Draw(CommandBuffer commandBuffer, int frameIndex, SceneFrame scene, Rect2D viewport, float pixelSize, float lineWidth, int[] palette)
+    public void Draw(CommandBuffer commandBuffer, int frameIndex, SceneFrame scene, Rect2D viewport, float pixelSize, float lineWidth, Palette palette)
     {
         var vk = _gpu.Vk;
         var frame = _frames[frameIndex];
         float aspect = (float)viewport.Extent.Width / viewport.Extent.Height;
         var viewProjection = scene.Camera.ViewMatrix * Camera.Projection(aspect);
 
-        *(FrameUniforms*)frame.Uniforms.Mapped = new FrameUniforms
-        {
-            ViewProjection = viewProjection,
-            Viewport = new Vector4(viewport.Offset.X, viewport.Offset.Y, pixelSize, 0),
-            ViewportSize = new Vector4(viewport.Extent.Width, viewport.Extent.Height, 0, 0),
-        };
+        var uniforms = (FrameUniforms*)frame.Uniforms.Mapped;
+        uniforms->ViewProjection = viewProjection;
+        uniforms->Viewport = new Vector4(viewport.Offset.X, viewport.Offset.Y, pixelSize, 0);
+        uniforms->ViewportSize = new Vector4(viewport.Extent.Width, viewport.Extent.Height, 0, 0);
+        palette.Patterns.CopyTo(new Span<uint>(uniforms->Inks, Rendering.Inks.Count * Palette.PatternLength));
 
         var vkViewport = new Viewport(viewport.Offset.X, viewport.Offset.Y, viewport.Extent.Width, viewport.Extent.Height, 0, 1);
         vk.CmdSetViewport(commandBuffer, 0, 1, in vkViewport);
@@ -280,11 +278,11 @@ public sealed unsafe class WorldRenderer : IDisposable
         // Solid objects first, so they are in the depth buffer before the
         // lines and particles are tested against it
         DrawPlanetOccluders(commandBuffer, scene);
-        DrawSuns(commandBuffer, scene, pixelSize, palette);
-        DrawShips(commandBuffer, scene, palette);
-        DrawPlanetLines(commandBuffer, scene, palette);
-        DrawLines(commandBuffer, frame, scene, palette);
-        DrawParticles(commandBuffer, frame, scene, palette, aspect);
+        DrawSuns(commandBuffer, scene, pixelSize);
+        DrawShips(commandBuffer, scene);
+        DrawPlanetLines(commandBuffer, scene);
+        DrawLines(commandBuffer, frame, scene);
+        DrawParticles(commandBuffer, frame, scene, aspect);
     }
 
     private void BindMeshes(CommandBuffer commandBuffer, Pipeline pipeline)
@@ -305,15 +303,12 @@ public sealed unsafe class WorldRenderer : IDisposable
         _gpu.Vk.CmdDraw(commandBuffer, mesh.VertexCount, 1, mesh.FirstVertex, 0);
     }
 
-    /// <summary>Draw constants for geometry in the given colour pattern.</summary>
-    private static DrawConstants Constants(Matrix4x4 model, uint[] colours, Vector4 parameters = default) => new()
+    /// <summary>Draw constants for geometry in the given ink.</summary>
+    private static DrawConstants Constants(Matrix4x4 model, Ink ink, Vector4 parameters = default) => new()
     {
         Model = model,
         Parameters = parameters,
-        Colour0 = colours[0],
-        Colour1 = colours[1],
-        Colour2 = colours[2],
-        Colour3 = colours[3],
+        Ink = (uint)ink,
     };
 
     /// <summary>A transform that maps the unit circle (or disc) onto a circle with the given centre and axes.</summary>
@@ -363,16 +358,15 @@ public sealed unsafe class WorldRenderer : IDisposable
         }
 
         BindMeshes(commandBuffer, _surfacePipeline);
-        uint[] black = [Black, Black, Black, Black];
         foreach (var planet in scene.Planets)
         {
             var model = Matrix4x4.CreateScale(planet.Radius * PlanetOccluderScale) * Matrix4x4.CreateTranslation(planet.Centre);
-            DrawMesh(commandBuffer, _meshes.UnitSphere, Constants(model, black));
+            DrawMesh(commandBuffer, _meshes.UnitSphere, Constants(model, Ink.Black));
         }
     }
 
     /// <summary>Draw the outline of each planet, plus its meridian and equator, or its crater.</summary>
-    private void DrawPlanetLines(CommandBuffer commandBuffer, SceneFrame scene, int[] palette)
+    private void DrawPlanetLines(CommandBuffer commandBuffer, SceneFrame scene)
     {
         if (scene.Planets.Count == 0)
         {
@@ -382,10 +376,10 @@ public sealed unsafe class WorldRenderer : IDisposable
         BindMeshes(commandBuffer, _wirePipeline);
         foreach (var planet in scene.Planets)
         {
-            var colours = ColourPattern.Resolve(planet.Colour, palette);
+            var ink = planet.Colour;
             if (Silhouette(planet.Centre, planet.Radius, out var centre, out float radius, out var axisX, out var axisY))
             {
-                DrawMesh(commandBuffer, _meshes.UnitCircle, Constants(CircleTransform(centre, axisX * radius, axisY * radius), colours));
+                DrawMesh(commandBuffer, _meshes.UnitCircle, Constants(CircleTransform(centre, axisX * radius, axisY * radius), ink));
             }
 
             if (!planet.ShowFeatures)
@@ -415,27 +409,26 @@ public sealed unsafe class WorldRenderer : IDisposable
                 Vector3 Reflect(Vector3 v) => v - 2 * Vector3.Dot(v, lineOfSight) * lineOfSight;
                 var craterCentre = planet.Centre + Reflect(roof) * (r * CraterDistance);
                 var model = CircleTransform(craterCentre, Reflect(nose) * (r * CraterRadius), Reflect(side) * (r * CraterRadius));
-                DrawMesh(commandBuffer, _meshes.UnitCircle, Constants(model, colours));
+                DrawMesh(commandBuffer, _meshes.UnitCircle, Constants(model, ink));
             }
             else
             {
                 // The meridian is the great circle through nosev and roofv, and
                 // the equator is the great circle through nosev and sidev
-                DrawMesh(commandBuffer, _meshes.UnitCircle, Constants(CircleTransform(planet.Centre, nose * r, roof * r), colours));
-                DrawMesh(commandBuffer, _meshes.UnitCircle, Constants(CircleTransform(planet.Centre, nose * r, side * r), colours));
+                DrawMesh(commandBuffer, _meshes.UnitCircle, Constants(CircleTransform(planet.Centre, nose * r, roof * r), ink));
+                DrawMesh(commandBuffer, _meshes.UnitCircle, Constants(CircleTransform(planet.Centre, nose * r, side * r), ink));
             }
         }
     }
 
     /// <summary>Draw each sun as a disc facing the camera, with the original's colours and fringe.</summary>
-    private void DrawSuns(CommandBuffer commandBuffer, SceneFrame scene, float pixelSize, int[] palette)
+    private void DrawSuns(CommandBuffer commandBuffer, SceneFrame scene, float pixelSize)
     {
         if (scene.Suns.Count == 0)
         {
             return;
         }
 
-        var colours = ColourPattern.Resolve(SunColourByte, palette);
         _gpu.Vk.CmdBindPipeline(commandBuffer, PipelineBindPoint.Graphics, _sunPipeline);
         ulong offset = 0;
         var buffer = _meshes.VertexBuffer;
@@ -459,8 +452,8 @@ public sealed unsafe class WorldRenderer : IDisposable
             {
                 Model = model,
                 Parameters = new Vector4(discScale, sun.Seed & 0xFFFF, sun.FringeMask, radiusInPixels),
-                Colour0 = colours[0],
-                Colour1 = colours[1],
+                Ink = (uint)Ink.Red,
+                SecondInk = (uint)Ink.Yellow,
             };
             DrawMesh(commandBuffer, _meshes.UnitDisc, constants);
         }
@@ -472,14 +465,14 @@ public sealed unsafe class WorldRenderer : IDisposable
     /// test. Each ship is drawn at the level of detail that suits its size on
     /// screen.
     /// </summary>
-    private void DrawShips(CommandBuffer commandBuffer, SceneFrame scene, int[] palette)
+    private void DrawShips(CommandBuffer commandBuffer, SceneFrame scene)
     {
         if (scene.Ships.Count == 0)
         {
             return;
         }
 
-        var ships = new (ShipMeshes Meshes, int Level, Matrix4x4 Transform, float Scale, uint[] Colours)[scene.Ships.Count];
+        var ships = new (ShipMeshes Meshes, int Level, Matrix4x4 Transform, float Scale, Ink Colour)[scene.Ships.Count];
         for (int i = 0; i < ships.Length; i++)
         {
             var ship = scene.Ships[i];
@@ -499,26 +492,25 @@ public sealed unsafe class WorldRenderer : IDisposable
             // Distant ships are scaled up so they don't get too small to see
             float scale = size > 0 && size < MinimumShipSize ? MinimumShipSize / size : 1;
             var transform = scale == 1 ? ship.Transform : Matrix4x4.CreateScale(scale) * ship.Transform;
-            ships[i] = (meshes, level, transform, scale, ColourPattern.Resolve(ship.Colour, palette));
+            ships[i] = (meshes, level, transform, scale, ship.Colour);
         }
 
-        uint[] black = [Black, Black, Black, Black];
         BindMeshes(commandBuffer, _surfacePipeline);
         foreach (var ship in ships)
         {
             var pushBack = new Vector4(SurfacePushBack * ship.Scale, 0, 0, 0);
-            DrawMesh(commandBuffer, ship.Meshes.Surfaces[ship.Level], Constants(ship.Transform, black, pushBack));
+            DrawMesh(commandBuffer, ship.Meshes.Surfaces[ship.Level], Constants(ship.Transform, Ink.Black, pushBack));
         }
 
         BindMeshes(commandBuffer, _wirePipeline);
         foreach (var ship in ships)
         {
-            DrawMesh(commandBuffer, ship.Meshes.Wireframes[ship.Level], Constants(ship.Transform, ship.Colours));
+            DrawMesh(commandBuffer, ship.Meshes.Wireframes[ship.Level], Constants(ship.Transform, ship.Colour));
         }
     }
 
     /// <summary>Draw the lines in space, such as laser beams.</summary>
-    private void DrawLines(CommandBuffer commandBuffer, FrameResources frame, SceneFrame scene, int[] palette)
+    private void DrawLines(CommandBuffer commandBuffer, FrameResources frame, SceneFrame scene)
     {
         if (scene.Lines.Count == 0)
         {
@@ -540,7 +532,7 @@ public sealed unsafe class WorldRenderer : IDisposable
 
         for (int i = 0; i < scene.Lines.Count; i++)
         {
-            DrawMesh(commandBuffer, new Mesh((uint)i * 2, 2), Constants(Matrix4x4.Identity, ColourPattern.Resolve(scene.Lines[i].Colour, palette)));
+            DrawMesh(commandBuffer, new Mesh((uint)i * 2, 2), Constants(Matrix4x4.Identity, scene.Lines[i].Colour));
         }
     }
 
@@ -551,7 +543,7 @@ public sealed unsafe class WorldRenderer : IDisposable
     /// directly away from the centre in the front and rear views, so this
     /// keeps its motion looking the same).
     /// </summary>
-    private void DrawParticles(CommandBuffer commandBuffer, FrameResources frame, SceneFrame scene, int[] palette, float aspect)
+    private void DrawParticles(CommandBuffer commandBuffer, FrameResources frame, SceneFrame scene, float aspect)
     {
         if (scene.Particles.Count == 0)
         {
@@ -560,17 +552,10 @@ public sealed unsafe class WorldRenderer : IDisposable
 
         float spread = MathF.Max(1, aspect / (4f / 3f));
         var view = scene.Camera.ViewMatrix;
-        var patterns = new Dictionary<int, uint[]>();
         var instances = new ParticleInstance[scene.Particles.Count];
         for (int i = 0; i < instances.Length; i++)
         {
             var particle = scene.Particles[i];
-            if (!patterns.TryGetValue(particle.Colour, out var colours))
-            {
-                colours = ColourPattern.Resolve(particle.Colour, palette);
-                patterns[particle.Colour] = colours;
-            }
-
             var position = particle.Position;
             if (particle.Stardust && spread > 1)
             {
@@ -582,10 +567,7 @@ public sealed unsafe class WorldRenderer : IDisposable
             {
                 Position = position,
                 Size = new Vector2(particle.Width, particle.Height),
-                Colour0 = colours[0],
-                Colour1 = colours[1],
-                Colour2 = colours[2],
-                Colour3 = colours[3],
+                Ink = (uint)particle.Colour,
             };
         }
 

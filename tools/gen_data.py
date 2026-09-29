@@ -119,24 +119,19 @@ def gen_tables():
                    "QQ23: market table (base price, factor/units, base quantity, mask) for 17 items."))
     tables.append(("EquipmentPrices", code_bytes("PRXS", 28),
                    "PRXS: equipment prices * 10 as 16-bit little-endian words."))
-    tables.append(("ExplosionColours", code_bytes("coltabl", 4),
-                   "coltabl: mode 1 colours for explosion particles."))
-    tables.append(("SightColours", code_bytes("sightcol", 4),
-                   "sightcol: laser crosshair colours for pulse, beam, military, mining."))
     tables.append(("HangarGroups", code_bytes("HATB", 36),
                    "HATB: ship hangar groups (type, x_hi/z_hi, z_lo/x_sign) * 3 * 4."))
     tables.append(("BombBaseX", code_bytes("BOMBPOS", 10),
                    "BOMBPOS: base x-coordinates for the energy bomb lightning bolt."))
     tables.append(("DefaultCommander", code_bytes("NA2%", LABELS["NAEND%"] - LABELS["NA2%"]),
                    "NA2%: the default JAMESON commander (name + data block + checksums)."))
-    tables.append(("SpaceViewPalettes", code_bytes("TVT3", 64),
-                   "TVT3: the four mode 1 palettes (space, chart, title, trade)."))
-    tables.append(("DashboardPalette", code_bytes("TVT1", 16),
-                   "TVT1: the mode 2 palette for the dashboard."))
     tables.append(("SoundPriority", code_bytes("SFXPR", 12), "SFXPR: sound data block 1."))
     tables.append(("SoundBits", code_bytes("SFXBT", 12), "SFXBT: sound data block 2."))
     tables.append(("SoundFrequency", code_bytes("SFXFQ", 12), "SFXFQ: sound data block 3."))
     tables.append(("SoundVolumeChange", code_bytes("SFXVC", 12), "SFXVC: sound data block 4."))
+    # The colours (the palettes TVT1 and TVT3, and the colour tables coltabl
+    # and sightcol) are defined as inks and palettes in the game's code (see
+    # Rendering/Ink.cs and Rendering/Palette.cs), rather than as screen bytes
     tables.append(("EcmBulb", code_bytes("ECBT", 16), "ECBT: E.C.M. bulb bitmap (mode 2)."))
     tables.append(("StationBulb", code_bytes("SPBT", 16), "SPBT: space station bulb bitmap (mode 2)."))
     tables.append(("PauseToggleKeys", code_bytes("TGINT", 9),

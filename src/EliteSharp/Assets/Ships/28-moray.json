@@ -11,7 +11,7 @@
   "targetRadius": 30,
   "canisters": 1,
   "killPoints": 0.75,
-  "colour": "0xC9",
-  "scannerColour": "0x3C",
+  "colour": "moray",
+  "scannerColour": "cyan",
   "flags": ["hostile", "pirate"]
 }

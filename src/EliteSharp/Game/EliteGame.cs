@@ -57,7 +57,7 @@ internal enum GameJump
 /// </summary>
 public sealed partial class EliteGame
 {
-    private readonly Screen _screen;
+    private readonly Hud _hud;
     private readonly BbcKeyboard _keyboard;
     private readonly SoundEngine? _sound;
     private readonly GameOptions _options;
@@ -66,14 +66,14 @@ public sealed partial class EliteGame
     private long _nextMainLoopTicks;
     private volatile bool _quit;
 
-    public EliteGame(Screen screen, BbcKeyboard keyboard, SoundEngine? sound, GameOptions options, Gamepad? gamepad = null)
+    public EliteGame(Hud hud, BbcKeyboard keyboard, SoundEngine? sound, GameOptions options, Gamepad? gamepad = null)
     {
         _gamepad = gamepad;
-        _screen = screen;
+        _hud = hud;
         _keyboard = keyboard;
         _sound = sound;
         _options = options;
-        _screen.DashboardRenderer = DrawDashboard;
+        _hud.DashboardRenderer = DrawDashboard;
         ConnectWorld();
 
         for (int i = 0; i < Slots.Length; i++)
@@ -150,56 +150,60 @@ public sealed partial class EliteGame
     /// <summary>f9: the inventory.</summary>
     private const int FunctionKey9 = 0x89;
 
-    // Colour bytes for the space view, which uses screen mode 1 (four pixels
-    // per byte, with two bits per pixel)
+    // The colours the original draws with in the space view (see Ink)
 
-    /// <summary>YELLOW: yellow in the space view (colour 1).</summary>
-    private const int Yellow = 0b00001111;
+    /// <summary>YELLOW: yellow in the space view.</summary>
+    private const Ink Yellow = Ink.Yellow;
 
-    /// <summary>RED: red in the space view (colour 2).</summary>
-    private const int Red = 0b11110000;
+    /// <summary>RED: red in the space view.</summary>
+    private const Ink Red = Ink.Red;
 
-    /// <summary>CYAN: cyan in the space view (colour 3).</summary>
-    private const int Cyan = 0b11111111;
+    /// <summary>CYAN: cyan in the space view.</summary>
+    private const Ink Cyan = Ink.Cyan;
 
-    /// <summary>GREEN: green in the space view (a stripe of colours 3 and 1, which shows as green).</summary>
-    private const int Green = 0b10101111;
+    /// <summary>GREEN: green in the space view (cyan and yellow stripes).</summary>
+    private const Ink Green = Ink.Green;
 
-    /// <summary>WHITE: white in the space view (a stripe of colours 3 and 2).</summary>
-    private const int White = 0b11111010;
+    /// <summary>WHITE: white in the space view (cyan and red stripes).</summary>
+    private const Ink White = Ink.White;
 
-    /// <summary>MAGENTA: magenta in the space view (the same byte as red, with a different palette).</summary>
-    private const int Magenta = Red;
+    /// <summary>MAGENTA: magenta in the space view (the space view's red, which the trading screens' palette shows as magenta).</summary>
+    private const Ink Magenta = Ink.Red;
 
     /// <summary>DUST: the colour of the stardust.</summary>
-    private const int DustColour = White;
+    private const Ink DustColour = Ink.White;
 
-    // Colour bytes for the dashboard, which uses screen mode 2 (two pixels per
-    // byte, with four bits per pixel)
+    // The colours the original draws with on the dashboard
 
     /// <summary>RED2: red on the dashboard.</summary>
-    private const int DashboardRed = 0b00000011;
+    private const Ink DashboardRed = Ink.DashboardRed;
 
     /// <summary>GREEN2: green on the dashboard.</summary>
-    private const int DashboardGreen = 0b00001100;
+    private const Ink DashboardGreen = Ink.DashboardGreen;
 
     /// <summary>YELLOW2: yellow on the dashboard.</summary>
-    private const int DashboardYellow = 0b00001111;
+    private const Ink DashboardYellow = Ink.DashboardYellow;
 
     /// <summary>BLUE2: blue on the dashboard.</summary>
-    private const int DashboardBlue = 0b00110000;
+    private const Ink DashboardBlue = Ink.DashboardBlue;
 
     /// <summary>MAG2: magenta on the dashboard.</summary>
-    private const int DashboardMagenta = 0b00110011;
+    private const Ink DashboardMagenta = Ink.DashboardMagenta;
 
     /// <summary>CYAN2: cyan on the dashboard.</summary>
-    private const int DashboardCyan = 0b00111100;
+    private const Ink DashboardCyan = Ink.DashboardCyan;
 
     /// <summary>WHITE2: white on the dashboard.</summary>
-    private const int DashboardWhite = 0b00111111;
+    private const Ink DashboardWhite = Ink.DashboardWhite;
 
-    /// <summary>STRIPE: a red and magenta stripe on the dashboard.</summary>
-    private const int DashboardStripe = 0b00100011;
+    /// <summary>STRIPE: magenta and red stripes on the dashboard.</summary>
+    private const Ink DashboardStripe = Ink.DashboardStripes;
+
+    /// <summary>coltabl: the colours of explosion particles.</summary>
+    private static readonly Ink[] ExplosionColours = [Yellow, Red, Yellow, Cyan];
+
+    /// <summary>sightcol: the colours of the laser crosshairs for pulse, beam, military and mining lasers.</summary>
+    private static readonly Ink[] SightColours = [Yellow, Cyan, Cyan, Yellow];
 
     // Sound effect numbers, as passed to MakeSound
 
@@ -357,7 +361,7 @@ public sealed partial class EliteGame
     private int _laserEndX, _laserEndY;
 
     /// <summary>MSAR: non-zero if the missile is armed and looking for a target.</summary>
-    private int _missileArmed;
+    private bool _missileArmed;
 
     /// <summary>MSTG: the slot number of the current missile target, or &amp;FF for none.</summary>
     private int _missileTarget;
@@ -407,8 +411,8 @@ public sealed partial class EliteGame
     /// <summary>HFX: non-zero while the hyperspace colour effect is on.</summary>
     private int HyperspaceColoursOn
     {
-        get => _screen.HyperspaceColours ? 1 : 0;
-        set => _screen.HyperspaceColours = value != 0;
+        get => _hud.HyperspaceColours ? 1 : 0;
+        set => _hud.HyperspaceColours = value != 0;
     }
 
     /// <summary>
@@ -694,8 +698,8 @@ public sealed partial class EliteGame
             throw new QuitException();
         }
 
-        _screen.EscapePodFitted = _escapePod != 0;
-        _screen.Present();
+        _hud.EscapePodFitted = _escapePod != 0;
+        _hud.Present();
     }
 
     /// <summary>WSCAN: wait for the vertical sync (the original runs at 50 Hz).</summary>

@@ -11,7 +11,7 @@
   "targetRadius": 100,
   "canisters": 7,
   "killPoints": 1.0,
-  "colour": "0xFF",
-  "scannerColour": "0x33",
+  "colour": "cyan",
+  "scannerColour": "magenta",
   "flags": ["trader", "innocent", "escapePod"]
 }

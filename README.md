@@ -149,37 +149,7 @@ charge, press **K** while paused.
 
 On the charts, either stick moves the cross-hairs.
 
-| Button | In flight | On other screens (and when docked) |
-| --- | --- | --- |
-| **A** | Fire laser | Enter (carry on) |
-| **B** | Fire missile | "N" (answer No) |
-| **X** | Target missile | |
-| **Y** | Unarm missile | "Y" (answer Yes, or load a commander on the title screen) |
-| **RB** | E.C.M. | Move the cross-hairs faster |
-| **D-pad** | Front, rear, left and right views | Move the cross-hairs |
-| **Start** | Pause | Front view (or launch, when docked) |
-| **Back** | Short-range chart | Short-range chart |
-| **Left stick click** | In-system jump | In-system jump |
-| **Right stick click** | Docking computer on / off | Docking computer on / off |
-
-Hold **LB** for more functions:
-
-| Button | With LB held |
-| --- | --- |
-| **D-pad up / down** | Status / market prices |
-| **D-pad left / right** | Short-range chart / galactic chart |
-| **A** | Hyperspace |
-| **B** | Galactic hyperspace |
-| **X** | Data on the selected system |
-| **Y** | Inventory |
-| **RB** | Energy bomb |
-| **Back** | Escape pod |
-| **Start** | Equip ship |
-
-While the game is paused, **Start** or **B** carries on, **Back** quits to the
-title screen, the **D-pad** changes the volume (left and right) and turns the
-sound on and off (up and down), **Y** reverses the pitch axis, and **X** switches
-controller-only flying on and off.
+![Xbox controller controls](images/xbox-controls.png)
 
 You still need the keyboard for typing: naming your commander, and entering how
 much cargo to buy.

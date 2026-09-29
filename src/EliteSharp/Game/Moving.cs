@@ -1,4 +1,5 @@
 using EliteSharp.Game.Ships;
+using EliteSharp.Rendering;
 
 namespace EliteSharp.Game;
 
@@ -403,7 +404,7 @@ public sealed partial class EliteGame
     /// <summary>LOOK1: switch to a new space view.</summary>
     private void SwitchView(int view)
     {
-        SetSpacePalette(0);
+        SetSpacePalette(SpacePalette.Space);
         if (_viewType != 0)
         {
             // LQ
@@ -412,7 +413,7 @@ public sealed partial class EliteGame
             DrawCrosshairs();
             if ((_energyBomb & 0x80) != 0)
             {
-                ToggleBombBolt();
+                DrawBombBolt();
             }
 
             InitialiseStardust();
@@ -429,7 +430,7 @@ public sealed partial class EliteGame
         FlipStardust();
         if ((_energyBomb & 0x80) != 0)
         {
-            ToggleBombBolt();
+            DrawBombBolt();
         }
 
         WipeScanner();
@@ -439,7 +440,7 @@ public sealed partial class EliteGame
     /// <summary>
     /// SIGHT: draw the laser crosshairs. The original draws two crosses of
     /// sizes 20 and 10 using EOR, so the inner parts cancel out, leaving four
-    /// separate arms.
+    /// separate arms, which is what is drawn here.
     /// </summary>
     private void DrawCrosshairs()
     {
@@ -457,12 +458,12 @@ public sealed partial class EliteGame
             _ => 3,
         };
 
-        int colour = Data.GameData.SightColours[index];
+        var colour = SightColours[index];
         int centreY = CentreY;
-        _screen.DrawLine(108, centreY, 117, centreY, colour);
-        _screen.DrawLine(138, centreY, 147, centreY, colour);
-        _screen.DrawLine(128, 76, 128, 85, colour);
-        _screen.DrawLine(128, 107, 128, 116, colour);
+        _hud.DrawLine(108, centreY, 117, centreY, colour);
+        _hud.DrawLine(138, centreY, 147, centreY, colour);
+        _hud.DrawLine(128, 76, 128, 85, colour);
+        _hud.DrawLine(128, 107, 128, 116, colour);
     }
 
     /// <summary>

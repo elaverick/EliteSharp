@@ -64,6 +64,29 @@ public sealed partial class EliteGame
     // Printing characters
     // ------------------------------------------------------------------------
 
+    /// <summary>
+    /// Whether text is being printed to erase it rather than show it. The
+    /// original prints with EOR logic, and erases text (such as in-flight
+    /// messages and the hyperspace countdown) by printing it again; this game
+    /// does the same printing, so the cursor and the other state change just as
+    /// they do in the original, but takes the characters out of the HUD.
+    /// </summary>
+    private bool _erasingText;
+
+    /// <summary>Print something to erase it from the screen (see <see cref="_erasingText"/>).</summary>
+    private void EraseText(Action print)
+    {
+        _erasingText = true;
+        try
+        {
+            print();
+        }
+        finally
+        {
+            _erasingText = false;
+        }
+    }
+
     /// <summary>CHPR: print a character at the text cursor.</summary>
     private void PutCharacter(int character)
     {
@@ -112,7 +135,7 @@ public sealed partial class EliteGame
         {
             // Delete the character to the left of the cursor
             _cursorX--;
-            _screen.EraseCharacter(_cursorX, _cursorY);
+            _hud.EraseCharacter(_cursorX, _cursorY);
             return;
         }
 
@@ -128,7 +151,14 @@ public sealed partial class EliteGame
         }
 
         // RR3
-        _screen.PrintCharacter(column, _cursorY, (char)character, _colour);
+        if (_erasingText)
+        {
+            _hud.EraseCharacter(column, _cursorY, (char)character);
+        }
+        else
+        {
+            _hud.Print(column, _cursorY, (char)character, _colour);
+        }
     }
 
     /// <summary>
@@ -979,11 +1009,11 @@ public sealed partial class EliteGame
             (x1, x2) = (x2, x1);
         }
 
-        _screen.DrawLine(x1, y, x2 - 1, y, _colour);
+        _hud.DrawLine(x1, y, x2 - 1, y, _colour);
     }
 
-    /// <summary>LOIN: draw a line in the current colour (using EOR logic, so drawing it twice removes it).</summary>
-    private void DrawLine(int x1, int y1, int x2, int y2) => _screen.DrawLine(x1, y1, x2, y2, _colour);
+    /// <summary>LOIN: draw a line in the current colour.</summary>
+    private void DrawLine(int x1, int y1, int x2, int y2) => _hud.DrawLine(x1, y1, x2, y2, _colour);
 
     /// <summary>BELL: make a beep.</summary>
     private void Bell() => PutCharacter(7);
@@ -1031,17 +1061,17 @@ public sealed partial class EliteGame
     /// <summary>TTX66: clear the top part of the screen and draw a border box.</summary>
     private void ClearSpaceView()
     {
-        _screen.ClearSpaceView();
+        _hud.ClearSpaceView();
         _world.Clear();
         DrawBorderBox();
     }
 
-    /// <summary>BOX: draw the border box around the space view (using EOR logic).</summary>
+    /// <summary>BOX: draw the border box around the space view.</summary>
     private void DrawBorderBox()
     {
         _cursorY = 1;
         _cursorX = 1;
-        _screen.ToggleBorder();
+        _hud.Border = true;
     }
 
     /// <summary>CLYNS: clear the bottom three text rows of the space view.</summary>
@@ -1053,7 +1083,7 @@ public sealed partial class EliteGame
         _textCase = 0x80;
         _cursorY = 20;
         PutNewline();
-        _screen.ClearRows(21 * 8, 23 * 8 + 7);
+        _hud.ClearRows(21 * 8, 23 * 8 + 7);
     }
 
     // ------------------------------------------------------------------------
@@ -1081,7 +1111,7 @@ public sealed partial class EliteGame
                 // me1: erase the existing message by printing it again
                 _messageDelay = 0;
                 _colour = Yellow;
-                PrintMessage(_messageToken);
+                EraseText(() => PrintMessage(_messageToken));
                 continue;
             }
 
@@ -1122,7 +1152,8 @@ public sealed partial class EliteGame
             return;
         }
 
-        ShowMessage(_messageToken);
+        // The message is erased by showing it again
+        EraseText(() => ShowMessage(_messageToken));
         _messageDelay = 0;
     }
 

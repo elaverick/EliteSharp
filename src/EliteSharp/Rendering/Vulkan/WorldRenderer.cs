@@ -373,9 +373,17 @@ public sealed unsafe class WorldRenderer : IDisposable
             float r = planet.Radius;
             if (planet.HasCrater)
             {
-                // The crater is a circle on the planet's surface, around roofv
-                var craterCentre = planet.Centre + roof * (r * CraterDistance);
-                var model = CircleTransform(craterCentre, nose * (r * CraterRadius), side * (r * CraterRadius));
+                // The crater is a circle on the planet's surface, around roofv.
+                // The original only draws it when roofv points away from us
+                // (roofv_z >= 0), which puts it on the far side of its
+                // see-through planet; here the planet hides its far side, so
+                // we reflect the crater front-to-back along the line of sight
+                // onto the near side, where it covers the same part of the
+                // screen as in the original
+                var lineOfSight = Vector3.Normalize(planet.Centre);
+                Vector3 Reflect(Vector3 v) => v - 2 * Vector3.Dot(v, lineOfSight) * lineOfSight;
+                var craterCentre = planet.Centre + Reflect(roof) * (r * CraterDistance);
+                var model = CircleTransform(craterCentre, Reflect(nose) * (r * CraterRadius), Reflect(side) * (r * CraterRadius));
                 DrawMesh(commandBuffer, _meshes.UnitCircle, Unculled(model, colours));
             }
             else

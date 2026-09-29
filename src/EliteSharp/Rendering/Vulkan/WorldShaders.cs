@@ -25,7 +25,6 @@ internal static class WorldShaders
         layout(push_constant) uniform DrawConstants
         {
             mat4 model;           // model space to world space
-            vec4 cameraModel;     // xyz = the camera's position in model space, w = the LOD distance (XX4)
             vec4 parameters;      // meaning depends on the shader
             uvec4 colours;        // four packed RGBA8 colours (a colour pattern, or shader-specific colours)
         } draw;
@@ -33,56 +32,48 @@ internal static class WorldShaders
 
     /// <summary>
     /// The wireframe vertex shader, used for ships, the planet's circles and
-    /// laser beams. Each vertex belongs to an edge of the model, and carries
-    /// the normals of the two faces either side of the edge, so the shader can
-    /// apply Elite's hidden line removal (LL9): an edge is drawn if either of
-    /// its faces is visible and the edge is within its visibility distance.
-    ///
-    /// parameters.x = the scale that turns a face normal into a point on the
-    /// face (2^-S, or 0 when the original ignores the normal), and
-    /// parameters.y = 1 to draw every edge (for geometry that has no faces).
+    /// laser beams, which are line lists. Which parts of the lines are hidden
+    /// is left to the depth test.
     /// </summary>
     public const string WireVertex = Common + """
 
         layout(location = 0) in vec3 inPosition;
-        layout(location = 1) in vec4 inFaceA;         // xyz = face normal, w = visibility distance (-1 if always visible)
-        layout(location = 2) in vec4 inFaceB;
-        layout(location = 3) in float inEdgeVisibility;
 
         layout(location = 0) flat out uvec4 outColours;
-
-        // Elite's back-face test (LL9 part 5): a face is visible if the camera is
-        // in front of the plane that has the face normal as its normal and that
-        // passes through the point given by the scaled normal
-        bool faceVisible(vec4 face)
-        {
-            if (face.w < 0.0 || face.w < draw.cameraModel.w)
-            {
-                // The edge has no face here, or the ship is further away than
-                // the face's visibility distance, so the face is always visible
-                return true;
-            }
-
-            vec3 normal = face.xyz;
-            return dot(normal, draw.cameraModel.xyz - normal * draw.parameters.x) > 0.0;
-        }
 
         void main()
         {
             outColours = draw.colours;
+            gl_Position = frame.viewProjection * (draw.model * vec4(inPosition, 1.0));
+        }
+        """;
 
-            bool visible = draw.parameters.y != 0.0
-                || (inEdgeVisibility >= draw.cameraModel.w && (faceVisible(inFaceA) || faceVisible(inFaceB)));
+    /// <summary>
+    /// The vertex shader for solid surfaces (the ships' hulls and the planet's
+    /// sphere), which are drawn into the depth buffer so they hide whatever is
+    /// behind them. Each vertex is pushed back along the line of sight from the
+    /// camera (which is at the origin of world space) by parameters.x, which
+    /// moves the surface away from the camera by that distance without
+    /// changing its outline, so the lines drawn on the surface (and details
+    /// drawn just inside it) pass the depth test.
+    /// </summary>
+    public const string SurfaceVertex = Common + """
 
-            if (!visible)
+        layout(location = 0) in vec3 inPosition;
+
+        layout(location = 0) flat out uvec4 outColours;
+
+        void main()
+        {
+            outColours = draw.colours;
+            vec3 world = (draw.model * vec4(inPosition, 1.0)).xyz;
+            float distance = length(world);
+            if (distance > 0.0)
             {
-                // Put both ends of the edge behind the near plane, so the whole
-                // line is clipped away
-                gl_Position = vec4(0.0, 0.0, -1.0, 1.0);
-                return;
+                world += world / distance * draw.parameters.x;
             }
 
-            gl_Position = frame.viewProjection * (draw.model * vec4(inPosition, 1.0));
+            gl_Position = frame.viewProjection * vec4(world, 1.0);
         }
         """;
 

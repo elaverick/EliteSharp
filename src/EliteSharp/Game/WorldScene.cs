@@ -103,71 +103,8 @@ public sealed partial class EliteGame
     private Vector3 ScreenPointToWorld(float screenX, float screenY, float distance) =>
         ViewToWorld((screenX - CentreX) * distance / 256, (CentreY - screenY) * distance / 256, distance);
 
-    /// <summary>Remove an object from the 3D world (and its outline from the original's screen, if it's a ship).</summary>
-    private void RemoveFromScreen(object owner)
-    {
-        _screen.RemoveShipOutline(owner);
-        _world.Remove(owner);
-    }
-
-    /// <summary>
-    /// The scale that turns the face normals of the ship in INWK into points on
-    /// its faces, for the GPU's hidden line removal. LL9 part 5 scales the face
-    /// normals down by XX17, which is the blueprint's normal scale plus the
-    /// number of times the ship's position is halved to bring z_hi to zero, and
-    /// the position by just the second of these, so relative to the position,
-    /// the normals are scaled by 2^-S. If XX17 is 4 or more, the original
-    /// ignores the normals and uses the position alone.
-    /// </summary>
-    private float NormalOffsetScale(ShipBlueprint blueprint)
-    {
-        int scaleShifts = blueprint.NormalScale;
-        for (int z = (Math.Abs(_currentShip.Z) & 0xFFFF) >> 8; z != 0; z >>= 1)
-        {
-            scaleShifts++;
-        }
-
-        return scaleShifts >= 4 ? 0 : 1f / (1 << blueprint.NormalScale);
-    }
-
-    /// <summary>Whether to compare the GPU's face visibility test with LL9's (the "facecheck" test command).</summary>
-    private bool _faceCheck;
-
-    /// <summary>
-    /// Compare LL9's face visibility for the ship in INWK with the test that
-    /// the 3D renderer's vertex shader does (in WorldShaders.WireVertex), and
-    /// trace any faces where they disagree. The GPU does the exact geometric
-    /// test, whereas LL9 works with 8-bit values (the ship's position is
-    /// rounded to as little as 1/256 of its distance, and the normals are
-    /// shifted down to a few bits), so they disagree about faces that are seen
-    /// almost edge-on, which is where the original's faces flicker.
-    /// </summary>
-    private void CheckFaceVisibility(ShipBlueprint blueprint, Matrix4x4 transform, float normalOffsetScale)
-    {
-        if (!_faceCheck || _trace == null || !Matrix4x4.Invert(transform, out var inverse))
-        {
-            return;
-        }
-
-        var camera = Vector3.Transform(Vector3.Zero, inverse);
-        int mismatches = 0;
-        var details = new List<string>();
-        for (int f = 0; f < blueprint.Faces.Count; f++)
-        {
-            var face = blueprint.Faces[f];
-            var normal = new Vector3(face.NormalX, face.NormalY, face.NormalZ);
-            bool gpu = face.Visibility < _shipDistance || Vector3.Dot(normal, camera - normal * normalOffsetScale) > 0;
-            bool cpu = FaceVisibility[f] != 0;
-            if (gpu != cpu)
-            {
-                mismatches++;
-                float margin = Vector3.Dot(normal, camera - normal * normalOffsetScale) / normal.Length();
-                details.Add($"face {f} cpu={cpu} gpu={gpu} margin={margin:F1}");
-            }
-        }
-
-        Trace($"FACECHECK {blueprint.Name} faces={blueprint.Faces.Count} mismatches={mismatches} distance={camera.Length():F0} {string.Join("; ", details)}");
-    }
+    /// <summary>Remove an object from the screen (that is, from the 3D world).</summary>
+    private void RemoveFromScreen(object owner) => _world.Remove(owner);
 
     /// <summary>
     /// Add the planet or sun in INWK to the 3D world (called by PLANET once it

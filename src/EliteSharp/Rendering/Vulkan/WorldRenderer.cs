@@ -7,8 +7,9 @@ using Silk.NET.Vulkan;
 namespace EliteSharp.Rendering.Vulkan;
 
 /// <summary>
-/// Draws the 3D world: the ships as wireframes (with hidden line removal on
-/// the GPU), the planet as a sphere with circles on its surface, the sun as a
+/// Draws the 3D world: the ships as wireframes over solid surfaces (so the
+/// depth buffer hides whatever is behind them, including their own far
+/// sides), the planet as a sphere with circles on its surface, the sun as a
 /// disc, and particles and laser beams, all with real 3D transforms, a
 /// perspective projection and a depth buffer.
 /// </summary>
@@ -28,7 +29,6 @@ public sealed unsafe class WorldRenderer : IDisposable
     private struct DrawConstants
     {
         public Matrix4x4 Model;
-        public Vector4 CameraModel;
         public Vector4 Parameters;
         public uint Colour0, Colour1, Colour2, Colour3;
     }
@@ -62,6 +62,35 @@ public sealed unsafe class WorldRenderer : IDisposable
     private const float CraterDistance = 222f / 256f;
     private const float CraterRadius = 0.5f;
 
+    /// <summary>
+    /// How far a ship's surface is pushed back from the camera (in the model's
+    /// units), so the edges on it, and the surface details that are drawn up
+    /// to a few units inside it, are in front of it.
+    /// </summary>
+    private const float SurfacePushBack = 8;
+
+    /// <summary>
+    /// The slope-scaled depth bias for surfaces, which pushes them further back
+    /// where they are seen almost edge-on, so the lines on them (and details
+    /// just inside them) still pass the depth test at those angles.
+    /// </summary>
+    private const float SurfaceDepthBiasSlope = -2;
+
+    /// <summary>
+    /// The sizes of ship on screen at which each simpler level of detail takes
+    /// over, as the ship's radius in original pixels (see ShipGeometry for the
+    /// levels): at this size or smaller, level i + 1 is used.
+    /// </summary>
+    private static readonly float[] LevelSizes = [20, 10, 5];
+
+    /// <summary>
+    /// The smallest a ship is drawn on screen, as its radius in original pixels.
+    /// Ships further away are scaled up to this size, so they stay visible (as
+    /// the original's dots for distant ships are), rather than shrinking to
+    /// nothing.
+    /// </summary>
+    private const float MinimumShipSize = 2;
+
     /// <summary>The original's pattern of red and yellow pixels for the sun (the first row of <c>Orange</c> in SUN).</summary>
     private const int SunColourByte = 0b10100101;
 
@@ -73,7 +102,7 @@ public sealed unsafe class WorldRenderer : IDisposable
     private readonly DescriptorPool _descriptorPool;
     private readonly PipelineLayout _pipelineLayout;
     private readonly Pipeline _wirePipeline;
-    private readonly Pipeline _solidPipeline;
+    private readonly Pipeline _surfacePipeline;
     private readonly Pipeline _sunPipeline;
     private readonly Pipeline _particlePipeline;
     private readonly FrameResources[] _frames;
@@ -124,6 +153,7 @@ public sealed unsafe class WorldRenderer : IDisposable
 
         // The pipelines
         var wireVertex = gpu.CreateShaderModule(ShaderCompiler.Compile(WorldShaders.WireVertex, ShaderKind.VertexShader, "wire.vert"));
+        var surfaceVertex = gpu.CreateShaderModule(ShaderCompiler.Compile(WorldShaders.SurfaceVertex, ShaderKind.VertexShader, "surface.vert"));
         var patternFragment = gpu.CreateShaderModule(ShaderCompiler.Compile(WorldShaders.PatternFragment, ShaderKind.FragmentShader, "pattern.frag"));
         var sunVertex = gpu.CreateShaderModule(ShaderCompiler.Compile(WorldShaders.SunVertex, ShaderKind.VertexShader, "sun.vert"));
         var sunFragment = gpu.CreateShaderModule(ShaderCompiler.Compile(WorldShaders.SunFragment, ShaderKind.FragmentShader, "sun.frag"));
@@ -143,15 +173,16 @@ public sealed unsafe class WorldRenderer : IDisposable
             Depth = DepthMode.Test,
         });
 
-        _solidPipeline = PipelineFactory.Create(gpu, renderPass, new PipelineDescription
+        _surfacePipeline = PipelineFactory.Create(gpu, renderPass, new PipelineDescription
         {
-            VertexShader = wireVertex,
+            VertexShader = surfaceVertex,
             FragmentShader = patternFragment,
             Topology = PrimitiveTopology.TriangleList,
             Layout = _pipelineLayout,
             Bindings = meshBinding,
             Attributes = meshAttributes,
             Depth = DepthMode.TestAndWrite,
+            DepthBiasSlope = SurfaceDepthBiasSlope,
         });
 
         _sunPipeline = PipelineFactory.Create(gpu, renderPass, new PipelineDescription
@@ -181,7 +212,7 @@ public sealed unsafe class WorldRenderer : IDisposable
             Depth = DepthMode.Test,
         });
 
-        foreach (var module in new[] { wireVertex, patternFragment, sunVertex, sunFragment, particleVertex })
+        foreach (var module in new[] { wireVertex, surfaceVertex, patternFragment, sunVertex, sunFragment, particleVertex })
         {
             vk.DestroyShaderModule(gpu.Device, module, null);
         }
@@ -274,11 +305,11 @@ public sealed unsafe class WorldRenderer : IDisposable
         _gpu.Vk.CmdDraw(commandBuffer, mesh.VertexCount, 1, mesh.FirstVertex, 0);
     }
 
-    /// <summary>Draw constants for geometry with no faces (every edge is drawn).</summary>
-    private static DrawConstants Unculled(Matrix4x4 model, uint[] colours) => new()
+    /// <summary>Draw constants for geometry in the given colour pattern.</summary>
+    private static DrawConstants Constants(Matrix4x4 model, uint[] colours, Vector4 parameters = default) => new()
     {
         Model = model,
-        Parameters = new Vector4(0, 1, 0, 0),
+        Parameters = parameters,
         Colour0 = colours[0],
         Colour1 = colours[1],
         Colour2 = colours[2],
@@ -331,12 +362,12 @@ public sealed unsafe class WorldRenderer : IDisposable
             return;
         }
 
-        BindMeshes(commandBuffer, _solidPipeline);
+        BindMeshes(commandBuffer, _surfacePipeline);
         uint[] black = [Black, Black, Black, Black];
         foreach (var planet in scene.Planets)
         {
             var model = Matrix4x4.CreateScale(planet.Radius * PlanetOccluderScale) * Matrix4x4.CreateTranslation(planet.Centre);
-            DrawMesh(commandBuffer, _meshes.UnitSphere, Unculled(model, black));
+            DrawMesh(commandBuffer, _meshes.UnitSphere, Constants(model, black));
         }
     }
 
@@ -354,7 +385,7 @@ public sealed unsafe class WorldRenderer : IDisposable
             var colours = ColourPattern.Resolve(planet.Colour, palette);
             if (Silhouette(planet.Centre, planet.Radius, out var centre, out float radius, out var axisX, out var axisY))
             {
-                DrawMesh(commandBuffer, _meshes.UnitCircle, Unculled(CircleTransform(centre, axisX * radius, axisY * radius), colours));
+                DrawMesh(commandBuffer, _meshes.UnitCircle, Constants(CircleTransform(centre, axisX * radius, axisY * radius), colours));
             }
 
             if (!planet.ShowFeatures)
@@ -384,14 +415,14 @@ public sealed unsafe class WorldRenderer : IDisposable
                 Vector3 Reflect(Vector3 v) => v - 2 * Vector3.Dot(v, lineOfSight) * lineOfSight;
                 var craterCentre = planet.Centre + Reflect(roof) * (r * CraterDistance);
                 var model = CircleTransform(craterCentre, Reflect(nose) * (r * CraterRadius), Reflect(side) * (r * CraterRadius));
-                DrawMesh(commandBuffer, _meshes.UnitCircle, Unculled(model, colours));
+                DrawMesh(commandBuffer, _meshes.UnitCircle, Constants(model, colours));
             }
             else
             {
                 // The meridian is the great circle through nosev and roofv, and
                 // the equator is the great circle through nosev and sidev
-                DrawMesh(commandBuffer, _meshes.UnitCircle, Unculled(CircleTransform(planet.Centre, nose * r, roof * r), colours));
-                DrawMesh(commandBuffer, _meshes.UnitCircle, Unculled(CircleTransform(planet.Centre, nose * r, side * r), colours));
+                DrawMesh(commandBuffer, _meshes.UnitCircle, Constants(CircleTransform(planet.Centre, nose * r, roof * r), colours));
+                DrawMesh(commandBuffer, _meshes.UnitCircle, Constants(CircleTransform(planet.Centre, nose * r, side * r), colours));
             }
         }
     }
@@ -435,7 +466,12 @@ public sealed unsafe class WorldRenderer : IDisposable
         }
     }
 
-    /// <summary>Draw the ships' wireframes, with the GPU working out which edges are hidden.</summary>
+    /// <summary>
+    /// Draw the ships: first all their surfaces, in black, into the depth
+    /// buffer, and then their wireframes, whose hidden parts fail the depth
+    /// test. Each ship is drawn at the level of detail that suits its size on
+    /// screen.
+    /// </summary>
     private void DrawShips(CommandBuffer commandBuffer, SceneFrame scene, int[] palette)
     {
         if (scene.Ships.Count == 0)
@@ -443,28 +479,41 @@ public sealed unsafe class WorldRenderer : IDisposable
             return;
         }
 
-        BindMeshes(commandBuffer, _wirePipeline);
-        foreach (var ship in scene.Ships)
+        var ships = new (ShipMeshes Meshes, int Level, Matrix4x4 Transform, float Scale, uint[] Colours)[scene.Ships.Count];
+        for (int i = 0; i < ships.Length; i++)
         {
-            if (!Matrix4x4.Invert(ship.Transform, out var inverse))
+            var ship = scene.Ships[i];
+            var meshes = _meshes.Ship(ship.Model);
+
+            // The ship's radius on screen, in original pixels (the original
+            // projects with a scale of 256 pixels per unit of x / z), which
+            // chooses the level of detail
+            float distance = MathF.Max(ship.Transform.Translation.Length(), 1);
+            float size = 256 * meshes.Radius / distance;
+            int level = 0;
+            while (level < LevelSizes.Length && size <= LevelSizes[level])
             {
-                continue;
+                level++;
             }
 
-            // The camera is at the origin of world space
-            var camera = Vector3.Transform(Vector3.Zero, inverse);
-            var colours = ColourPattern.Resolve(ship.Colour, palette);
-            var constants = new DrawConstants
-            {
-                Model = ship.Transform,
-                CameraModel = new Vector4(camera, ship.LodDistance),
-                Parameters = new Vector4(ship.NormalOffsetScale, 0, 0, 0),
-                Colour0 = colours[0],
-                Colour1 = colours[1],
-                Colour2 = colours[2],
-                Colour3 = colours[3],
-            };
-            DrawMesh(commandBuffer, _meshes.Ship(ship.Model), constants);
+            // Distant ships are scaled up so they don't get too small to see
+            float scale = size > 0 && size < MinimumShipSize ? MinimumShipSize / size : 1;
+            var transform = scale == 1 ? ship.Transform : Matrix4x4.CreateScale(scale) * ship.Transform;
+            ships[i] = (meshes, level, transform, scale, ColourPattern.Resolve(ship.Colour, palette));
+        }
+
+        uint[] black = [Black, Black, Black, Black];
+        BindMeshes(commandBuffer, _surfacePipeline);
+        foreach (var ship in ships)
+        {
+            var pushBack = new Vector4(SurfacePushBack * ship.Scale, 0, 0, 0);
+            DrawMesh(commandBuffer, ship.Meshes.Surfaces[ship.Level], Constants(ship.Transform, black, pushBack));
+        }
+
+        BindMeshes(commandBuffer, _wirePipeline);
+        foreach (var ship in ships)
+        {
+            DrawMesh(commandBuffer, ship.Meshes.Wireframes[ship.Level], Constants(ship.Transform, ship.Colours));
         }
     }
 
@@ -479,8 +528,8 @@ public sealed unsafe class WorldRenderer : IDisposable
         var vertices = new MeshVertex[scene.Lines.Count * 2];
         for (int i = 0; i < scene.Lines.Count; i++)
         {
-            vertices[i * 2] = MeshVertex.Plain(scene.Lines[i].Start);
-            vertices[i * 2 + 1] = MeshVertex.Plain(scene.Lines[i].End);
+            vertices[i * 2] = new MeshVertex(scene.Lines[i].Start);
+            vertices[i * 2 + 1] = new MeshVertex(scene.Lines[i].End);
         }
 
         frame.Lines.Write<MeshVertex>(vertices);
@@ -491,7 +540,7 @@ public sealed unsafe class WorldRenderer : IDisposable
 
         for (int i = 0; i < scene.Lines.Count; i++)
         {
-            DrawMesh(commandBuffer, new Mesh((uint)i * 2, 2), Unculled(Matrix4x4.Identity, ColourPattern.Resolve(scene.Lines[i].Colour, palette)));
+            DrawMesh(commandBuffer, new Mesh((uint)i * 2, 2), Constants(Matrix4x4.Identity, ColourPattern.Resolve(scene.Lines[i].Colour, palette)));
         }
     }
 
@@ -559,7 +608,7 @@ public sealed unsafe class WorldRenderer : IDisposable
         }
 
         vk.DestroyPipeline(_gpu.Device, _wirePipeline, null);
-        vk.DestroyPipeline(_gpu.Device, _solidPipeline, null);
+        vk.DestroyPipeline(_gpu.Device, _surfacePipeline, null);
         vk.DestroyPipeline(_gpu.Device, _sunPipeline, null);
         vk.DestroyPipeline(_gpu.Device, _particlePipeline, null);
         vk.DestroyPipelineLayout(_gpu.Device, _pipelineLayout, null);

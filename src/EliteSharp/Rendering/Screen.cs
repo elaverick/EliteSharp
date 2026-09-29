@@ -9,10 +9,12 @@ namespace EliteSharp.Rendering;
 public readonly record struct ScreenLine(int X1, int Y1, int X2, int Y2, int Colour);
 
 /// <summary>
-/// A line that spans the full width of the space view (see
-/// <see cref="FrameData.WideLines"/>), with a BBC colour byte.
+/// A line in a space view that can be wider than the original's screen, in
+/// logical screen pixels that carry on past the original's edges (so x can
+/// be less than 0 or more than 255), with the margin (the number of pixels
+/// that fit beyond each side) that it was drawn for.
 /// </summary>
-public readonly record struct WideLine(float X1, float Y1, float X2, float Y2, int Colour);
+public readonly record struct WideLine(int X1, int Y1, int X2, int Y2, int Colour, float Margin);
 
 /// <summary>
 /// A filled rectangle in logical screen pixels with a BBC colour byte.
@@ -60,7 +62,6 @@ public sealed class Screen
     private readonly List<WideLine> _wideLines = [];
     private readonly List<ScreenRect> _canvasRects = [];
     private readonly Dictionary<(int Col, int Row), List<(char Char, int Colour)>> _text = [];
-    private readonly Dictionary<object, List<ScreenLine>> _shipOutlines = [];
     private readonly FrameBuilder _builder = new();
     private readonly FrameExchange _exchange;
 
@@ -110,7 +111,6 @@ public sealed class Screen
         _wideLines.Clear();
         _canvasRects.Clear();
         _text.Clear();
-        _shipOutlines.Clear();
         _border = false;
     }
 
@@ -148,16 +148,28 @@ public sealed class Screen
     /// <summary>
     /// Draw a line that can extend beyond the sides of the original's screen,
     /// by up to the given margin (from <see cref="SideMargin"/>). The line
-    /// stays the same size, and the space view gets wider around it.
+    /// stays the same size, and the space view gets wider around it. As with
+    /// EOR drawing, drawing the same line again removes it.
     /// </summary>
     public void DrawWideLine(int x1, int y1, int x2, int y2, int colour, float margin)
     {
-        // Convert the pixel centres to logical coordinates, where 0 to 255 is
-        // the full width of the space view
-        float scale = Width / (Width + 2 * margin);
-        float Convert(int x) => (x + 0.5f + margin) * scale - 0.5f;
-        _wideLines.Add(new WideLine(Convert(x1), y1, Convert(x2), y2, colour));
+        int index = _wideLines.FindIndex(l => l.Colour == colour &&
+            ((l.X1, l.Y1, l.X2, l.Y2) == (x1, y1, x2, y2) || (l.X1, l.Y1, l.X2, l.Y2) == (x2, y2, x1, y1)));
+        if (index >= 0)
+        {
+            _wideLines.RemoveAt(index);
+            return;
+        }
+
+        _wideLines.Add(new WideLine(x1, y1, x2, y2, colour, margin));
     }
+
+    /// <summary>
+    /// Convert an x-coordinate in a space view that is widened by the given
+    /// margin into the logical coordinates of the wide lines, where 0 to 255
+    /// span the whole widened view (see <see cref="FrameData.WideLines"/>).
+    /// </summary>
+    private static float ToWide(float x, float margin) => (x + 0.5f + margin) * Width / (Width + 2 * margin) - 0.5f;
 
     /// <summary>Draw a filled rectangle on the canvas, toggling as with EOR drawing.</summary>
     public void DrawRect(int x, int y, int width, int height, int colour, bool toggle = true)
@@ -227,115 +239,6 @@ public sealed class Screen
         _wideLines.RemoveAll(l => Math.Min(l.Y1, l.Y2) >= firstPixelRow && Math.Max(l.Y1, l.Y2) <= lastPixelRow);
     }
 
-    /// <summary>
-    /// Set the outline of a ship: the edges that the original draws on the
-    /// screen, projected onto it. These aren't drawn (the 3D world draws the
-    /// ship), but the hangar's lines stop when they hit them, as they do in
-    /// the original.
-    /// </summary>
-    public void SetShipOutline(object owner, List<ScreenLine> lines) => _shipOutlines[owner] = lines;
-
-    /// <summary>Remove the outline of a ship.</summary>
-    public void RemoveShipOutline(object owner) => _shipOutlines.Remove(owner);
-
-    /// <summary>
-    /// Work out which pixels in the space view have something drawn in them,
-    /// including the ships' outlines (used by the hangar, whose lines stop
-    /// when they hit the ships). The space view is widened by the given
-    /// number of pixels on each side, with the border at its edges, so pixel
-    /// x of the original's screen is at [x + margin, y].
-    /// </summary>
-    public bool[,] RasterizeSpaceView(int margin)
-    {
-        int width = Width + 2 * margin;
-        var pixels = new bool[width, SpaceViewHeight];
-
-        void Plot(int x, int y)
-        {
-            x += margin;
-            if (x >= 0 && x < width && y >= 0 && y < SpaceViewHeight)
-            {
-                pixels[x, y] = true;
-            }
-        }
-
-        // The border's pixels move out to the edges of the widened view
-        int Widen(int x) => x < Width / 2 ? x - margin : x + margin;
-
-        void Line(double x1, double y1, double x2, double y2)
-        {
-            double dx = x2 - x1, dy = y2 - y1;
-            double steps = Math.Min(Math.Max(Math.Abs(dx), Math.Abs(dy)), 4096);
-            int count = (int)Math.Ceiling(steps);
-            for (int i = 0; i <= count; i++)
-            {
-                double t = count == 0 ? 0 : (double)i / count;
-                Plot((int)Math.Round(x1 + dx * t), (int)Math.Round(y1 + dy * t));
-            }
-        }
-
-        void Rect(ScreenRect rect)
-        {
-            for (int y = rect.Y; y < rect.Y + rect.Height; y++)
-            {
-                for (int x = rect.X; x < rect.X + rect.Width; x++)
-                {
-                    Plot(x, y);
-                }
-            }
-        }
-
-        foreach (var line in _canvasLines)
-        {
-            Line(line.X1, line.Y1, line.X2, line.Y2);
-        }
-
-        if (_border)
-        {
-            foreach (var line in BorderLines)
-            {
-                Line(Widen(line.X1), line.Y1, Widen(line.X2), line.Y2);
-            }
-        }
-
-        foreach (var rect in _canvasRects)
-        {
-            Rect(rect);
-        }
-
-        foreach (var ((column, row), glyphs) in _text)
-        {
-            foreach (var (character, _) in glyphs)
-            {
-                int offset = (character - 32) * 8;
-                if (offset < 0 || offset + 8 > GameData.Font.Length)
-                {
-                    continue;
-                }
-
-                for (int y = 0; y < 8; y++)
-                {
-                    for (int x = 0; x < 8; x++)
-                    {
-                        if ((GameData.Font[offset + y] & (0x80 >> x)) != 0)
-                        {
-                            Plot(column * 8 + x, row * 8 + y);
-                        }
-                    }
-                }
-            }
-        }
-
-        foreach (var outline in _shipOutlines.Values)
-        {
-            foreach (var line in outline)
-            {
-                Line(line.X1, line.Y1, line.X2, line.Y2);
-            }
-        }
-
-        return pixels;
-    }
 
     /// <summary>Build the current frame and hand it to the renderer.</summary>
     public void Present()
@@ -354,15 +257,19 @@ public sealed class Screen
 
         if (_border)
         {
+            // The border's sides move out to the edges of a widened space view,
+            // keeping their shape (rather than being stretched apart)
+            float margin = SideMargin;
+            float Widen(int x) => ToWide(x < Width / 2 ? x - margin : x + margin, margin);
             foreach (var line in BorderLines)
             {
-                _builder.WideLine(line.X1, line.Y1, line.X2, line.Y2, line.Colour);
+                _builder.WideLine(Widen(line.X1), line.Y1, Widen(line.X2), line.Y2, line.Colour);
             }
         }
 
         foreach (var line in _wideLines)
         {
-            _builder.WideLine(line.X1, line.Y1, line.X2, line.Y2, line.Colour);
+            _builder.WideLine(ToWide(line.X1, line.Margin), line.Y1, ToWide(line.X2, line.Margin), line.Y2, line.Colour);
         }
 
         foreach (var ((column, row), glyphs) in _text)

@@ -1,45 +1,27 @@
 using System.Numerics;
 using System.Runtime.InteropServices;
 using EliteSharp.Game.Ships;
+using EliteSharp.Rendering.Geometry;
 using Silk.NET.Vulkan;
 
 namespace EliteSharp.Rendering.Vulkan;
 
 /// <summary>
-/// A vertex of the world's geometry. Wireframe models are line lists, with
-/// two vertices per edge, and each vertex carries the normals of the faces on
-/// either side of its edge so the vertex shader can do Elite's hidden line
-/// removal. Solid geometry uses the same format, with no faces.
+/// A vertex of the world's geometry: a position in model space. Wireframes
+/// are line lists, with two vertices per edge, and surfaces are triangle
+/// lists.
 /// </summary>
 [StructLayout(LayoutKind.Sequential)]
-public struct MeshVertex(Vector3 position, Vector4 faceA, Vector4 faceB, float edgeVisibility)
+public struct MeshVertex(Vector3 position)
 {
     /// <summary>The position in model space.</summary>
     public Vector3 Position = position;
-
-    /// <summary>The normal of the face on one side of the edge (xyz), and its visibility distance (w), or w = -1 if there is no face.</summary>
-    public Vector4 FaceA = faceA;
-
-    /// <summary>The normal of the face on the other side of the edge, as for <see cref="FaceA"/>.</summary>
-    public Vector4 FaceB = faceB;
-
-    /// <summary>The visibility distance of the edge.</summary>
-    public float EdgeVisibility = edgeVisibility;
-
-    /// <summary>A face that is always visible (for geometry with no faces).</summary>
-    public static readonly Vector4 NoFace = new(0, 0, 0, -1);
-
-    /// <summary>A vertex of geometry that has no faces.</summary>
-    public static MeshVertex Plain(Vector3 position) => new(position, NoFace, NoFace, 31);
 
     public static readonly uint SizeInBytes = (uint)Marshal.SizeOf<MeshVertex>();
 
     public static VertexInputAttributeDescription[] Attributes(uint binding) =>
     [
         new(0, binding, Format.R32G32B32Sfloat, 0),
-        new(1, binding, Format.R32G32B32A32Sfloat, 12),
-        new(2, binding, Format.R32G32B32A32Sfloat, 28),
-        new(3, binding, Format.R32Sfloat, 44),
     ];
 }
 
@@ -47,8 +29,17 @@ public struct MeshVertex(Vector3 position, Vector4 faceA, Vector4 faceB, float e
 public readonly record struct Mesh(uint FirstVertex, uint VertexCount);
 
 /// <summary>
-/// The geometry of the 3D world, uploaded to the GPU once at startup: a
-/// wireframe mesh for each ship model, plus the unit shapes used for the
+/// The meshes for a ship model: for each level of detail (see
+/// <see cref="ShipGeometry"/>), its surface and its wireframe.
+/// </summary>
+/// <param name="Surfaces">The surface at each level of detail (a triangle list).</param>
+/// <param name="Wireframes">The wireframe at each level of detail (a line list).</param>
+/// <param name="Radius">The distance from the model's origin to its furthest vertex.</param>
+public sealed record ShipMeshes(Mesh[] Surfaces, Mesh[] Wireframes, float Radius);
+
+/// <summary>
+/// The geometry of the 3D world, uploaded to the GPU once at startup: the
+/// surfaces and wireframes of each ship model at each level of detail, plus the unit shapes used for the
 /// planet and sun (a circle, a sphere and a disc), all in one vertex buffer.
 /// </summary>
 public sealed class MeshLibrary : IDisposable
@@ -56,7 +47,7 @@ public sealed class MeshLibrary : IDisposable
     /// <summary>The number of segments in the circles and the disc.</summary>
     private const int CircleSegments = 64;
 
-    private readonly Dictionary<ShipModel, Mesh> _ships = [];
+    private readonly Dictionary<ShipModel, ShipMeshes> _ships = [];
     private readonly GpuBuffer _vertexBuffer;
 
     public MeshLibrary(GpuDevice gpu)
@@ -65,7 +56,11 @@ public sealed class MeshLibrary : IDisposable
 
         foreach (var model in ShipCatalogue.All.Select(b => b.Model).Distinct())
         {
-            _ships[model] = Add(vertices, BuildWireframe(model));
+            var geometry = ShipGeometry.Build(model);
+            _ships[model] = new ShipMeshes(
+                [.. geometry.Levels.Select(level => Add(vertices, BuildSurface(level)))],
+                [.. geometry.Levels.Select(level => Add(vertices, BuildWireframe(level)))],
+                geometry.Radius);
         }
 
         UnitCircle = Add(vertices, BuildCircle());
@@ -86,8 +81,8 @@ public sealed class MeshLibrary : IDisposable
     /// <summary>A disc of radius 1 in the xy plane, as a triangle list.</summary>
     public Mesh UnitDisc { get; }
 
-    /// <summary>The wireframe mesh for a ship model.</summary>
-    public Mesh Ship(ShipModel model) => _ships[model];
+    /// <summary>The meshes for a ship model.</summary>
+    public ShipMeshes Ship(ShipModel model) => _ships[model];
 
     private static Mesh Add(List<MeshVertex> vertices, List<MeshVertex> mesh)
     {
@@ -96,32 +91,28 @@ public sealed class MeshLibrary : IDisposable
         return range;
     }
 
-    /// <summary>Build the line list for a ship's wireframe, with the face data for each edge.</summary>
-    private static List<MeshVertex> BuildWireframe(ShipModel model)
+    /// <summary>Build the triangle list for a level of a ship's surface.</summary>
+    private static List<MeshVertex> BuildSurface(ShipLevel level)
     {
-        Vector4 Face(int face)
+        var vertices = new List<MeshVertex>();
+        foreach (var triangle in level.Surface)
         {
-            // Edges can refer to faces that the blueprint doesn't have (face
-            // 15 is used for this), and the original treats those as visible
-            if (face >= model.Faces.Count)
-            {
-                return MeshVertex.NoFace;
-            }
-
-            var f = model.Faces[face];
-            return new Vector4(f.NormalX, f.NormalY, f.NormalZ, f.Visibility);
+            vertices.Add(new MeshVertex(level.Points[triangle.A]));
+            vertices.Add(new MeshVertex(level.Points[triangle.B]));
+            vertices.Add(new MeshVertex(level.Points[triangle.C]));
         }
 
+        return vertices;
+    }
+
+    /// <summary>Build the line list for a level of a ship's wireframe.</summary>
+    private static List<MeshVertex> BuildWireframe(ShipLevel level)
+    {
         var vertices = new List<MeshVertex>();
-        foreach (var edge in model.Edges)
+        foreach (var (a, b) in level.Edges)
         {
-            var faceA = Face(edge.Face1);
-            var faceB = Face(edge.Face2);
-            foreach (int index in (ReadOnlySpan<int>)[edge.Vertex1, edge.Vertex2])
-            {
-                var vertex = model.Vertices[index];
-                vertices.Add(new MeshVertex(new Vector3(vertex.X, vertex.Y, vertex.Z), faceA, faceB, edge.Visibility));
-            }
+            vertices.Add(new MeshVertex(level.Points[a]));
+            vertices.Add(new MeshVertex(level.Points[b]));
         }
 
         return vertices;
@@ -135,8 +126,8 @@ public sealed class MeshLibrary : IDisposable
         var vertices = new List<MeshVertex>();
         for (int i = 0; i < CircleSegments; i++)
         {
-            vertices.Add(MeshVertex.Plain(OnCircle(i)));
-            vertices.Add(MeshVertex.Plain(OnCircle(i + 1)));
+            vertices.Add(new MeshVertex(OnCircle(i)));
+            vertices.Add(new MeshVertex(OnCircle(i + 1)));
         }
 
         return vertices;
@@ -147,9 +138,9 @@ public sealed class MeshLibrary : IDisposable
         var vertices = new List<MeshVertex>();
         for (int i = 0; i < CircleSegments; i++)
         {
-            vertices.Add(MeshVertex.Plain(Vector3.Zero));
-            vertices.Add(MeshVertex.Plain(OnCircle(i)));
-            vertices.Add(MeshVertex.Plain(OnCircle(i + 1)));
+            vertices.Add(new MeshVertex(Vector3.Zero));
+            vertices.Add(new MeshVertex(OnCircle(i)));
+            vertices.Add(new MeshVertex(OnCircle(i + 1)));
         }
 
         return vertices;
@@ -173,12 +164,12 @@ public sealed class MeshLibrary : IDisposable
                 var b = Point(slice + 1, stack);
                 var c = Point(slice, stack + 1);
                 var d = Point(slice + 1, stack + 1);
-                vertices.Add(MeshVertex.Plain(a));
-                vertices.Add(MeshVertex.Plain(b));
-                vertices.Add(MeshVertex.Plain(c));
-                vertices.Add(MeshVertex.Plain(b));
-                vertices.Add(MeshVertex.Plain(d));
-                vertices.Add(MeshVertex.Plain(c));
+                vertices.Add(new MeshVertex(a));
+                vertices.Add(new MeshVertex(b));
+                vertices.Add(new MeshVertex(c));
+                vertices.Add(new MeshVertex(b));
+                vertices.Add(new MeshVertex(d));
+                vertices.Add(new MeshVertex(c));
             }
         }
 

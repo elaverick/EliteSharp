@@ -32,12 +32,20 @@ public sealed class PipelineDescription
     public VertexInputAttributeDescription[] Attributes { get; init; } = [];
 
     public DepthMode Depth { get; init; }
+
+    /// <summary>
+    /// The slope-scaled depth bias for polygons (0 for none), which offsets
+    /// each polygon's depth in proportion to how steeply its depth changes
+    /// across the screen. The depth is reversed, so a negative bias pushes
+    /// polygons away from the camera.
+    /// </summary>
+    public float DepthBiasSlope { get; init; }
 }
 
 /// <summary>
 /// Creates the graphics pipelines. Everything the renderers draw uses dynamic
-/// viewports, scissors and line widths, no face culling (the wireframes have
-/// their own hidden line removal) and no blending (transparent pixels are
+/// viewports, scissors and line widths, no face culling (the depth buffer
+/// does all the hiding) and no blending (transparent pixels are
 /// discarded instead).
 /// </summary>
 public static unsafe class PipelineFactory
@@ -95,6 +103,8 @@ public static unsafe class PipelineFactory
                     CullMode = CullModeFlags.None,
                     FrontFace = FrontFace.Clockwise,
                     LineWidth = 1,
+                    DepthBiasEnable = description.DepthBiasSlope != 0,
+                    DepthBiasSlopeFactor = description.DepthBiasSlope,
                 };
 
                 var multisample = new PipelineMultisampleStateCreateInfo

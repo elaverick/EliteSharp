@@ -140,10 +140,17 @@ public sealed unsafe class HudRenderer : IDisposable
 
         if (wideCount > 0)
         {
+            var area2 = wideArea ?? area;
             if (wideArea is { } stretched)
             {
                 SetArea(commandBuffer, frame, stretched, stretched.Extent.Width / (float)Screen.Width, layout.Scale);
             }
+
+            // The wide lines (the border, and the tunnels, which are bigger than
+            // the screen) are clipped to the space view, as the original clips
+            // them, so they don't spill onto the dashboard
+            var spaceView = new Rect2D(area2.Offset, new Extent2D(area2.Extent.Width, (uint)MathF.Ceiling(Screen.SpaceViewHeight * layout.Scale)));
+            vk.CmdSetScissor(commandBuffer, 0, 1, in spaceView);
 
             vk.CmdDraw(commandBuffer, (uint)wideCount, 1, (uint)(triangleCount + lineCount), 0);
         }

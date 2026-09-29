@@ -5,9 +5,13 @@ namespace EliteSharp.Game.Ships;
 /// <summary>
 /// A ship's wireframe model, loaded from a glTF 2.0 file (see
 /// tools/export_ships.py for the layout). As well as the vertices and edges,
-/// the model holds the data Elite uses for hidden line removal: the faces that
-/// each vertex and edge belong to, the face normals, and the distances beyond
-/// which vertices, edges and faces are no longer drawn.
+/// the model holds the data the original uses for hidden line removal: the
+/// faces that each vertex and edge belong to, the face normals, and the
+/// distances beyond which vertices, edges and faces are no longer drawn. The
+/// game's port of LL9 still uses these (the explosions, the ships' lasers and
+/// the hangar depend on its results), but the renderer doesn't: it draws the
+/// ships' actual geometry and lets the depth buffer hide what's out of sight
+/// (see Rendering/Geometry/ShipGeometry.cs).
 ///
 /// The coordinates are in the original's left-handed space (x right, y up,
 /// z forward); the glTF node mirrors x for other viewers, but the mesh data is
@@ -70,7 +74,7 @@ public sealed class ShipModel
     /// <summary>The face normals are scaled by 2^NormalScale.</summary>
     public int NormalScale { get; }
 
-    /// <summary>The distance (z_hi) beyond which the ship is drawn as a dot.</summary>
+    /// <summary>The distance (z_hi) beyond which the original draws the ship as a dot.</summary>
     public int DotDistance { get; }
 
     /// <summary>The most edges that can be visible at once (which sizes the ship line heap).</summary>

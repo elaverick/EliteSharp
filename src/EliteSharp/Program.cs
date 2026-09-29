@@ -46,6 +46,11 @@ VulkanRenderer? renderer = null;
 Thread? gameThread = null;
 Exception? gameError = null;
 bool closeRequested = false;
+bool fullScreenToggleRequested = false;
+
+// Switch between a window and full screen (on the window's thread)
+void ToggleFullScreen() =>
+    window.WindowState = window.WindowState == WindowState.Fullscreen ? WindowState.Normal : WindowState.Fullscreen;
 
 window.Load += () =>
 {
@@ -58,7 +63,7 @@ window.Load += () =>
             // Alt+Enter toggles full-screen mode
             if (key == Key.Enter && (k.IsKeyPressed(Key.AltLeft) || k.IsKeyPressed(Key.AltRight)))
             {
-                window.WindowState = window.WindowState == WindowState.Fullscreen ? WindowState.Normal : WindowState.Fullscreen;
+                ToggleFullScreen();
                 return;
             }
 
@@ -87,12 +92,32 @@ window.Load += () =>
     int scriptIndex = Array.FindIndex(args, a => a.Equals("--script", StringComparison.OrdinalIgnoreCase));
     if (scriptIndex >= 0 && scriptIndex + 1 < args.Length)
     {
-        new ScriptRunner(args[scriptIndex + 1], keyboard, gamepad, path => renderer?.RequestCapture(path), () => closeRequested = true, game.DebugCommand).Start();
+        // Test scripts can't press Alt+Enter (their keys go to the BBC's
+        // keyboard), so "cmd fullscreen" does the same
+        void Command(string command)
+        {
+            if (command == "fullscreen")
+            {
+                fullScreenToggleRequested = true;
+            }
+            else
+            {
+                game.DebugCommand(command);
+            }
+        }
+
+        new ScriptRunner(args[scriptIndex + 1], keyboard, gamepad, path => renderer?.RequestCapture(path), () => closeRequested = true, Command).Start();
     }
 };
 
 window.Render += _ =>
 {
+    if (fullScreenToggleRequested)
+    {
+        fullScreenToggleRequested = false;
+        ToggleFullScreen();
+    }
+
     if (renderer != null)
     {
         screen.SideMargin = renderer.SideMargin;

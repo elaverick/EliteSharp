@@ -98,11 +98,6 @@ public sealed partial class EliteGame
                     _dockingComputer = 0xFF;
                     break;
 
-                case "facecheck":
-                    // Compare the GPU's face visibility test with LL9's (needs trace)
-                    _faceCheck = true;
-                    break;
-
                 case "trace":
                     _trace = new StreamWriter(parts[1]) { AutoFlush = true };
                     break;

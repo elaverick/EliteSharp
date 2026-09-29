@@ -222,11 +222,8 @@ public sealed partial class EliteGame
         }
 
         _currentShip.Flags |= Ship.FlagDrawn;
-        var outline = new List<ScreenLine>();
         var transform = CurrentShipTransform();
         List<LineSegment>? worldLines = null;
-        int lineHeapUsed = 1;
-        int heapSize = blueprint.LineHeapSize;
 
         if ((_currentShip.Flags & Ship.FlagFiring) != 0)
         {
@@ -238,57 +235,16 @@ public sealed partial class EliteGame
                 // corners of the screen (or thereabouts)
                 int x2 = _currentShip.X < 0 ? 255 : 0;
                 int y2 = _currentShip.ZLo;
-                int gunScreenX = ToSigned16(gunX), gunScreenY = ToSigned16(gunY);
-                if (LineOnScreen(gunScreenX, gunScreenY, x2, y2))
-                {
-                    lineHeapUsed += 4;
-                }
-
                 var gunVertex = blueprint.Vertices[gun];
                 var gunPosition = Vector3.Transform(new Vector3(gunVertex.X, gunVertex.Y, gunVertex.Z), transform);
                 worldLines = [new LineSegment(gunPosition, ScreenPointToWorld(x2, y2, ScreenEdgeDistance), _colour)];
             }
         }
 
-        // LL170: work out which edges the original draws, for the ship's
-        // outline on the original's screen
-        foreach (var edge in blueprint.Edges)
-        {
-            if (lineHeapUsed >= heapSize)
-            {
-                break;
-            }
-
-            if (edge.Visibility < _shipDistance)
-            {
-                continue;
-            }
-
-            if (FaceVisibility[edge.Face1] == 0 && FaceVisibility[edge.Face2] == 0)
-            {
-                continue;
-            }
-
-            // The outline includes the edges that are off the sides of the
-            // original's screen, as the space view can be wider, but only the
-            // ones that are on it use up the line heap
-            int vertex1 = edge.Vertex1, vertex2 = edge.Vertex2;
-            var line = new ScreenLine(ToSigned16(_projectedX[vertex1]), ToSigned16(_projectedY[vertex1]),
-                                      ToSigned16(_projectedX[vertex2]), ToSigned16(_projectedY[vertex2]), _colour);
-            outline.Add(line);
-            if (LineOnScreen(line.X1, line.Y1, line.X2, line.Y2))
-            {
-                lineHeapUsed += 4;
-            }
-        }
-
-        _screen.SetShipOutline(owner, outline);
-
-        // In the 3D world, the ship is its model and its transform, and the GPU
-        // works out which edges to draw
-        float normalOffsetScale = NormalOffsetScale(blueprint);
-        CheckFaceVisibility(blueprint, transform, normalOffsetScale);
-        _world.SetShip(owner, new ShipInstance(blueprint.Model, transform, _colour, _shipDistance, normalOffsetScale), worldLines);
+        // In the 3D world, the ship is its model and its transform, and the
+        // renderer draws its geometry, with the depth buffer hiding the parts
+        // that are out of sight
+        _world.SetShip(owner, new ShipInstance(blueprint.Model, transform, _colour), worldLines);
     }
 
     /// <summary>Set up one row of XX16 from an orientation vector, scaling each coordinate by 256 / 197.</summary>
@@ -530,9 +486,10 @@ public sealed partial class EliteGame
 
     /// <summary>
     /// The LL145 clipping test: returns true if the line from (x1, y1) to
-    /// (x2, y2) intersects the space view (0-255, 0-191).
+    /// (x2, y2) intersects the space view (0-255, 0-191), widened by the given
+    /// number of pixels on each side.
     /// </summary>
-    private static bool LineOnScreen(int x1, int y1, int x2, int y2)
+    private static bool LineOnScreen(int x1, int y1, int x2, int y2, int margin = 0)
     {
         double entry = 0, exit = 1;
         double dx = x2 - x1, dy = y2 - y1;
@@ -573,7 +530,7 @@ public sealed partial class EliteGame
             return true;
         }
 
-        return Clip(-dx, x1 - 0) && Clip(dx, 255 - x1) && Clip(-dy, y1 - 0) && Clip(dy, 2 * CentreY - 1 - y1);
+        return Clip(-dx, x1 + margin) && Clip(dx, 255 + margin - x1) && Clip(-dy, y1 - 0) && Clip(dy, 2 * CentreY - 1 - y1);
     }
 
     /// <summary>LL14: the ship is not in view, so draw the explosion cloud if it's exploding, or erase it.</summary>
@@ -600,7 +557,12 @@ public sealed partial class EliteGame
         RemoveFromScreen(owner);
     }
 
-    /// <summary>SHPPT: draw a distant ship as a dot.</summary>
+    /// <summary>
+    /// SHPPT: draw a distant ship as a dot. The game still works out whether
+    /// the dot is on the original's screen, but in the 3D world the ship stays
+    /// a 3D object, which the renderer draws in less detail the further away it
+    /// is.
+    /// </summary>
     private void DrawShipAsDot(object owner)
     {
         // Shpt draws a four-pixel dash on two rows if the dot is on the
@@ -614,11 +576,7 @@ public sealed partial class EliteGame
             _currentShip.Flags &= ~Ship.FlagDrawn;
         }
 
-        _screen.RemoveShipOutline(owner);
-
-        // In the 3D world, the dot is wherever the ship is (and the GPU clips it
-        // to the view), rather than only where the original's screen can show it
-        _world.SetParticles(owner, [new Particle(CurrentShipPosition(), 4, 2, _colour)]);
+        _world.SetShip(owner, new ShipInstance(_blueprint!.Model, CurrentShipTransform(), _colour));
     }
 
     /// <summary>
@@ -667,7 +625,6 @@ public sealed partial class EliteGame
     private void DrawExplosion(object owner)
     {
         var cloud = _currentShip.Explosion;
-        _screen.RemoveShipOutline(owner);
         if ((_currentShip.Flags & Ship.FlagOnScreenCloud) != 0)
         {
             // Erase the existing cloud (which, as in the original, reseeds the
@@ -874,6 +831,12 @@ public sealed partial class EliteGame
     /// <summary>The previous point on the circle being drawn.</summary>
     private int _circleLinePreviousX, _circleLinePreviousY;
 
+    /// <summary>
+    /// How far beyond each side of the original's screen the circle being
+    /// drawn can reach (for the tunnels, which fill a widened space view).
+    /// </summary>
+    private int _circleMargin;
+
     /// <summary>PLANET: draw the planet or sun in INWK.</summary>
     private void DrawPlanetOrSun()
     {
@@ -932,7 +895,7 @@ public sealed partial class EliteGame
         {
             _circleLineFirst = false;
         }
-        else if (LineOnScreen(_circleLinePreviousX, _circleLinePreviousY, x, y))
+        else if (LineOnScreen(_circleLinePreviousX, _circleLinePreviousY, x, y, _circleMargin))
         {
             _circleLines.Add(new ScreenLine(_circleLinePreviousX, _circleLinePreviousY, x, y, _colour));
         }
@@ -1207,9 +1170,15 @@ public sealed partial class EliteGame
         DrawTunnelCircles();
     }
 
-    /// <summary>HFS1: draw the tunnel as eight sets of concentric circles.</summary>
+    /// <summary>
+    /// HFS1: draw the tunnel as eight sets of concentric circles (using EOR
+    /// logic, so drawing it again erases it). The circles carry on out to the
+    /// sides of a space view that is wider than the original's.
+    /// </summary>
     private void DrawTunnelCircles()
     {
+        float sideMargin = _screen.SideMargin;
+        _circleMargin = (int)sideMargin;
         _circleX = CentreX;
         _circleY = CentreY;
         for (int i = 0; i < 8; i++)
@@ -1222,7 +1191,7 @@ public sealed partial class EliteGame
                 DrawCircle();
                 foreach (var line in _circleLines)
                 {
-                    _screen.DrawLine(line.X1, line.Y1, line.X2, line.Y2, _colour);
+                    _screen.DrawWideLine(line.X1, line.Y1, line.X2, line.Y2, _colour, sideMargin);
                 }
 
                 // The original draws the circles slowly enough for them to be
@@ -1242,5 +1211,7 @@ public sealed partial class EliteGame
                 }
             }
         }
+
+        _circleMargin = 0;
     }
 }

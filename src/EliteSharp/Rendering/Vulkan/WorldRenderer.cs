@@ -67,10 +67,10 @@ public sealed unsafe class WorldRenderer : IDisposable
 
     /// <summary>
     /// How far a ship's surface is pushed back from the camera (in the model's
-    /// units), so the edges on it, and the surface details that are drawn up
-    /// to a few units inside it, are in front of it.
+    /// units), so the edges on it are in front of it. This is kept small, as the
+    /// hidden edges within this distance of the surface show through it.
     /// </summary>
-    private const float SurfacePushBack = 8;
+    private const float SurfacePushBack = 1;
 
     /// <summary>
     /// The slope-scaled depth bias for surfaces, which pushes them further back
@@ -82,9 +82,13 @@ public sealed unsafe class WorldRenderer : IDisposable
     /// <summary>
     /// The sizes of ship on screen at which each simpler level of detail takes
     /// over, as the ship's radius in original pixels (see ShipGeometry for the
-    /// levels): at this size or smaller, level i + 1 is used.
+    /// levels): at this size or smaller, level i + 1 is used. These keep at
+    /// least as much detail as the original shows at the same distance (it
+    /// drops the details on the ships' surfaces, such as the Sidewinder's
+    /// exhausts, when they are around 10 pixels across, and shows ships as
+    /// dots when they are a few pixels across).
     /// </summary>
-    private static readonly float[] LevelSizes = [20, 10, 5];
+    private static readonly float[] LevelSizes = [8, 4, 2.5f];
 
     /// <summary>
     /// The smallest a ship is drawn on screen, as its radius in original pixels.

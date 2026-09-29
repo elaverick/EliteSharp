@@ -2,6 +2,8 @@
 
 **Classic Elite, as it played on the BBC Master, rebuilt for modern Windows PCs.**
 
+![A pirate Cobra Mk III sweeps across the planet, with a Mamba alongside](images/close-quarters.png)
+
 Elite is the 1984 space trading and combat game that started it all. You begin
 with a Cobra Mk III, 100 credits and a tank of fuel, docked at the space station
 orbiting Lave. From there the eight galaxies are yours: trade between the stars,

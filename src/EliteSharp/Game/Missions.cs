@@ -296,7 +296,7 @@ public sealed partial class EliteGame
     /// <summary>HAS1: draw a ship in the hangar, using the type and position bytes in XX15.</summary>
     private void DrawHangarShip()
     {
-        // Each ship in the hangar gets its own on-screen image
+        // Each ship in the hangar is a separate object on the screen
         _currentShip = Ship.Workspace();
         _currentShip.ResetOrientationAndPosition();
 
@@ -345,20 +345,25 @@ public sealed partial class EliteGame
 
     /// <summary>
     /// HANGER: draw the hangar floor and back wall, with the lines stopping
-    /// when they bump into the ships that are already on-screen.
+    /// when they bump into the ships that are already on-screen. If the
+    /// window is wider than the original's screen, the hangar carries on out
+    /// to its edges, with the lines at the same size and spacing.
     /// </summary>
     private void DrawHangarBackground()
     {
-        var occupied = _screen.RasterizeSpaceView();
+        float sideMargin = _screen.SideMargin;
+        int margin = (int)sideMargin;
+        var occupied = _screen.RasterizeSpaceView(margin);
+        bool Occupied(int x, int y) => occupied[x + margin, y];
 
         void Draw(int x1, int y1, int x2, int y2)
         {
-            _screen.DrawLine(x1, y1, x2, y2, Red, toggle: false);
+            _screen.DrawWideLine(x1, y1, x2, y2, Red, sideMargin);
             for (int y = Math.Min(y1, y2); y <= Math.Max(y1, y2); y++)
             {
                 for (int x = Math.Min(x1, x2); x <= Math.Max(x1, x2); x++)
                 {
-                    occupied[x, y] = true;
+                    occupied[x + margin, y] = true;
                 }
             }
         }
@@ -368,38 +373,41 @@ public sealed partial class EliteGame
         void Scan(int y, int start, int step, int limit)
         {
             int x = start;
-            int end = -1;
-            while (x != limit && !occupied[x, y])
+            int? end = null;
+            while (x != limit && !Occupied(x, y))
             {
                 end = x;
                 x += step;
             }
 
-            if (end >= 0)
+            if (end is int last)
             {
-                Draw(start, y, end, y);
+                Draw(start, y, last, y);
             }
         }
 
-        // The floor
+        // The floor, from just inside the border on each side (which is
+        // further out if the space view is wider than the original's)
+        int left = -margin, right = 255 + margin;
         for (int divisor = 2; divisor < 13; divisor++)
         {
             int y = CentreY + 130 / divisor;
-            Scan(y, 2, 1, 256);
-            Scan(y, 253, -1, -1);
+            Scan(y, left + 2, 1, right + 1);
+            Scan(y, right - 2, -1, left - 1);
             if (_hangarHasManyShips != 0)
             {
-                Scan(y, 128, 1, 256);
-                Scan(y, 127, -1, -1);
+                Scan(y, 128, 1, right + 1);
+                Scan(y, 127, -1, left - 1);
             }
         }
 
-        // The back wall
-        for (int i = 1; i < 32; i++)
+        // The back wall, with a line every eight pixels from x = 8 to 248 in
+        // the original's screen, and out to the edges in a wider one
+        int extraLines = margin / 8;
+        for (int x = 8 - extraLines * 8; x <= 248 + extraLines * 8; x += 8)
         {
-            int x = i * 8;
             int end = -1;
-            for (int y = 1; y < 2 * CentreY && !occupied[x, y]; y++)
+            for (int y = 1; y < 2 * CentreY && !Occupied(x, y); y++)
             {
                 end = y;
             }

@@ -34,7 +34,7 @@ var game = new EliteGame(screen, keyboard, sound, options, gamepad);
 
 var windowOptions = WindowOptions.DefaultVulkan with
 {
-    Title = options.Renderer == RendererKind.World3D ? "Elite - 3D renderer" : "Elite - classic renderer",
+    Title = "Elite",
     Size = options.WindowSize is var (width, height)
         ? new Vector2D<int>(width, height)
         : new Vector2D<int>(256 * options.Scale, 248 * options.Scale),
@@ -49,7 +49,7 @@ bool closeRequested = false;
 
 window.Load += () =>
 {
-    renderer = new VulkanRenderer(window, options.ClassicFrame ? WorldFraming.Classic : WorldFraming.Wide);
+    renderer = new VulkanRenderer(window, options.FourByThreeFrame ? WorldFraming.FourByThree : WorldFraming.Wide);
     var input = window.CreateInput();
     foreach (var kb in input.Keyboards)
     {
@@ -59,14 +59,6 @@ window.Load += () =>
             if (key == Key.Enter && (k.IsKeyPressed(Key.AltLeft) || k.IsKeyPressed(Key.AltRight)))
             {
                 window.WindowState = window.WindowState == WindowState.Fullscreen ? WindowState.Normal : WindowState.Fullscreen;
-                return;
-            }
-
-            // Alt+V switches between the 3D and classic renderers (not Alt+R,
-            // which the NVIDIA and AMD overlays use)
-            if (key == Key.V && (k.IsKeyPressed(Key.AltLeft) || k.IsKeyPressed(Key.AltRight)))
-            {
-                game.Renderer = game.Renderer == RendererKind.World3D ? RendererKind.Classic : RendererKind.World3D;
                 return;
             }
 
@@ -101,14 +93,12 @@ window.Load += () =>
 
 window.Render += _ =>
 {
-    // Show which renderer is running in the title bar
-    string title = game.Renderer == RendererKind.World3D ? "Elite - 3D renderer" : "Elite - classic renderer";
-    if (window.Title != title)
+    if (renderer != null)
     {
-        window.Title = title;
+        screen.SideMargin = renderer.SideMargin;
+        renderer.Draw(exchange.Latest);
     }
 
-    renderer?.Draw(exchange.Latest);
     if (gameError != null || closeRequested)
     {
         window.Close();

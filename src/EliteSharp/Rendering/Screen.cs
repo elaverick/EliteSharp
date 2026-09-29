@@ -9,52 +9,23 @@ namespace EliteSharp.Rendering;
 public readonly record struct ScreenLine(int X1, int Y1, int X2, int Y2, int Colour);
 
 /// <summary>
+/// A line that spans the full width of the space view (see
+/// <see cref="FrameData.WideLines"/>), with a BBC colour byte.
+/// </summary>
+public readonly record struct WideLine(float X1, float Y1, float X2, float Y2, int Colour);
+
+/// <summary>
 /// A filled rectangle in logical screen pixels with a BBC colour byte.
 /// </summary>
 public readonly record struct ScreenRect(int X, int Y, int Width, int Height, int Colour);
-
-/// <summary>
-/// A 3D line in space relative to our ship.
-/// </summary>
-public readonly record struct SpaceLine(float X1, float Y1, float Z1, float X2, float Y2, float Z2, int Colour);
-
-/// <summary>Which part of the display an object's image belongs to.</summary>
-public enum ImageLayer
-{
-    /// <summary>The 2D display (the HUD).</summary>
-    Hud,
-
-    /// <summary>
-    /// The 3D world: the 2D image of something that the 3D renderer draws in
-    /// 3D, such as a ship. These images are only drawn by the classic
-    /// renderer, but they are always kept, as the game uses them to work out
-    /// where the hangar's lines stop.
-    /// </summary>
-    World,
-}
-
-/// <summary>
-/// The current on-screen image of a moving object (a ship, the planet, the sun,
-/// the stardust, laser beams and so on). The original erases these images by
-/// redrawing them with EOR logic before drawing them again; here, setting a new
-/// image simply replaces the old one.
-/// </summary>
-public sealed class ObjectImage
-{
-    public readonly List<ScreenLine> Lines = [];
-    public readonly List<SpaceLine> SpaceLines = [];
-    public readonly List<ScreenRect> Rects = [];
-
-    public bool IsEmpty => Lines.Count == 0 && SpaceLines.Count == 0 && Rects.Count == 0;
-}
 
 /// <summary>
 /// The model of the BBC's screen for the space view part of the display (the
 /// top 192 pixel rows). The original draws everything into screen memory using
 /// EOR logic, so drawing something twice removes it; here that behaviour is
 /// modelled with toggling primitives for the static parts of the display (text,
-/// boxes, charts and crosshairs), while moving objects such as ships have their
-/// images replaced each time they are redrawn.
+/// boxes, charts and crosshairs). Moving objects such as ships are in the 3D
+/// world instead, which is added to each frame.
 /// </summary>
 public sealed class Screen
 {
@@ -86,9 +57,10 @@ public sealed class Screen
     /// <summary>Whether the space view's border is shown.</summary>
     private bool _border;
     private readonly List<ScreenLine> _canvasLines = [];
+    private readonly List<WideLine> _wideLines = [];
     private readonly List<ScreenRect> _canvasRects = [];
     private readonly Dictionary<(int Col, int Row), List<(char Char, int Colour)>> _text = [];
-    private readonly Dictionary<object, (ObjectImage Image, ImageLayer Layer)> _images = [];
+    private readonly Dictionary<object, List<ScreenLine>> _shipOutlines = [];
     private readonly FrameBuilder _builder = new();
     private readonly FrameExchange _exchange;
 
@@ -113,30 +85,32 @@ public sealed class Screen
     public bool EscapePodFitted { get; set; }
 
     /// <summary>
-    /// Whether the game is showing a space view in flight (QQ11 = 0), rather
-    /// than a chart, a text screen or the hangar, in which case the renderer
-    /// puts the space view's border around the whole 3D view.
+    /// The number of the original's pixels that fit into the space view
+    /// beyond each side of the original's screen, when the window is wider
+    /// than the original's 4:3 (set by the renderer).
     /// </summary>
-    public bool IsSpaceView { get; set; }
+    public float SideMargin
+    {
+        get => _sideMargin;
+        set => _sideMargin = value;
+    }
+
+    private volatile float _sideMargin;
 
     /// <summary>Called when building each frame, to add the dashboard.</summary>
     public Action<FrameBuilder>? DashboardRenderer { get; set; }
 
-    /// <summary>
-    /// Called when building each frame, to take a snapshot of the 3D world for
-    /// the 3D renderer. If this isn't set, or it returns null (when the classic
-    /// renderer is being used), the images in the world layer are drawn in 2D
-    /// instead.
-    /// </summary>
-    public Func<SceneFrame?>? WorldSnapshot { get; set; }
+    /// <summary>Called when building each frame, to take a snapshot of the 3D world.</summary>
+    public Func<SceneFrame>? WorldSnapshot { get; set; }
 
-    /// <summary>Clear the space view: all text, lines and object images.</summary>
+    /// <summary>Clear the space view: all text, lines and ship outlines.</summary>
     public void ClearSpaceView()
     {
         _canvasLines.Clear();
+        _wideLines.Clear();
         _canvasRects.Clear();
         _text.Clear();
-        _images.Clear();
+        _shipOutlines.Clear();
         _border = false;
     }
 
@@ -169,6 +143,20 @@ public sealed class Screen
         }
 
         _canvasLines.Add(line);
+    }
+
+    /// <summary>
+    /// Draw a line that can extend beyond the sides of the original's screen,
+    /// by up to the given margin (from <see cref="SideMargin"/>). The line
+    /// stays the same size, and the space view gets wider around it.
+    /// </summary>
+    public void DrawWideLine(int x1, int y1, int x2, int y2, int colour, float margin)
+    {
+        // Convert the pixel centres to logical coordinates, where 0 to 255 is
+        // the full width of the space view
+        float scale = Width / (Width + 2 * margin);
+        float Convert(int x) => (x + 0.5f + margin) * scale - 0.5f;
+        _wideLines.Add(new WideLine(Convert(x1), y1, Convert(x2), y2, colour));
     }
 
     /// <summary>Draw a filled rectangle on the canvas, toggling as with EOR drawing.</summary>
@@ -236,43 +224,43 @@ public sealed class Screen
         _canvasLines.RemoveAll(l => Math.Min(l.Y1, l.Y2) >= firstPixelRow && Math.Max(l.Y1, l.Y2) <= lastPixelRow
                                     && Math.Min(l.X1, l.X2) >= 2 && Math.Max(l.X1, l.X2) <= 253);
         _canvasRects.RemoveAll(r => r.Y >= firstPixelRow && r.Y + r.Height - 1 <= lastPixelRow);
+        _wideLines.RemoveAll(l => Math.Min(l.Y1, l.Y2) >= firstPixelRow && Math.Max(l.Y1, l.Y2) <= lastPixelRow);
     }
-
-    /// <summary>Set the on-screen image of a moving object, replacing any previous image.</summary>
-    public void SetImage(object owner, ObjectImage image, ImageLayer layer = ImageLayer.Hud)
-    {
-        if (image.IsEmpty)
-        {
-            _images.Remove(owner);
-        }
-        else
-        {
-            _images[owner] = (image, layer);
-        }
-    }
-
-    /// <summary>Remove the on-screen image of a moving object.</summary>
-    public void RemoveImage(object owner) => _images.Remove(owner);
-
-    public bool HasImage(object owner) => _images.ContainsKey(owner);
-
-    public ObjectImage? GetImage(object owner) => _images.TryGetValue(owner, out var entry) ? entry.Image : null;
 
     /// <summary>
-    /// Work out which pixels in the space view have something drawn in them
-    /// (used by the hangar, whose lines stop when they hit the ships).
+    /// Set the outline of a ship: the edges that the original draws on the
+    /// screen, projected onto it. These aren't drawn (the 3D world draws the
+    /// ship), but the hangar's lines stop when they hit them, as they do in
+    /// the original.
     /// </summary>
-    public bool[,] RasterizeSpaceView()
+    public void SetShipOutline(object owner, List<ScreenLine> lines) => _shipOutlines[owner] = lines;
+
+    /// <summary>Remove the outline of a ship.</summary>
+    public void RemoveShipOutline(object owner) => _shipOutlines.Remove(owner);
+
+    /// <summary>
+    /// Work out which pixels in the space view have something drawn in them,
+    /// including the ships' outlines (used by the hangar, whose lines stop
+    /// when they hit the ships). The space view is widened by the given
+    /// number of pixels on each side, with the border at its edges, so pixel
+    /// x of the original's screen is at [x + margin, y].
+    /// </summary>
+    public bool[,] RasterizeSpaceView(int margin)
     {
-        var pixels = new bool[Width, SpaceViewHeight];
+        int width = Width + 2 * margin;
+        var pixels = new bool[width, SpaceViewHeight];
 
         void Plot(int x, int y)
         {
-            if (x >= 0 && x < Width && y >= 0 && y < SpaceViewHeight)
+            x += margin;
+            if (x >= 0 && x < width && y >= 0 && y < SpaceViewHeight)
             {
                 pixels[x, y] = true;
             }
         }
+
+        // The border's pixels move out to the edges of the widened view
+        int Widen(int x) => x < Width / 2 ? x - margin : x + margin;
 
         void Line(double x1, double y1, double x2, double y2)
         {
@@ -306,7 +294,7 @@ public sealed class Screen
         {
             foreach (var line in BorderLines)
             {
-                Line(line.X1, line.Y1, line.X2, line.Y2);
+                Line(Widen(line.X1), line.Y1, Widen(line.X2), line.Y2);
             }
         }
 
@@ -338,22 +326,11 @@ public sealed class Screen
             }
         }
 
-        foreach (var (image, _) in _images.Values)
+        foreach (var outline in _shipOutlines.Values)
         {
-            foreach (var line in image.Lines)
+            foreach (var line in outline)
             {
                 Line(line.X1, line.Y1, line.X2, line.Y2);
-            }
-
-            foreach (var rect in image.Rects)
-            {
-                Rect(rect);
-            }
-
-            foreach (var line in image.SpaceLines)
-            {
-                Line(128 + 256 * line.X1 / line.Z1, 96 - 256 * line.Y1 / line.Z1,
-                     128 + 256 * line.X2 / line.Z2, 96 - 256 * line.Y2 / line.Z2);
             }
         }
 
@@ -379,33 +356,13 @@ public sealed class Screen
         {
             foreach (var line in BorderLines)
             {
-                _builder.BorderLine(line.X1, line.Y1, line.X2, line.Y2, line.Colour);
+                _builder.WideLine(line.X1, line.Y1, line.X2, line.Y2, line.Colour);
             }
         }
 
-        var world = WorldSnapshot?.Invoke();
-        foreach (var (image, layer) in _images.Values)
+        foreach (var line in _wideLines)
         {
-            if (layer == ImageLayer.World && world != null)
-            {
-                // The 3D renderer draws this
-                continue;
-            }
-
-            foreach (var rect in image.Rects)
-            {
-                _builder.Rect(rect.X, rect.Y, rect.Width, rect.Height, rect.Colour);
-            }
-
-            foreach (var line in image.Lines)
-            {
-                _builder.Line(line.X1, line.Y1, line.X2, line.Y2, line.Colour);
-            }
-
-            foreach (var line in image.SpaceLines)
-            {
-                _builder.Line3D(line.X1, line.Y1, line.Z1, line.X2, line.Y2, line.Z2, line.Colour);
-            }
+            _builder.WideLine(line.X1, line.Y1, line.X2, line.Y2, line.Colour);
         }
 
         foreach (var ((column, row), glyphs) in _text)
@@ -421,7 +378,7 @@ public sealed class Screen
             DashboardRenderer?.Invoke(_builder);
         }
 
-        _exchange.Publish(_builder.Build(world, IsSpaceView, BuildSpacePalette(), BuildDashboardPalette(), HyperspaceColours, DashboardVisible));
+        _exchange.Publish(_builder.Build(WorldSnapshot?.Invoke(), BuildSpacePalette(), BuildDashboardPalette(), HyperspaceColours, DashboardVisible));
     }
 
     /// <summary>Add a character from the MOS font, merging each row of pixels into runs.</summary>

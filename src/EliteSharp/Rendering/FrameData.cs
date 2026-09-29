@@ -4,18 +4,14 @@ using EliteSharp.Rendering.Scene;
 namespace EliteSharp.Rendering;
 
 /// <summary>
-/// A vertex of the 2D display as sent to the GPU. For 2D primitives the
-/// position is in logical BBC screen pixels (256 x 248, origin top-left). In
-/// the classic renderer, the 3D world is drawn with these too, as points in
-/// space relative to our ship, which the vertex shader projects using Elite's
-/// perspective (screen x = 128 + 256 * x / z, screen y = 96 - 256 * y / z).
+/// A vertex of the 2D display as sent to the GPU, in logical BBC screen pixels
+/// (256 x 248, origin top-left).
 /// </summary>
 [StructLayout(LayoutKind.Sequential, Pack = 4)]
-public struct Vertex(float x, float y, float z, uint colour, uint flags)
+public struct Vertex(float x, float y, uint colour, uint flags)
 {
     public float X = x;
     public float Y = y;
-    public float Z = z;
 
     /// <summary>The BBC colour byte (a mode 1 or mode 2 pixel pattern).</summary>
     public uint Colour = colour;
@@ -31,22 +27,18 @@ public static class VertexFlags
     /// <summary>Decode the colour byte as a mode 2 (dashboard) pattern rather than mode 1.</summary>
     public const uint Mode2 = 1;
 
-    /// <summary>The position is a 3D point in space to be projected.</summary>
-    public const uint Space3D = 2;
-
     /// <summary>The primitive belongs to the dashboard rather than the space view (for clipping).</summary>
     public const uint Dashboard = 4;
 }
 
 /// <summary>
-/// A complete frame to be drawn: the 3D world (unless the classic renderer is
-/// being used), and the 2D display as vertices for the triangle list and the
+/// A complete frame to be drawn: the 3D world, and the 2D display as vertices for the triangle list and the
 /// line list, plus the palette state. Built on the game thread, drawn by the
 /// renderer.
 /// </summary>
 public sealed class FrameData
 {
-    /// <summary>The 3D world, or null if there isn't one (or the classic renderer draws it in 2D).</summary>
+    /// <summary>The 3D world, or null if there isn't one.</summary>
     public SceneFrame? World;
 
     public Vertex[] Triangles = [];
@@ -56,14 +48,14 @@ public sealed class FrameData
     public int LineVertexCount;
 
     /// <summary>
-    /// The space view's border (a line list), which is kept separate so the
-    /// renderer can draw it around a 3D view that is wider than the 2D display.
+    /// The lines that span the full width of the space view (a line list): the
+    /// space view's border, and the hangar. These are kept separate so the
+    /// renderer can stretch them to the edges of a window that is wider than
+    /// the 2D display, where logical x-coordinates 0 and 255 are at the left
+    /// and right edges of the window.
     /// </summary>
-    public Vertex[] Border = [];
-    public int BorderVertexCount;
-
-    /// <summary>Whether this is a space view in flight (see <see cref="Screen.IsSpaceView"/>).</summary>
-    public bool SpaceView;
+    public Vertex[] WideLines = [];
+    public int WideLineVertexCount;
 
     /// <summary>The sixteen physical colours (0-7) of the ULA palette for the space view.</summary>
     public int[] SpacePalette = new int[16];
@@ -85,44 +77,37 @@ public sealed class FrameBuilder
 {
     private readonly List<Vertex> _triangles = new(16384);
     private readonly List<Vertex> _lines = new(8192);
-    private readonly List<Vertex> _border = new(16);
+    private readonly List<Vertex> _wideLines = new(16);
 
     public void Clear()
     {
         _triangles.Clear();
         _lines.Clear();
-        _border.Clear();
+        _wideLines.Clear();
     }
 
     /// <summary>Add a 2D line in logical screen coordinates, drawn to the pixel centres.</summary>
     public void Line(float x1, float y1, float x2, float y2, int colour, uint flags = 0)
     {
-        _lines.Add(new Vertex(x1 + 0.5f, y1 + 0.5f, 0, (uint)colour, flags));
-        _lines.Add(new Vertex(x2 + 0.5f, y2 + 0.5f, 0, (uint)colour, flags));
+        _lines.Add(new Vertex(x1 + 0.5f, y1 + 0.5f, (uint)colour, flags));
+        _lines.Add(new Vertex(x2 + 0.5f, y2 + 0.5f, (uint)colour, flags));
     }
 
-    /// <summary>Add a line of the space view's border, in logical screen coordinates.</summary>
-    public void BorderLine(float x1, float y1, float x2, float y2, int colour)
+    /// <summary>Add a line that spans the full width of the space view (see <see cref="FrameData.WideLines"/>).</summary>
+    public void WideLine(float x1, float y1, float x2, float y2, int colour)
     {
-        _border.Add(new Vertex(x1 + 0.5f, y1 + 0.5f, 0, (uint)colour, 0));
-        _border.Add(new Vertex(x2 + 0.5f, y2 + 0.5f, 0, (uint)colour, 0));
-    }
-
-    /// <summary>Add a 3D line between two points in space relative to our ship.</summary>
-    public void Line3D(float x1, float y1, float z1, float x2, float y2, float z2, int colour)
-    {
-        _lines.Add(new Vertex(x1, y1, z1, (uint)colour, VertexFlags.Space3D));
-        _lines.Add(new Vertex(x2, y2, z2, (uint)colour, VertexFlags.Space3D));
+        _wideLines.Add(new Vertex(x1 + 0.5f, y1 + 0.5f, (uint)colour, 0));
+        _wideLines.Add(new Vertex(x2 + 0.5f, y2 + 0.5f, (uint)colour, 0));
     }
 
     /// <summary>Add a filled rectangle in logical screen coordinates.</summary>
     public void Rect(float x, float y, float width, float height, int colour, uint flags = 0)
     {
         var c = (uint)colour;
-        var a = new Vertex(x, y, 0, c, flags);
-        var b = new Vertex(x + width, y, 0, c, flags);
-        var d = new Vertex(x, y + height, 0, c, flags);
-        var e = new Vertex(x + width, y + height, 0, c, flags);
+        var a = new Vertex(x, y, c, flags);
+        var b = new Vertex(x + width, y, c, flags);
+        var d = new Vertex(x, y + height, c, flags);
+        var e = new Vertex(x + width, y + height, c, flags);
         _triangles.Add(a);
         _triangles.Add(b);
         _triangles.Add(d);
@@ -131,14 +116,13 @@ public sealed class FrameBuilder
         _triangles.Add(d);
     }
 
-    public FrameData Build(SceneFrame? world, bool spaceView, int[] spacePalette, int[] dashboardPalette, bool hyperspaceColours, bool dashboardVisible)
+    public FrameData Build(SceneFrame? world, int[] spacePalette, int[] dashboardPalette, bool hyperspaceColours, bool dashboardVisible)
     {
         return new FrameData
         {
             World = world,
-            SpaceView = spaceView,
-            Border = _border.ToArray(),
-            BorderVertexCount = _border.Count,
+            WideLines = _wideLines.ToArray(),
+            WideLineVertexCount = _wideLines.Count,
             Triangles = _triangles.ToArray(),
             TriangleVertexCount = _triangles.Count,
             Lines = _lines.ToArray(),

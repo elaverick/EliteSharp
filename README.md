@@ -132,9 +132,7 @@ Press **F11** (or **Pause**, or **End**) to pause the game. While paused:
 | **J** | Reverse both controller axes |
 | **K** | Controller-only flying (see below) |
 
-Press **Alt + Enter** at any time to switch between a window and full screen, and
-**Alt + V** to switch between the 3D renderer and the classic one. The window's
-title bar shows which one you're using.
+Press **Alt + Enter** at any time to switch between a window and full screen.
 
 ## Playing with a controller
 
@@ -197,8 +195,7 @@ shortcut:
 | `--fullscreen` | Start in full-screen mode |
 | `--scale <1-8>` | The size of the window, as a multiple of the original screen size (default 4) |
 | `--window <width>x<height>` | The size of the window in pixels, e.g. `--window 1920x1080` (any shape works; the 3D view fills the width) |
-| `--frame classic` | Keep the 3D view within the original's 4:3 frame, rather than the full width of the window |
-| `--renderer classic` | Draw the 3D world the way the original did, as flat lines on the BBC's screen (Alt+V switches between the two while you play) |
+| `--frame 4:3` | Keep the display within the original's 4:3 frame, rather than stretching it to the full width of the window |
 | `--fps <1-50>` | The game speed, in main loop updates per second (default 16, which feels like the original) |
 | `--nosound` | Turn off the sound |
 | `--nopad` | Ignore any game controllers |

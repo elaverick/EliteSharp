@@ -3,21 +3,18 @@ namespace EliteSharp.Rendering.Vulkan;
 /// <summary>
 /// The GLSL shaders for the 2D HUD (text, the dashboard, the charts and the
 /// other 2D parts of the display), which reproduce the BBC's screen modes and
-/// palettes. In the classic renderer, the 3D world is drawn with these too.
+/// palettes.
 /// </summary>
 internal static class HudShaders
 {
     /// <summary>
-    /// The vertex shader. 2D vertices are in logical BBC pixels (256 x 248, with
-    /// the origin at the top-left). 3D vertices are points in space relative to
-    /// our ship, which are projected using Elite's own perspective, where screen
-    /// x = 128 + 256 * x / z and screen y = 96 - 256 * y / z (as in LL9), and
-    /// the GPU clips lines against the view instead of the LL145 routine.
+    /// The vertex shader. Vertices are in logical BBC pixels (256 x 248, with
+    /// the origin at the top-left).
     /// </summary>
     public const string VertexSource = """
         #version 450
 
-        layout(location = 0) in vec3 inPosition;
+        layout(location = 0) in vec2 inPosition;
         layout(location = 1) in uint inColour;
         layout(location = 2) in uint inFlags;
 
@@ -26,22 +23,7 @@ internal static class HudShaders
 
         void main()
         {
-            if ((inFlags & 2u) != 0u)
-            {
-                // NDC x = sx / 128 - 1 = 2x / z
-                // NDC y = sy / 124 - 1 = (96 - 256y / z) / 124 - 1
-                // so in clip space (with w = z):
-                float z = inPosition.z;
-                gl_Position = vec4(2.0 * inPosition.x,
-                                   (96.0 / 124.0 - 1.0) * z - (256.0 / 124.0) * inPosition.y,
-                                   0.5 * z,
-                                   z);
-            }
-            else
-            {
-                gl_Position = vec4(inPosition.x / 128.0 - 1.0, inPosition.y / 124.0 - 1.0, 0.5, 1.0);
-            }
-
+            gl_Position = vec4(inPosition.x / 128.0 - 1.0, inPosition.y / 124.0 - 1.0, 0.5, 1.0);
             outColour = inColour;
             outFlags = inFlags;
         }

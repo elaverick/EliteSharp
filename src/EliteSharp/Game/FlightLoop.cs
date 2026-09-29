@@ -916,20 +916,18 @@ public sealed partial class EliteGame
             return;
         }
 
-        if (_screen.HasImage(_laserOwner))
+        if (_world.Contains(_laserOwner))
         {
-            RemoveFromScreen(_laserOwner);
+            _world.Remove(_laserOwner);
             return;
         }
 
-        BeginWorldDrawing(_view, inFlight: true);
-        var image = new ObjectImage();
+        BeginWorldDrawing(_view);
         var beams = new List<LineSegment>();
         _laserEndY -= 2;
-        DrawLaserLines(image, beams, 32, 224);
+        DrawLaserLines(beams, 32, 224);
         _laserEndY += 2;
-        DrawLaserLines(image, beams, 48, 208);
-        _screen.SetImage(_laserOwner, image, ImageLayer.World);
+        DrawLaserLines(beams, 48, 208);
         _world.SetLines(_laserOwner, beams);
     }
 
@@ -938,12 +936,11 @@ public sealed partial class EliteGame
     /// view to (LASX, LASY). In the 3D world, the beams start just in front of
     /// us at those corners, and reach into the distance towards (LASX, LASY).
     /// </summary>
-    private void DrawLaserLines(ObjectImage image, List<LineSegment> beams, int left, int right)
+    private void DrawLaserLines(List<LineSegment> beams, int left, int right)
     {
         var target = ScreenPointToWorld(_laserEndX, _laserEndY, LaserRange);
         foreach (int corner in (ReadOnlySpan<int>)[left, right])
         {
-            image.Lines.Add(new ScreenLine(_laserEndX, _laserEndY, corner, 2 * CentreY - 1, Red));
             beams.Add(new LineSegment(ScreenPointToWorld(corner, 2 * CentreY - 1, ScreenEdgeDistance), target, Red));
         }
     }

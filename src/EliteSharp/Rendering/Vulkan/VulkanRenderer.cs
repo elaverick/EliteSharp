@@ -14,7 +14,7 @@ public enum WorldFraming
     Wide,
 
     /// <summary>The world is confined to the original's 4:3 space view.</summary>
-    Classic,
+    FourByThree,
 }
 
 /// <summary>
@@ -563,6 +563,25 @@ public sealed unsafe class VulkanRenderer : IDisposable
             : new Rect2D(new Offset2D((int)layout.OriginX, top), new Extent2D((uint)MathF.Round(layout.Width), height));
     }
 
+    /// <summary>
+    /// The number of the original's pixels that fit into the space view beyond
+    /// each side of the original's screen (zero unless the world fills the
+    /// width of a window that is wider than 4:3).
+    /// </summary>
+    public float SideMargin
+    {
+        get
+        {
+            if (_framing != WorldFraming.Wide || _extent.Width == 0)
+            {
+                return 0;
+            }
+
+            float scale = HudLayout.For(_extent.Width, _extent.Height).Scale;
+            return Math.Max(0, (_extent.Width / scale - Screen.Width) / 2);
+        }
+    }
+
     /// <summary>Draw a frame.</summary>
     public void Draw(FrameData? frameData)
     {
@@ -621,22 +640,23 @@ public sealed unsafe class VulkanRenderer : IDisposable
             var layout = HudLayout.For(_extent.Width, _extent.Height);
             float lineWidth = _wideLines ? Math.Clamp(layout.Scale * 0.75f, 1f, _maxLineWidth) : 1f;
 
-            Rect2D? borderArea = null;
+            var worldViewport = WorldViewport(layout);
             if (frameData.World != null)
             {
-                var worldViewport = WorldViewport(layout);
                 _world.Draw(commandBuffer, _currentFrame, frameData.World, worldViewport, layout.Scale, lineWidth, frameData.SpacePalette);
-
-                // In a space view, put the border around the whole 3D view
-                if (frameData.SpaceView && _framing == WorldFraming.Wide)
-                {
-                    borderArea = new Rect2D(
-                        new Offset2D(worldViewport.Offset.X, (int)layout.OriginY),
-                        new Extent2D(worldViewport.Extent.Width, (uint)MathF.Ceiling(layout.Height)));
-                }
             }
 
-            _hud.Draw(commandBuffer, _currentFrame, frameData, layout, lineWidth, borderArea);
+            // In the wide framing, the border (and the hangar) spans the whole
+            // width of the window on every screen, not just the space view
+            Rect2D? wideArea = null;
+            if (_framing == WorldFraming.Wide)
+            {
+                wideArea = new Rect2D(
+                    new Offset2D(worldViewport.Offset.X, (int)layout.OriginY),
+                    new Extent2D(worldViewport.Extent.Width, (uint)MathF.Ceiling(layout.Height)));
+            }
+
+            _hud.Draw(commandBuffer, _currentFrame, frameData, layout, lineWidth, wideArea);
         }
 
         _vk.CmdEndRenderPass(commandBuffer);

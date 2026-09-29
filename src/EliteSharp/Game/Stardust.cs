@@ -10,7 +10,7 @@ namespace EliteSharp.Game;
 /// </summary>
 public sealed partial class EliteGame
 {
-    /// <summary>The owner of the stardust's image on the screen.</summary>
+    /// <summary>The owner of the stardust in the 3D world.</summary>
     private readonly object _dustOwner = new();
 
     /// <summary>A 16-bit sign-magnitude value from a sign-magnitude high byte and a low byte.</summary>
@@ -258,8 +258,8 @@ public sealed partial class EliteGame
     }
 
     /// <summary>
-    /// Build the on-screen image of the stardust from the particles' current
-    /// positions (PIXEL2 for each particle).
+    /// Put the stardust into the 3D world at the particles' current positions
+    /// (PIXEL2 for each particle).
     /// </summary>
     private void UpdateStardustImage()
     {
@@ -268,8 +268,7 @@ public sealed partial class EliteGame
             return;
         }
 
-        BeginWorldDrawing(_view, inFlight: true);
-        var image = new ObjectImage();
+        BeginWorldDrawing(_view);
         var particles = new List<Particle>();
         for (int particle = _stardustCount; particle > 0; particle--)
         {
@@ -281,19 +280,8 @@ public sealed partial class EliteGame
             float distance = Math.Max(_dustZ[particle], 4);
             var position = ViewToWorld(screenX * distance / 256, screenY * distance / 256, distance);
             particles.Add(new Particle(position, 2, _dustZ[particle] >= 80 ? 1 : 2, DustColour, Stardust: true));
-
-            int dustY = _dustY[particle];
-            if ((dustY & 0x7F) >= CentreY)
-            {
-                continue;
-            }
-
-            int x = CentreX + screenX;
-            int row = CentreY - screenY;
-            image.Rects.AddRange(PixelRects(x & 0xFF, row, _dustZ[particle], DustColour));
         }
 
-        _screen.SetImage(_dustOwner, image, ImageLayer.World);
         _world.SetParticles(_dustOwner, particles);
     }
 }

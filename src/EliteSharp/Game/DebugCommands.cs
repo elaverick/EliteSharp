@@ -18,13 +18,6 @@ public sealed partial class EliteGame
     /// <summary>Queue a test command, which is run at the start of the next main loop iteration.</summary>
     public void DebugCommand(string command)
     {
-        // "renderer classic" or "renderer 3d" takes effect straight away
-        if (command.StartsWith("renderer ", StringComparison.OrdinalIgnoreCase))
-        {
-            Renderer = command.EndsWith("classic", StringComparison.OrdinalIgnoreCase) ? RendererKind.Classic : RendererKind.World3D;
-            return;
-        }
-
         _debugCommands.Enqueue(command);
     }
 

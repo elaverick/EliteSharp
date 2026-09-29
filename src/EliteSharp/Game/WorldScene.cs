@@ -7,10 +7,10 @@ namespace EliteSharp.Game;
 
 /// <summary>
 /// Keeping the 3D world up to date. The drawing routines (LL9, PLANET, SUN,
-/// STARS and so on) still do everything the original does, including building
-/// the 2D images that the classic renderer draws and that the hangar uses, but
-/// they also describe what they are drawing to the 3D world, as 3D objects in
-/// world space, which the 3D renderer then draws with its own camera.
+/// STARS and so on) still do all the calculations of the original that the
+/// rest of the game depends on, but rather than drawing on the screen, they
+/// describe what they are drawing to the 3D world, as 3D objects in world
+/// space, which the renderer then draws with its own camera.
 ///
 /// The original draws everything in the space of the current view: PLUT
 /// rotates each ship into the view's frame of reference before LL9 draws it.
@@ -39,7 +39,7 @@ public sealed partial class EliteGame
     /// <summary>The 3D world.</summary>
     private readonly World _world = new();
 
-    /// <summary>The owner of our laser beams' image.</summary>
+    /// <summary>The owner of our laser beams in the 3D world.</summary>
     private readonly object _laserOwner = new();
 
     /// <summary>The random seed for the sun's fringe, which changes each time the sun is drawn.</summary>
@@ -58,52 +58,17 @@ public sealed partial class EliteGame
     private int? _plutView;
 
     /// <summary>
-    /// Whether the most recent objects drawn were in flight (as opposed to on
-    /// the title screen, in a briefing or in the hangar), in which case the 3D
-    /// view is framed by the space view's border.
+    /// Note which view the objects about to be drawn are in. The camera looks
+    /// out of the same view.
     /// </summary>
-    private bool _drawingInFlight;
-
-    /// <summary>
-    /// Note which view the objects about to be drawn are in, and whether we
-    /// are in flight. The camera looks out of the same view.
-    /// </summary>
-    private void BeginWorldDrawing(int view, bool inFlight)
+    private void BeginWorldDrawing(int view)
     {
         _drawView = view;
-        _drawingInFlight = inFlight;
         _world.CameraView = view;
     }
 
-    /// <summary>
-    /// How the 3D world is drawn. This can be changed while the game is
-    /// running (with Alt+V), to compare the 3D renderer with the classic one.
-    /// </summary>
-    public RendererKind Renderer
-    {
-        get => _renderer;
-        set => _renderer = value;
-    }
-
-    private volatile RendererKind _renderer;
-
-    /// <summary>
-    /// Connect the 3D world to the screen, so each frame includes a snapshot
-    /// of it (unless the classic renderer is being used, in which case the
-    /// world's 2D images are drawn instead).
-    /// </summary>
-    private void ConnectWorld()
-    {
-        _screen.WorldSnapshot = () =>
-        {
-            if (_renderer != RendererKind.World3D)
-            {
-                return null;
-            }
-
-            return _world.Snapshot();
-        };
-    }
+    /// <summary>Connect the 3D world to the screen, so each frame includes a snapshot of it.</summary>
+    private void ConnectWorld() => _screen.WorldSnapshot = _world.Snapshot;
 
     /// <summary>Rotate a point or direction from the current view's space into world space.</summary>
     private Vector3 ViewToWorld(float x, float y, float z) => Camera.ViewToWorld(_drawView, new Vector3(x, y, z));
@@ -138,10 +103,10 @@ public sealed partial class EliteGame
     private Vector3 ScreenPointToWorld(float screenX, float screenY, float distance) =>
         ViewToWorld((screenX - CentreX) * distance / 256, (CentreY - screenY) * distance / 256, distance);
 
-    /// <summary>Remove an object from the screen, both its 2D image and its 3D counterpart.</summary>
+    /// <summary>Remove an object from the 3D world (and its outline from the original's screen, if it's a ship).</summary>
     private void RemoveFromScreen(object owner)
     {
-        _screen.RemoveImage(owner);
+        _screen.RemoveShipOutline(owner);
         _world.Remove(owner);
     }
 
@@ -206,7 +171,7 @@ public sealed partial class EliteGame
 
     /// <summary>
     /// Add the planet or sun in INWK to the 3D world (called by PLANET once it
-    /// has drawn the planet or sun in 2D).
+    /// has worked out the planet or sun's size on the original's screen).
     /// </summary>
     private void SetWorldPlanetOrSun(bool large)
     {

@@ -386,12 +386,6 @@ public sealed partial class EliteGame
     private void ResetSunLines()
     {
         _world.Remove(_sunOwner);
-        if (_sunImage != null)
-        {
-            _screen.RemoveImage(_sunOwner);
-            _sunImage = null;
-        }
-
         Array.Clear(_sunHalfWidths);
         _sunHidden = 0xFF;
     }

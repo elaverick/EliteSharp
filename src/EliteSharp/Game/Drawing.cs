@@ -7,11 +7,11 @@ using EliteSharp.Rendering.Scene;
 namespace EliteSharp.Game;
 
 /// <summary>
-/// Drawing ships, explosions, planets and the sun. The visibility calculations
-/// (which faces, vertices and edges are visible, and at what level of detail)
-/// are exact ports of the original, but rather than plotting lines pixel by
-/// pixel, visible edges are sent to the GPU as 3D lines, and planets, suns and
-/// explosion clouds are sent as 2D lines and rectangles.
+/// Drawing ships, explosions, planets and the sun. The calculations that the
+/// rest of the game depends on (projecting ships onto the screen, which faces
+/// are visible, the explosion clouds and the sun's random fringe) are exact
+/// ports of the original, but rather than plotting pixels, each object is
+/// described to the 3D world (see WorldScene.cs), which the GPU draws.
 /// </summary>
 public sealed partial class EliteGame
 {
@@ -106,7 +106,7 @@ public sealed partial class EliteGame
     private void DrawShip()
     {
         // Work out which view INWK is in (see _drawView)
-        BeginWorldDrawing(_plutView ?? 0, _plutView.HasValue);
+        BeginWorldDrawing(_plutView ?? 0);
         _plutView = null;
 
         if (_shipType >= 128)
@@ -222,7 +222,7 @@ public sealed partial class EliteGame
         }
 
         _currentShip.Flags |= Ship.FlagDrawn;
-        var image = new ObjectImage();
+        var outline = new List<ScreenLine>();
         var transform = CurrentShipTransform();
         List<LineSegment>? worldLines = null;
         int lineHeapUsed = 1;
@@ -241,7 +241,6 @@ public sealed partial class EliteGame
                 int gunScreenX = ToSigned16(gunX), gunScreenY = ToSigned16(gunY);
                 if (LineOnScreen(gunScreenX, gunScreenY, x2, y2))
                 {
-                    image.Lines.Add(new ScreenLine(gunScreenX, gunScreenY, x2, y2, _colour));
                     lineHeapUsed += 4;
                 }
 
@@ -251,7 +250,8 @@ public sealed partial class EliteGame
             }
         }
 
-        // LL170: draw the visible edges
+        // LL170: work out which edges the original draws, for the ship's
+        // outline on the original's screen
         foreach (var edge in blueprint.Edges)
         {
             if (lineHeapUsed >= heapSize)
@@ -269,17 +269,20 @@ public sealed partial class EliteGame
                 continue;
             }
 
+            // The outline includes the edges that are off the sides of the
+            // original's screen, as the space view can be wider, but only the
+            // ones that are on it use up the line heap
             int vertex1 = edge.Vertex1, vertex2 = edge.Vertex2;
-            if (!LineOnScreen(ToSigned16(_projectedX[vertex1]), ToSigned16(_projectedY[vertex1]), ToSigned16(_projectedX[vertex2]), ToSigned16(_projectedY[vertex2])))
+            var line = new ScreenLine(ToSigned16(_projectedX[vertex1]), ToSigned16(_projectedY[vertex1]),
+                                      ToSigned16(_projectedX[vertex2]), ToSigned16(_projectedY[vertex2]), _colour);
+            outline.Add(line);
+            if (LineOnScreen(line.X1, line.Y1, line.X2, line.Y2))
             {
-                continue;
+                lineHeapUsed += 4;
             }
-
-            image.SpaceLines.Add(new SpaceLine(VertexX[vertex1], VertexY[vertex1], VertexZ[vertex1], VertexX[vertex2], VertexY[vertex2], VertexZ[vertex2], _colour));
-            lineHeapUsed += 4;
         }
 
-        _screen.SetImage(owner, image, ImageLayer.World);
+        _screen.SetShipOutline(owner, outline);
 
         // In the 3D world, the ship is its model and its transform, and the GPU
         // works out which edges to draw
@@ -600,22 +603,18 @@ public sealed partial class EliteGame
     /// <summary>SHPPT: draw a distant ship as a dot.</summary>
     private void DrawShipAsDot(object owner)
     {
-        var image = new ObjectImage();
+        // Shpt draws a four-pixel dash on two rows if the dot is on the
+        // original's screen (and nono notes that it isn't)
         if (ProjectToScreen(out int x, out int y) && (x >> 8) == 0 && (y >> 8) == 0 && y < 2 * CentreY - 2)
         {
-            // Shpt: draw a four-pixel dash on two rows
-            int x2 = Math.Min(x + 3, 255);
-            image.Lines.Add(new ScreenLine(x, y, x2, y, _colour));
-            image.Lines.Add(new ScreenLine(x, y + 1, x2, y + 1, _colour));
             _currentShip.Flags |= Ship.FlagDrawn;
         }
         else
         {
-            // nono
             _currentShip.Flags &= ~Ship.FlagDrawn;
         }
 
-        _screen.SetImage(owner, image, ImageLayer.World);
+        _screen.RemoveShipOutline(owner);
 
         // In the 3D world, the dot is wherever the ship is (and the GPU clips it
         // to the view), rather than only where the original's screen can show it
@@ -668,6 +667,7 @@ public sealed partial class EliteGame
     private void DrawExplosion(object owner)
     {
         var cloud = _currentShip.Explosion;
+        _screen.RemoveShipOutline(owner);
         if ((_currentShip.Flags & Ship.FlagOnScreenCloud) != 0)
         {
             // Erase the existing cloud (which, as in the original, reseeds the
@@ -731,10 +731,8 @@ public sealed partial class EliteGame
         }
 
         _currentShip.Flags |= Ship.FlagOnScreenCloud;
-        var image = new ObjectImage();
         var particles = new List<Particle>();
-        DrawExplosionCloud(image, particles);
-        _screen.SetImage(owner, image, ImageLayer.World);
+        DrawExplosionCloud(particles);
         _world.SetParticles(owner, particles);
     }
 
@@ -742,13 +740,13 @@ public sealed partial class EliteGame
     /// PTCLS: draw (or erase) the explosion cloud. The random number generator
     /// is seeded from the cloud data so the same cloud is produced each time.
     ///
-    /// For the 3D world, each particle is also added to the list of particles
-    /// (if one is given), at the same offset from its vertex as it is drawn on
-    /// the original's screen, and at the vertex's distance. This uses exactly
-    /// the same random numbers as the 2D cloud, so the game's random number
-    /// sequence is unaffected.
+    /// Each particle is added to the list of particles for the 3D world (if
+    /// one is given, as erasing the cloud doesn't need them), at the same
+    /// offset from its vertex as the original draws it on the screen, and at
+    /// the vertex's distance. This takes exactly the same random numbers as
+    /// the original, so the game's random number sequence is unaffected.
     /// </summary>
-    private void DrawExplosionCloud(ObjectImage? image, List<Particle>? particles = null)
+    private void DrawExplosionCloud(List<Particle>? particles)
     {
         var cloud = _currentShip.Explosion;
         int counter = cloud.Counter;
@@ -780,7 +778,8 @@ public sealed partial class EliteGame
                 // The original skips the x-coordinate if the y-coordinate is off
                 // the bottom of the screen, but still takes a random number
                 // (EX11), which is the only random number RandomCloudCoordinate
-                // takes, so we can work out the x-coordinate either way
+                // takes, so we can work out the x-coordinate either way (the
+                // 3D view can show particles that the original's screen can't)
                 int y = RandomCloudCoordinate(originY, cloud.Size);
                 int x = RandomCloudCoordinate(originX, cloud.Size);
 
@@ -793,13 +792,6 @@ public sealed partial class EliteGame
                     float dy = ToSigned16(y - originY) * scale;
                     particles.Add(new Particle(ViewToWorld(viewOrigin.X + dx, viewOrigin.Y - dy, viewOrigin.Z), 2, random >= 80 ? 1 : 2, _colour));
                 }
-
-                if ((y >> 8) != 0 || (y & 0xFF) >= 2 * CentreY - 1 || (x >> 8) != 0)
-                {
-                    continue;
-                }
-
-                image?.Rects.AddRange(PixelRects(x, y, random, _colour));
             }
         }
 
@@ -873,23 +865,14 @@ public sealed partial class EliteGame
     /// <summary>K3 and K4 for circles: the centre of the circle (16-bit two's complement).</summary>
     private int _circleX, _circleY;
 
-    /// <summary>K2 and XX16+0..3: the magnitudes of the ellipse axes (x and y of the first axis, then x and y of the second).</summary>
-    private readonly int[] _ellipseAxes = new int[4];
-
-    /// <summary>The signs of the ellipse axes in <see cref="_ellipseAxes"/>.</summary>
-    private readonly bool[] _ellipseAxisNegative = new bool[4];
-
-    /// <summary>CNT2: the angle counter for ellipses.</summary>
-    private int _ellipseAngle;
-
-    /// <summary>The line segments of the planet being collected by BLINE (the ball line heap).</summary>
-    private readonly List<ScreenLine> _planetLines = [];
+    /// <summary>The line segments of the circle being collected by BLINE (the ball line heap).</summary>
+    private readonly List<ScreenLine> _circleLines = [];
 
     /// <summary>True if the next point is the start of a new line (FLAG in the original).</summary>
-    private bool _planetLineFirst;
+    private bool _circleLineFirst;
 
-    /// <summary>The previous point in the planet line being drawn.</summary>
-    private int _planetLinePreviousX, _planetLinePreviousY;
+    /// <summary>The previous point on the circle being drawn.</summary>
+    private int _circleLinePreviousX, _circleLinePreviousY;
 
     /// <summary>PLANET: draw the planet or sun in INWK.</summary>
     private void DrawPlanetOrSun()
@@ -915,11 +898,8 @@ public sealed partial class EliteGame
 
         if ((_shipType & 1) != 0)
         {
+            // The sun's fringe takes random numbers
             DrawSun();
-        }
-        else
-        {
-            DrawPlanet(large);
         }
 
         // Add the planet or sun to the 3D world, whether or not it is on the
@@ -940,188 +920,32 @@ public sealed partial class EliteGame
         }
     }
 
-    /// <summary>PL9: draw the planet with its meridians and equator, or its crater.</summary>
-    private void DrawPlanet(bool large)
-    {
-        RemovePlanet();
-        _planetLines.Clear();
-        if (!DrawPlanetCircle())
-        {
-            return;
-        }
-
-        if (!large)
-        {
-            if (_shipType == ShipType.Planet)
-            {
-                // PL9 part 2: the meridian and equator
-                if (_circleRadius >= 6)
-                {
-                    CalculateEllipseStartAngle(_currentShip.Roof.Z);
-                    CalculateEllipseAxis(_currentShip.Nose.X, 0);
-                    CalculateEllipseAxis(_currentShip.Nose.Y, 1);
-                    CalculateEllipseAxis(_currentShip.Roof.X, 2);
-                    CalculateEllipseAxis(_currentShip.Roof.Y, 3);
-                    DrawHalfEllipse();
-
-                    CalculateEllipseStartAngle(_currentShip.Side.Z);
-                    CalculateEllipseAxis(_currentShip.Side.X, 2);
-                    CalculateEllipseAxis(_currentShip.Side.Y, 3);
-                    DrawHalfEllipse();
-                }
-            }
-            else if (_currentShip.Roof.Z >= 0)
-            {
-                // PL26: the crater
-                _circleX = (_circleX + CalculateCraterOffset(_currentShip.Roof.X)) & 0xFFFF;
-                _circleY = (_circleY - CalculateCraterOffset(_currentShip.Roof.Y)) & 0xFFFF;
-                CalculateEllipseAxis(_currentShip.Nose.X, 0, halve: true);
-                CalculateEllipseAxis(_currentShip.Nose.Y, 1, halve: true);
-                CalculateEllipseAxis(_currentShip.Side.X, 2, halve: true);
-                CalculateEllipseAxis(_currentShip.Side.Y, 3, halve: true);
-                _ellipseAngle = 0;
-                DrawEllipse(64);
-            }
-        }
-
-        var image = new ObjectImage();
-        image.Lines.AddRange(_planetLines);
-        _screen.SetImage(_currentShip.DisplayOwner, image, ImageLayer.World);
-    }
-
-    /// <summary>
-    /// PLS1: calculate a vector coordinate * 256 / z (clamped to 254) into one
-    /// of the K2 slots, with its sign.
-    /// </summary>
-    private void CalculateEllipseAxis(int vector, int index, bool halve = false)
-    {
-        int scaled = EliteMaths.DivideScaled(vector, _currentShip.Z);
-        int magnitude = Math.Abs(scaled) >= 256 ? 254 : Math.Abs(scaled) & 0xFF;
-        if (halve)
-        {
-            magnitude >>= 1;
-        }
-
-        _ellipseAxes[index] = magnitude;
-        _ellipseAxisNegative[index] = scaled < 0 || (scaled == 0 && vector < 0);
-    }
-
-    /// <summary>
-    /// PLS3: calculate 222 * roofv * 256 / z / 256 as a signed 16-bit value,
-    /// used to offset the crater from the planet's centre.
-    /// </summary>
-    private int CalculateCraterOffset(int vector)
-    {
-        int scaled = EliteMaths.DivideScaled(vector, _currentShip.Z);
-        int magnitude = Math.Abs(scaled) >= 256 ? 254 : Math.Abs(scaled) & 0xFF;
-        int product = (magnitude * 222) >> 8;
-        bool negative = scaled < 0 || (scaled == 0 && vector < 0);
-        if (negative && product != 0)
-        {
-            return -product;
-        }
-
-        return product;
-    }
-
-    /// <summary>PLS4: CNT2 = arctan(-nosev_z / vector_z) / 4, for the starting angle of the ellipse.</summary>
-    private void CalculateEllipseStartAngle(int vectorZ)
-    {
-        int numerator = -Ship.VectorHi(_currentShip.Nose.Z);
-        int denominator = Ship.VectorHi(vectorZ);
-        int angle = EliteMaths.Arctan(numerator, denominator);
-        if (_currentShip.Nose.Z >= 0)
-        {
-            angle ^= 0x80;
-        }
-
-        _ellipseAngle = (angle >> 2) & 0xFF;
-    }
-
-    /// <summary>PLS2: draw a half ellipse.</summary>
-    private void DrawHalfEllipse() => DrawEllipse(31);
-
-    /// <summary>
-    /// PLS22: draw an ellipse (or part of one) with axes in K2, centred on
-    /// K3/K4, starting at angle CNT2 and continuing until the counter reaches
-    /// the target.
-    /// </summary>
-    private void DrawEllipse(int target)
-    {
-        int count = 0;
-        _planetLineFirst = true;
-        while (true)
-        {
-            int angle = _ellipseAngle;
-            int sine = GameData.Sine[angle & 31];
-            int roofXTerm = EliteMaths.MultiplyFraction(_ellipseAxes[2], sine);
-            int roofYTerm = EliteMaths.MultiplyFraction(_ellipseAxes[3], sine);
-            bool sinNegative = angle >= 33;
-
-            int cosine = GameData.Sine[(angle + 16) & 31];
-            int noseYTerm = EliteMaths.MultiplyFraction(_ellipseAxes[1], cosine);
-            int noseXTerm = EliteMaths.MultiplyFraction(_ellipseAxes[0], cosine, out bool carry);
-
-            // The ADC #15 includes the C flag from the last FMLTU
-            bool cosNegative = ((angle + 15 + (carry ? 1 : 0)) & 63) >= 33;
-
-            // x = nosev_x * cos + roofv_x * sin
-            int offsetX = EliteMaths.Add16(Signed16(noseXTerm, cosNegative ^ _ellipseAxisNegative[0]), Signed16(roofXTerm, sinNegative ^ _ellipseAxisNegative[2]));
-            int offsetY = -EliteMaths.Add16(Signed16(noseYTerm, cosNegative ^ _ellipseAxisNegative[1]), Signed16(roofYTerm, sinNegative ^ _ellipseAxisNegative[3]));
-
-            count = AddPlanetLineSegment(_circleX + offsetX, _circleY + offsetY, count);
-            if (count > target)
-            {
-                return;
-            }
-
-            _ellipseAngle = (_ellipseAngle + _circleStep) & 63;
-        }
-    }
-
-    /// <summary>Apply a sign to a magnitude.</summary>
-    private static int Signed16(int magnitude, bool negative) => negative ? -magnitude : magnitude;
-
     /// <summary>
     /// BLINE: add a segment from the previous point to (x, y) to the ball line
     /// list, returning the updated segment counter (CNT + STP).
     /// </summary>
-    private int AddPlanetLineSegment(int x, int y, int count)
+    private int AddCircleSegment(int x, int y, int count)
     {
         x = ToSigned16(x);
         y = ToSigned16(y);
-        if (_planetLineFirst)
+        if (_circleLineFirst)
         {
-            _planetLineFirst = false;
+            _circleLineFirst = false;
         }
-        else if (LineOnScreen(_planetLinePreviousX, _planetLinePreviousY, x, y))
+        else if (LineOnScreen(_circleLinePreviousX, _circleLinePreviousY, x, y))
         {
-            _planetLines.Add(new ScreenLine(_planetLinePreviousX, _planetLinePreviousY, x, y, _colour));
+            _circleLines.Add(new ScreenLine(_circleLinePreviousX, _circleLinePreviousY, x, y, _colour));
         }
 
-        _planetLinePreviousX = x;
-        _planetLinePreviousY = y;
+        _circleLinePreviousX = x;
+        _circleLinePreviousY = y;
         return count + _circleStep;
-    }
-
-    /// <summary>CIRCLE: draw a circle for the planet, returning false (C set) if it's off-screen.</summary>
-    private bool DrawPlanetCircle()
-    {
-        if (!IsCircleOnScreen(out _, out _))
-        {
-            return false;
-        }
-
-        int radius = _circleRadius;
-        _circleStep = radius < 8 ? 8 : radius < 60 ? 4 : 2;
-        DrawCircle();
-        return true;
     }
 
     /// <summary>CIRCLE2: draw a circle of radius K centred on K3/K4, with step size STP.</summary>
     private void DrawCircle()
     {
-        _planetLineFirst = true;
+        _circleLineFirst = true;
         int count = 0;
         while (true)
         {
@@ -1139,7 +963,7 @@ public sealed partial class EliteGame
                 y = -y;
             }
 
-            int next = AddPlanetLineSegment(_circleX + x, _circleY + y, count);
+            int next = AddCircleSegment(_circleX + x, _circleY + y, count);
             if (next >= 65)
             {
                 return;
@@ -1189,10 +1013,7 @@ public sealed partial class EliteGame
     }
 
     /// <summary>WPLS2: remove the planet from the screen.</summary>
-    private void RemovePlanet()
-    {
-        RemoveFromScreen(_currentShip.DisplayOwner);
-    }
+    private void RemovePlanet() => RemoveFromScreen(_currentShip.DisplayOwner);
 
     // ------------------------------------------------------------------------
     // The sun
@@ -1204,19 +1025,18 @@ public sealed partial class EliteGame
     /// <summary>LSX: &amp;FF if the sun is not on-screen.</summary>
     private int _sunHidden = 0xFF;
 
-    /// <summary>SUNX: the x-coordinate of the centre of the sun on-screen.</summary>
-    private int _sunCentreX;
-
-    /// <summary>The owner of the sun's image on the screen.</summary>
+    /// <summary>The owner of the sun in the 3D world.</summary>
     private readonly object _sunOwner = new();
-
-    /// <summary>The sun's image on the screen, or null if the sun isn't shown.</summary>
-    private ObjectImage? _sunImage;
 
     /// <summary>The orange colours for each pixel row of the sun.</summary>
     private static readonly int[] Orange = [0b10100101, 0b10100101, 0b01011010, 0b01011010];
 
-    /// <summary>SUN: draw the sun, with its fringe of random widths.</summary>
+    /// <summary>
+    /// SUN: draw the sun, with its fringe of random widths. The 3D world draws
+    /// the sun in space, but this still works out the width of each row, as
+    /// the fringe takes a random number for each row, and the stars on the
+    /// short-range chart are drawn with this routine.
+    /// </summary>
     private void DrawSun()
     {
         _colour = Red;
@@ -1327,31 +1147,20 @@ public sealed partial class EliteGame
             }
         }
 
-        // PLF8
-        _sunCentreX = _circleX;
-        var image = new ObjectImage();
+        // PLF8: the stars on the short-range chart are drawn with the sun
+        // routine, and stay on-screen
+        if (!_sunToCanvas)
+        {
+            return;
+        }
+
         for (int row = 1; row <= yMax; row++)
         {
             if (_sunHalfWidths[row] != 0 && SunEdges(centre, _sunHalfWidths[row], out int x1, out int x2) && x2 > x1)
             {
-                image.Rects.Add(new ScreenRect(x1, row, x2 - x1, 1, Orange[row & 3]));
+                _screen.DrawRect(x1, row, x2 - x1, 1, Orange[row & 3]);
             }
         }
-
-        if (_sunToCanvas)
-        {
-            // The stars on the short-range chart are drawn with the sun
-            // routine, and stay on-screen
-            foreach (var rect in image.Rects)
-            {
-                _screen.DrawRect(rect.X, rect.Y, rect.Width, rect.Height, rect.Colour);
-            }
-
-            return;
-        }
-
-        _sunImage = image;
-        _screen.SetImage(_sunOwner, image, ImageLayer.World);
     }
 
     /// <summary>EDGES: the ends of a horizontal line of half-width A centred on YY, clipped to the screen.</summary>
@@ -1380,8 +1189,6 @@ public sealed partial class EliteGame
             return;
         }
 
-        RemoveFromScreen(_sunOwner);
-        _sunImage = null;
         Array.Clear(_sunHalfWidths);
         _sunHidden = 0xFF;
     }
@@ -1411,9 +1218,9 @@ public sealed partial class EliteGame
             _circleRadius = (i & 7) + 8;
             while (true)
             {
-                _planetLines.Clear();
+                _circleLines.Clear();
                 DrawCircle();
-                foreach (var line in _planetLines)
+                foreach (var line in _circleLines)
                 {
                     _screen.DrawLine(line.X1, line.Y1, line.X2, line.Y2, _colour);
                 }

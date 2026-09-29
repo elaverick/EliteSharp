@@ -4,9 +4,9 @@ namespace EliteSharp.Rendering.Scene;
 /// The 3D world as maintained by the game: each drawable thing (a ship, the
 /// planet, the sun, the stardust, our laser beams and so on) is an object
 /// identified by its owner, which the game replaces whenever it redraws that
-/// thing and removes when the thing leaves the screen, just as it does with
-/// the thing's image in the 2D screen model. Each frame, a snapshot of the
-/// world is handed to the renderer.
+/// thing and removes when the thing leaves the screen (where the original
+/// would erase it from screen memory). Each frame, a snapshot of the world is
+/// handed to the renderer.
 /// </summary>
 public sealed class World
 {

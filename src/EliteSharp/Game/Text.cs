@@ -1033,7 +1033,6 @@ public sealed partial class EliteGame
     {
         _screen.ClearSpaceView();
         _world.Clear();
-        _sunImage = null;
         DrawBorderBox();
     }
 

@@ -1,18 +1,5 @@
 namespace EliteSharp;
 
-/// <summary>How the 3D world is drawn.</summary>
-public enum RendererKind
-{
-    /// <summary>As a real 3D scene, with a camera, depth buffer and GPU-resident models.</summary>
-    World3D,
-
-    /// <summary>
-    /// As the original's 2D projection of it, drawn in the BBC's screen layout
-    /// (the renderer that EliteSharp started with, kept for comparison).
-    /// </summary>
-    Classic,
-}
-
 /// <summary>Command-line options.</summary>
 public sealed class GameOptions
 {
@@ -34,11 +21,8 @@ public sealed class GameOptions
     /// <summary>Whether to read game controllers.</summary>
     public bool Gamepad { get; set; } = true;
 
-    /// <summary>How to draw the 3D world.</summary>
-    public RendererKind Renderer { get; set; } = RendererKind.World3D;
-
     /// <summary>Whether to confine the 3D world to the original's 4:3 space view, rather than the full width of the window.</summary>
-    public bool ClassicFrame { get; set; }
+    public bool FourByThreeFrame { get; set; }
 
     /// <summary>Whether to start in full-screen mode.</summary>
     public bool FullScreen { get; set; }
@@ -75,12 +59,8 @@ public sealed class GameOptions
                     options.WindowSize = size;
                     i++;
                     break;
-                case "--renderer" when next != null:
-                    options.Renderer = next.Equals("classic", StringComparison.OrdinalIgnoreCase) ? RendererKind.Classic : RendererKind.World3D;
-                    i++;
-                    break;
                 case "--frame" when next != null:
-                    options.ClassicFrame = next.Equals("classic", StringComparison.OrdinalIgnoreCase);
+                    options.FourByThreeFrame = next == "4:3";
                     i++;
                     break;
                 case "--nopad":

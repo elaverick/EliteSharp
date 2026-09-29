@@ -572,9 +572,9 @@ public sealed partial class EliteGame
         _circleY = _scratch[1];
         _circleStep = 2;
         _colour = Red;
-        _planetLines.Clear();
+        _circleLines.Clear();
         DrawCircle();
-        foreach (var line in _planetLines)
+        foreach (var line in _circleLines)
         {
             _screen.DrawLine(line.X1, line.Y1, line.X2, line.Y2, _colour);
         }

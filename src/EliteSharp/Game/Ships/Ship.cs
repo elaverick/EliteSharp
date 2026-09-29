@@ -127,9 +127,9 @@ public sealed class Ship
     public ExplosionCloud Explosion { get; private set; } = new();
 
     /// <summary>
-    /// The object that owns this ship's on-screen image. When the main loop makes
-    /// a view-rotated copy of a ship (as PLUT does with INWK), the copy draws into
-    /// the original ship's display slot.
+    /// The object that owns this ship on the screen (and in the 3D world). When
+    /// the main loop makes a view-rotated copy of a ship (as PLUT does with
+    /// INWK), the copy draws into the original ship's display slot.
     /// </summary>
     public Ship DisplayOwner { get; private set; }
 

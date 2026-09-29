@@ -74,7 +74,6 @@ public sealed partial class EliteGame
         _sound = sound;
         _options = options;
         _screen.DashboardRenderer = DrawDashboard;
-        Renderer = options.Renderer;
         ConnectWorld();
 
         for (int i = 0; i < Slots.Length; i++)
@@ -696,9 +695,6 @@ public sealed partial class EliteGame
         }
 
         _screen.EscapePodFitted = _escapePod != 0;
-        // The title screen, briefings and hangar are space views too, but they
-        // are mostly drawn in 2D, so they keep the original's frame
-        _screen.IsSpaceView = _viewType == 0 && _drawingInFlight;
         _screen.Present();
     }
 

@@ -27,8 +27,7 @@ public readonly record struct HudLayout(float OriginX, float OriginY, float Scal
 /// <summary>
 /// Draws the 2D parts of the display (the HUD): text, the dashboard, charts,
 /// crosshairs and so on, in the original's screen layout, decoding the BBC's
-/// colour bytes and palettes in the fragment shader. In the classic renderer,
-/// this draws the 3D world too, as the original's 2D projection of it.
+/// colour bytes and palettes in the fragment shader.
 /// </summary>
 public sealed unsafe class HudRenderer : IDisposable
 {
@@ -72,9 +71,9 @@ public sealed unsafe class HudRenderer : IDisposable
             Bindings = [new(0, Vertex.SizeInBytes, VertexInputRate.Vertex)],
             Attributes =
             [
-                new(0, 0, Format.R32G32B32Sfloat, 0),
-                new(1, 0, Format.R32Uint, 12),
-                new(2, 0, Format.R32Uint, 16),
+                new(0, 0, Format.R32G32Sfloat, 0),
+                new(1, 0, Format.R32Uint, 8),
+                new(2, 0, Format.R32Uint, 12),
             ],
             Depth = DepthMode.None,
         };
@@ -92,26 +91,27 @@ public sealed unsafe class HudRenderer : IDisposable
     }
 
     /// <summary>
-    /// Record the commands to draw the 2D display. The space view's border is
-    /// drawn around the given area if there is one (when the 3D view is wider
+    /// Record the commands to draw the 2D display. The wide lines (the border
+    /// and the hangar) are drawn across the given area if there is one (when
+    /// the 3D view is wider
     /// than the 2D display), stretching it horizontally to fit, or around the
     /// 2D display's space view otherwise.
     /// </summary>
-    public void Draw(CommandBuffer commandBuffer, int frameIndex, FrameData frame, HudLayout layout, float lineWidth, Rect2D? borderArea)
+    public void Draw(CommandBuffer commandBuffer, int frameIndex, FrameData frame, HudLayout layout, float lineWidth, Rect2D? wideArea)
     {
         int triangleCount = frame.TriangleVertexCount;
         int lineCount = frame.LineVertexCount;
-        int borderCount = frame.BorderVertexCount;
-        if (triangleCount + lineCount + borderCount == 0)
+        int wideCount = frame.WideLineVertexCount;
+        if (triangleCount + lineCount + wideCount == 0)
         {
             return;
         }
 
-        // Upload the vertices: triangles first, then lines, then the border
-        var vertices = new Vertex[triangleCount + lineCount + borderCount];
+        // Upload the vertices: triangles first, then lines, then the wide lines
+        var vertices = new Vertex[triangleCount + lineCount + wideCount];
         frame.Triangles.AsSpan(0, triangleCount).CopyTo(vertices);
         frame.Lines.AsSpan(0, lineCount).CopyTo(vertices.AsSpan(triangleCount));
-        frame.Border.AsSpan(0, borderCount).CopyTo(vertices.AsSpan(triangleCount + lineCount));
+        frame.WideLines.AsSpan(0, wideCount).CopyTo(vertices.AsSpan(triangleCount + lineCount));
         var vertexBuffer = _vertexBuffers[frameIndex];
         vertexBuffer.Write<Vertex>(vertices);
 
@@ -138,14 +138,14 @@ public sealed unsafe class HudRenderer : IDisposable
             vk.CmdDraw(commandBuffer, (uint)lineCount, 1, (uint)triangleCount, 0);
         }
 
-        if (borderCount > 0)
+        if (wideCount > 0)
         {
-            if (borderArea is { } stretched)
+            if (wideArea is { } stretched)
             {
                 SetArea(commandBuffer, frame, stretched, stretched.Extent.Width / (float)Screen.Width, layout.Scale);
             }
 
-            vk.CmdDraw(commandBuffer, (uint)borderCount, 1, (uint)(triangleCount + lineCount), 0);
+            vk.CmdDraw(commandBuffer, (uint)wideCount, 1, (uint)(triangleCount + lineCount), 0);
         }
     }
 

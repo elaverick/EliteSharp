@@ -1,5 +1,6 @@
 using System.Numerics;
 using System.Runtime.InteropServices;
+using EliteSharp.Rendering.Geometry;
 using EliteSharp.Rendering.Scene;
 using Silk.NET.Shaderc;
 using Silk.NET.Vulkan;
@@ -85,17 +86,6 @@ public sealed unsafe class WorldRenderer : IDisposable
     /// depth test at those angles.
     /// </summary>
     private const float SurfaceDepthBiasSlope = -2;
-
-    /// <summary>
-    /// The sizes of ship on screen at which each simpler level of detail takes
-    /// over, as the ship's radius in original pixels (see ShipGeometry for the
-    /// levels): at this size or smaller, level i + 1 is used. These keep at
-    /// least as much detail as the original shows at the same distance (it
-    /// drops the details on the ships' surfaces, such as the Sidewinder's
-    /// exhausts, when they are around 10 pixels across, and shows ships as
-    /// dots when they are a few pixels across).
-    /// </summary>
-    private static readonly float[] LevelSizes = [8, 4, 2.5f];
 
     private readonly GpuDevice _gpu;
     private readonly MeshLibrary _meshes;
@@ -281,7 +271,7 @@ public sealed unsafe class WorldRenderer : IDisposable
         vk.CmdBindDescriptorSets(commandBuffer, PipelineBindPoint.Graphics, _pipelineLayout, 0, 1, in descriptorSet, 0, null);
         vk.CmdBindIndexBuffer(commandBuffer, _meshes.IndexBuffer, 0, IndexType.Uint32);
 
-        ChooseShipLevels(scene);
+        ChooseShipLevels(scene, new ViewFrustum(aspect), viewport.Extent.Height);
 
         // The depth pre-pass, then everything that is seen, tested against it
         DrawDepth(commandBuffer, scene);
@@ -293,24 +283,25 @@ public sealed unsafe class WorldRenderer : IDisposable
     }
 
     /// <summary>
-    /// Choose each ship's level of detail from its size on screen: the radius
-    /// in original pixels (as the original projects with a scale of 256 pixels
-    /// per unit of x / z).
+    /// Decide which ships can be seen (those whose bounding spheres are in the
+    /// camera's view), and choose each one's level of detail from its size on
+    /// the screen, in pixels.
     /// </summary>
-    private void ChooseShipLevels(SceneFrame scene)
+    private void ChooseShipLevels(SceneFrame scene, ViewFrustum frustum, float viewportHeight)
     {
         _ships.Clear();
+        var view = scene.Camera.ViewMatrix;
         foreach (var ship in scene.Ships)
         {
             var meshes = _meshes.Ship(ship.Model);
-            float size = 256 * meshes.Radius / MathF.Max(ship.Transform.Translation.Length(), 1);
-            int level = 0;
-            while (level < LevelSizes.Length && size <= LevelSizes[level])
+            var centre = ship.Transform.Translation;
+            if (!frustum.Intersects(Vector3.Transform(centre, view), meshes.Radius))
             {
-                level++;
+                continue;
             }
 
-            _ships.Add(new ShipDraw(meshes, level, ship.Transform, ship.Colour));
+            float screenRadius = ViewFrustum.ProjectedRadius(meshes.Radius, centre.Length(), viewportHeight);
+            _ships.Add(new ShipDraw(meshes, ShipLevelOfDetail.LevelFor(screenRadius), ship.Transform, ship.Colour));
         }
     }
 

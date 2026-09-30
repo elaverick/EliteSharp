@@ -12,50 +12,70 @@ namespace EliteSharp.Rendering.Geometry;
 /// <param name="Edges">The wireframe's edges, as pairs of indices into the points.</param>
 public sealed record ShipLevel(IReadOnlyList<Vector3> Points, IReadOnlyList<Triangle> Surface, IReadOnlyList<(int A, int B)> Edges);
 
+/// <summary>What a ship's line is, which decides how long it survives as the ship gets smaller.</summary>
+public enum ShipEdgeKind
+{
+    /// <summary>A detail drawn on a face, such as a vent or a window.</summary>
+    Detail,
+
+    /// <summary>A line where two faces of the surface meet.</summary>
+    Crease,
+
+    /// <summary>A part that sticks out of the surface, such as a gun barrel, a fin or the Krait's prongs.</summary>
+    Protrusion,
+}
+
+/// <summary>A line of a ship's wireframe, with what kind of line it is.</summary>
+/// <param name="A">The index of one end.</param>
+/// <param name="B">The index of the other end.</param>
+/// <param name="Kind">What the line is.</param>
+/// <param name="CreaseAngle">For a crease, the angle between the two faces' normals, in degrees (0 where the faces are in the same plane).</param>
+public readonly record struct ShipEdge(int A, int B, ShipEdgeKind Kind, float CreaseAngle);
+
 /// <summary>
-/// The 3D geometry of a ship model at each level of detail, from the full
-/// model for ships that are close by, down to a simple solid for ships that
-/// are far away. The levels are:
+/// The 3D geometry of a ship model at each level of detail, all built from the
+/// model's real surface and lines (see <see cref="ShipMeshAsset"/>). Every level
+/// keeps the whole surface, which is only a few dozen triangles and is only
+/// drawn into the depth buffer, so the lines of every level lie on (or stick
+/// out of) the same surface that hides them. The levels differ in which lines
+/// they draw, dropping the least visible first:
 ///
-/// 0. The full model: its surface, and all its lines, including the details
-///    drawn on its faces (such as vents and windows).
-/// 1. The model's surface and structure, without the details.
-/// 2. A simplified solid: the convex hull of half of the model's corners,
-///    chosen to keep as much of the ship's volume as possible, with an edge
-///    wherever its surface bends.
-/// 3. A minimal solid, made the same way from six corners.
+/// 0. Every line: the structure and the details on the faces (such as vents
+///    and windows).
+/// 1. The structure: the creases where faces meet, and the parts that stick out.
+/// 2. The structure without the gentle creases between faces that are almost
+///    in the same plane (panel lines).
+/// 3. Only the sharp creases, which make the ship's outline and main shape,
+///    and the parts that stick out, which make ships such as the Krait and the
+///    missile recognisable.
 ///
-/// Levels 2 and 3 are only used when the ship is a few pixels across, where
-/// its outline is all that can be seen.
+/// A level that would lose every line keeps the lines of the level before it.
 /// </summary>
 public sealed class ShipGeometry
 {
     /// <summary>The number of levels of detail.</summary>
     public const int LevelCount = 4;
 
-    /// <summary>
-    /// Two faces of a hull that meet at less than this angle (in degrees) are
-    /// treated as one flat face, as the models' whole-number coordinates make
-    /// faces that are meant to be flat slightly bent.
-    /// </summary>
-    private const float FlatAngle = 4;
+    /// <summary>The smallest crease angle (in degrees) that level 2 keeps.</summary>
+    public const float GentleCreaseAngle = 20;
 
-    /// <summary>The number of hull corners in the minimal solid (level 3).</summary>
-    private const int MinimalCorners = 6;
+    /// <summary>The smallest crease angle (in degrees) that level 3 keeps.</summary>
+    public const float SharpCreaseAngle = 45;
 
-    /// <summary>The fewest hull corners in the simplified solid (level 2).</summary>
-    private const int SimplifiedCorners = 8;
-
-    private ShipGeometry(ShipLevel[] levels, float radius)
+    private ShipGeometry(ShipLevel[] levels, IReadOnlyList<ShipEdge> edges, float radius)
     {
         Levels = levels;
+        Edges = edges;
         Radius = radius;
     }
 
-    /// <summary>The levels of detail, from the full model (0) to the minimal solid.</summary>
+    /// <summary>The levels of detail, from the full model (0) to the simplest.</summary>
     public IReadOnlyList<ShipLevel> Levels { get; }
 
-    /// <summary>The distance from the model's origin to its furthest vertex.</summary>
+    /// <summary>All the model's lines, with what each is.</summary>
+    public IReadOnlyList<ShipEdge> Edges { get; }
+
+    /// <summary>The distance from the model's origin to its furthest point.</summary>
     public float Radius { get; }
 
     /// <summary>Build the levels of detail for a model.</summary>
@@ -63,75 +83,81 @@ public sealed class ShipGeometry
     {
         var points = asset.Points;
         float radius = points.Count == 0 ? 0 : points.Max(p => p.Length());
+        var edges = ClassifyEdges(asset);
+
+        bool InLevel(ShipEdge edge, int level) => level switch
+        {
+            0 => true,
+            1 => edge.Kind != ShipEdgeKind.Detail,
+            2 => edge.Kind == ShipEdgeKind.Protrusion || (edge.Kind == ShipEdgeKind.Crease && edge.CreaseAngle >= GentleCreaseAngle),
+            _ => edge.Kind == ShipEdgeKind.Protrusion || (edge.Kind == ShipEdgeKind.Crease && edge.CreaseAngle >= SharpCreaseAngle),
+        };
 
         var levels = new ShipLevel[LevelCount];
-        levels[0] = new ShipLevel(points, asset.Surface, [.. asset.Structure, .. asset.Details]);
-        levels[1] = new ShipLevel(points, asset.Surface, asset.Structure);
+        for (int level = 0; level < LevelCount; level++)
+        {
+            var levelEdges = edges.Where(e => InLevel(e, level)).Select(e => (e.A, e.B)).ToList();
+            if (levelEdges.Count == 0 && level > 0)
+            {
+                levelEdges = [.. levels[level - 1].Edges];
+            }
 
-        var corners = ConvexHull.Build(points).Corners.ToList();
-        levels[2] = Simplify(points, corners, Math.Max(SimplifiedCorners, (corners.Count + 1) / 2)) ?? levels[1];
-        levels[3] = Simplify(points, corners, MinimalCorners) ?? levels[2];
-        return new ShipGeometry(levels, radius);
+            levels[level] = new ShipLevel(points, asset.Surface, levelEdges);
+        }
+
+        return new ShipGeometry(levels, edges, radius);
     }
 
     /// <summary>
-    /// A simplified solid with the given number of corners, made by removing
-    /// the hull's corners one at a time, each time taking the one whose loss
-    /// shrinks the hull the least. Returns null if the hull already has no
-    /// more corners than that.
+    /// Work out what each of the model's lines is: the details are as the
+    /// model says; a structure line is a crease if it is an edge of the
+    /// surface (with the angle between the faces on either side), and a
+    /// protrusion if not.
     /// </summary>
-    private static ShipLevel? Simplify(IReadOnlyList<Vector3> points, List<int> corners, int count)
+    private static List<ShipEdge> ClassifyEdges(ShipMeshAsset asset)
     {
-        if (corners.Count <= count)
+        var points = asset.Points;
+        var normals = asset.Surface.Select(t =>
+            Vector3.Normalize(Vector3.Cross(points[t.B] - points[t.A], points[t.C] - points[t.A]))).ToList();
+
+        var adjacent = new Dictionary<(int, int), List<int>>();
+        for (int i = 0; i < asset.Surface.Count; i++)
         {
-            return null;
-        }
-
-        var kept = new List<int>(corners);
-        while (kept.Count > count)
-        {
-            int best = -1;
-            double bestVolume = double.NegativeInfinity;
-            for (int i = 0; i < kept.Count; i++)
-            {
-                double volume = ConvexHull.Build([.. kept.Where((_, j) => j != i).Select(k => points[k])]).Volume;
-                if (volume > bestVolume)
-                {
-                    bestVolume = volume;
-                    best = i;
-                }
-            }
-
-            kept.RemoveAt(best);
-        }
-
-        var keptPoints = kept.Select(k => points[k]).ToList();
-        var hull = ConvexHull.Build(keptPoints);
-        return new ShipLevel(keptPoints, hull.Triangles, Creases(hull));
-    }
-
-    /// <summary>The edges of a hull where its surface bends (where the two faces that meet aren't in the same plane).</summary>
-    private static List<(int A, int B)> Creases(ConvexHull hull)
-    {
-        var faces = new Dictionary<(int, int), List<Triangle>>();
-        foreach (var t in hull.Triangles)
-        {
+            var t = asset.Surface[i];
             foreach (var (a, b) in new[] { (t.A, t.B), (t.B, t.C), (t.C, t.A) })
             {
                 var key = (Math.Min(a, b), Math.Max(a, b));
-                if (!faces.TryGetValue(key, out var list))
+                if (!adjacent.TryGetValue(key, out var list))
                 {
                     list = [];
-                    faces[key] = list;
+                    adjacent[key] = list;
                 }
 
-                list.Add(t);
+                list.Add(i);
             }
         }
 
-        float flat = MathF.Cos(FlatAngle * MathF.PI / 180);
-        return [.. faces
-            .Where(f => f.Value.Count != 2 || Vector3.Dot(hull.Normal(f.Value[0]), hull.Normal(f.Value[1])) < flat)
-            .Select(f => f.Key)];
+        var edges = new List<ShipEdge>();
+        foreach (var (a, b) in asset.Structure)
+        {
+            if (adjacent.TryGetValue((Math.Min(a, b), Math.Max(a, b)), out var faces) && faces.Count == 2)
+            {
+                float cosine = Math.Clamp(Vector3.Dot(normals[faces[0]], normals[faces[1]]), -1, 1);
+                edges.Add(new ShipEdge(a, b, ShipEdgeKind.Crease, MathF.Acos(cosine) * 180 / MathF.PI));
+            }
+            else if (faces != null)
+            {
+                // An edge of the surface that isn't between exactly two
+                // triangles (which none of the models have) counts as sharp
+                edges.Add(new ShipEdge(a, b, ShipEdgeKind.Crease, 180));
+            }
+            else
+            {
+                edges.Add(new ShipEdge(a, b, ShipEdgeKind.Protrusion, 0));
+            }
+        }
+
+        edges.AddRange(asset.Details.Select(d => new ShipEdge(d.A, d.B, ShipEdgeKind.Detail, 0)));
+        return edges;
     }
 }

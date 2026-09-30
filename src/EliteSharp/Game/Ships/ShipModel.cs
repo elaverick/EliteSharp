@@ -23,13 +23,12 @@ public sealed class ShipModel
     /// </summary>
     private const int MaxVertices = 64;
 
-    private ShipModel(string name, Vector3[] vertices, int gunVertex, int explosionVertices, int dotDistance)
+    private ShipModel(string name, Vector3[] vertices, int gunVertex, int explosionVertices)
     {
         Name = name;
         Vertices = vertices;
         GunVertex = gunVertex;
         ExplosionVertices = explosionVertices;
-        DotDistance = dotDistance;
     }
 
     /// <summary>The model's name (its file name without the extension), which the renderer knows it by.</summary>
@@ -46,9 +45,6 @@ public sealed class ShipModel
     /// can be more than the model has, as it is for the rock hermit).
     /// </summary>
     public int ExplosionVertices { get; }
-
-    /// <summary>The distance (z_hi) beyond which the original draws the ship as a dot.</summary>
-    public int DotDistance { get; }
 
     /// <summary>Load a model from a glTF file.</summary>
     public static ShipModel Load(string path)
@@ -75,8 +71,7 @@ public sealed class ShipModel
                 Path.GetFileNameWithoutExtension(path),
                 vertices,
                 Range(elite.GetProperty("gunVertex").GetInt32(), 0, Math.Max(0, vertices.Length - 1), "gunVertex"),
-                Range(elite.GetProperty("explosionVertices").GetInt32(), 0, MaxVertices, "explosionVertices"),
-                Range(elite.GetProperty("dotDistance").GetInt32(), 0, 255, "dotDistance"));
+                Range(elite.GetProperty("explosionVertices").GetInt32(), 0, MaxVertices, "explosionVertices"));
         }
         catch (Exception e) when (e is InvalidDataException or JsonException or KeyNotFoundException or FormatException or IndexOutOfRangeException or InvalidOperationException)
         {

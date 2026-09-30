@@ -155,13 +155,6 @@ public sealed class ShipBlueprint
     /// <summary>Bytes #10-11: the bounty in Cr * 10.</summary>
     public int Bounty { get; }
 
-    /// <summary>
-    /// Byte #13: the distance (z_hi) beyond which the original shows the ship as
-    /// a dot. The game still uses it to decide whether a distant ship counts as
-    /// drawn; the renderer always draws ships as 3D geometry.
-    /// </summary>
-    public int VisibilityDistance => Model.DotDistance;
-
     /// <summary>Byte #14: the ship's maximum energy.</summary>
     public int MaxEnergy { get; }
 

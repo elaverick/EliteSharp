@@ -10,12 +10,12 @@ namespace EliteSharp.Game;
 /// <summary>
 /// Drawing ships, explosions, planets and the sun. Each object is described to
 /// the 3D world (see WorldScene.cs) as what it is and where it is, and the
-/// renderer decides how to draw it and what can be seen. The original's
-/// drawing routines also make decisions that the rest of the game depends on
-/// (whether a ship is in the original's field of view, which decides whether
-/// its explosion cloud is drawn, and the explosion clouds and the sun's
-/// fringe, which take random numbers), and those parts are exact ports of the
-/// original.
+/// renderer decides what can be seen and how to draw it. The original's
+/// drawing routines also make decisions that the rest of the game depends on,
+/// because they take random numbers (whether an exploding ship is in the
+/// original's field of view, which decides whether its explosion cloud is
+/// drawn, and the explosion clouds and the sun's fringe themselves), and those
+/// parts are exact ports of the original.
 /// </summary>
 public sealed partial class EliteGame
 {
@@ -27,12 +27,12 @@ public sealed partial class EliteGame
     // ------------------------------------------------------------------------
 
     /// <summary>
-    /// LL9: draw the ship in INWK. The ship goes into the 3D world as its model
-    /// and its position and orientation, and the renderer works out what can be
-    /// seen of it. The game still tracks what the original's drawing decides
-    /// about the ship (whether it is in the original's field of view, and so
-    /// drawn, and whether its laser has been drawn), as these decide whether an
-    /// explosion's cloud is drawn, which takes random numbers.
+    /// LL9: draw the ship in INWK. The ship goes into the 3D world as its model,
+    /// position and orientation, and the renderer decides whether it can be
+    /// seen and how much detail to draw, however far away it is. An exploding
+    /// ship's cloud goes into the world too, and the game works out whether
+    /// the original would draw it, which decides whether it takes random
+    /// numbers.
     /// </summary>
     private void DrawShip()
     {
@@ -53,7 +53,7 @@ public sealed partial class EliteGame
         if ((_currentShip.Behaviour & 0x80) != 0)
         {
             // The ship has been scooped or has docked
-            RemoveShipFromScreen(owner);
+            RemoveFromScreen(owner);
             return;
         }
 
@@ -67,7 +67,7 @@ public sealed partial class EliteGame
                 _slotShip.PitchCounter = 0;
             }
 
-            RemoveShipFromScreen(owner);
+            RemoveFromScreen(owner);
             var cloud = _currentShip.Explosion;
             cloud.Counter = 18;
             cloud.CountByte = _blueprint!.ExplosionCountByte;
@@ -77,32 +77,13 @@ public sealed partial class EliteGame
             }
         }
 
-        // EE28 and LL10: is the ship in the original's field of view (in front
-        // of us, not too far away, and within 45 degrees of straight ahead)?
-        int zMagnitude = Math.Abs(_currentShip.Z) & 0xFFFF;
-        if (_currentShip.Z < 0 || _currentShip.ZHi >= 192
-            || (Math.Abs(_currentShip.X) & 0xFFFF) >= zMagnitude || (Math.Abs(_currentShip.Y) & 0xFFFF) >= zMagnitude)
-        {
-            DrawShipOutOfView(owner);
-            return;
-        }
-
-        // LL72
         if ((_currentShip.Flags & Ship.FlagExploding) != 0)
         {
-            _currentShip.Flags |= Ship.FlagDrawn;
-            DrawExplosion(owner);
+            // LL72 and LL14
+            DrawExplosion(owner, InOriginalFieldOfView());
             return;
         }
 
-        if ((_currentShip.ZHi >> 4) != 0 && _blueprint!.VisibilityDistance < _currentShip.ZHi)
-        {
-            // LL13: the original draws the ship as a dot this far away
-            DrawShipAsDot(owner);
-            return;
-        }
-
-        _currentShip.Flags |= Ship.FlagDrawn;
         var beam = default(LineSegment);
         bool firing = (_currentShip.Flags & Ship.FlagFiring) != 0;
         if (firing)
@@ -121,10 +102,24 @@ public sealed partial class EliteGame
 
     /// <summary>
     /// Put the ship in INWK into the 3D world (with its laser beam, if it's
-    /// firing), where the renderer decides how much of it can be seen.
+    /// firing), where the renderer decides whether and how it can be seen.
     /// </summary>
     private void ShowShip(object owner, ReadOnlySpan<LineSegment> beam = default) =>
         _world.SetShip(owner, new ShipInstance(_blueprint!.Model.Name, CurrentShipTransform(), _colour), beam);
+
+    /// <summary>
+    /// EE28 and LL10: whether the ship in INWK is in the original's field of
+    /// view (in front of us, not too far away, and within 45 degrees of
+    /// straight ahead). This doesn't decide what can be seen, which is up to
+    /// the renderer; it decides whether the original draws an explosion's
+    /// cloud, and so whether the cloud takes random numbers.
+    /// </summary>
+    private bool InOriginalFieldOfView()
+    {
+        int zMagnitude = Math.Abs(_currentShip.Z) & 0xFFFF;
+        return _currentShip.Z >= 0 && _currentShip.ZHi < 192
+            && (Math.Abs(_currentShip.X) & 0xFFFF) < zMagnitude && (Math.Abs(_currentShip.Y) & 0xFFFF) < zMagnitude;
+    }
 
     /// <summary>Convert a 16-bit two's complement word to a signed value.</summary>
     private static int ToSigned16(int value) => (short)(value & 0xFFFF);
@@ -179,58 +174,11 @@ public sealed partial class EliteGame
     }
 
     /// <summary>
-    /// LL14: the ship is out of the original's field of view, so it isn't
-    /// drawn (though the 3D view, which can be wider, may show it), but if it's
-    /// exploding, its explosion carries on.
-    /// </summary>
-    private void DrawShipOutOfView(object owner)
-    {
-        _currentShip.Flags &= ~Ship.FlagDrawn;
-        if ((_currentShip.Flags & Ship.FlagExploding) == 0)
-        {
-            ShowShip(owner);
-            return;
-        }
-
-        DrawExplosion(owner);
-    }
-
-    /// <summary>EE51: remove the ship from the screen if it is on-screen.</summary>
-    private void RemoveShipFromScreen(object owner)
-    {
-        if ((_currentShip.Flags & Ship.FlagDrawn) != 0)
-        {
-            _currentShip.Flags &= ~Ship.FlagDrawn;
-        }
-
-        RemoveFromScreen(owner);
-    }
-
-    /// <summary>
-    /// SHPPT: the original draws a distant ship as a dot, and the ship counts
-    /// as drawn if the dot is on its screen. The ship stays a 3D object in the
-    /// 3D world, which the renderer draws in less detail the further away it is.
-    /// </summary>
-    private void DrawShipAsDot(object owner)
-    {
-        // Shpt draws a four-pixel dash on two rows if the dot is on the
-        // original's screen (and nono notes that it isn't)
-        if (ProjectToScreen(out int x, out int y) && (x >> 8) == 0 && (y >> 8) == 0 && y < 2 * CentreY - 2)
-        {
-            _currentShip.Flags |= Ship.FlagDrawn;
-        }
-        else
-        {
-            _currentShip.Flags &= ~Ship.FlagDrawn;
-        }
-
-        ShowShip(owner);
-    }
-
-    /// <summary>
-    /// PROJ: project the ship's centre onto the screen, returning false (C set)
-    /// if it's too far off-screen. The results are K3 (x) and K4 (y) as 16-bit
-    /// two's complement values.
+    /// PROJ: project the centre of the planet or sun in INWK onto the
+    /// original's screen, returning false (C set) if it's too far off-screen.
+    /// The results are K3 (x) and K4 (y) as 16-bit two's complement values.
+    /// The planet and sun routines still work on the original's screen, as
+    /// the sun's fringe takes random numbers for each of its lines.
     /// </summary>
     private bool ProjectToScreen(out int screenX, out int screenY)
     {
@@ -278,7 +226,9 @@ public sealed partial class EliteGame
     /// its field of view; the game does the same, and the 3D world gets the
     /// cloud wherever the ship is.
     /// </summary>
-    private void DrawExplosion(object owner)
+    /// <param name="owner">The ship's owner in the 3D world.</param>
+    /// <param name="inOriginalFieldOfView">Whether the ship is in the original's field of view (see <see cref="InOriginalFieldOfView"/>).</param>
+    private void DrawExplosion(object owner, bool inOriginalFieldOfView)
     {
         var cloud = _currentShip.Explosion;
         if ((_currentShip.Flags & Ship.FlagOnScreenCloud) != 0)
@@ -327,7 +277,7 @@ public sealed partial class EliteGame
         cloud.Size = size;
         _currentShip.Flags &= ~Ship.FlagOnScreenCloud;
         _cloudParticles.Clear();
-        if ((_currentShip.Flags & Ship.FlagDrawn) != 0)
+        if (inOriginalFieldOfView)
         {
             _currentShip.Flags |= Ship.FlagOnScreenCloud;
             DrawExplosionCloud(_cloudParticles);

@@ -24,9 +24,10 @@ vertex positions (POSITION, in the original's units):
 
 Each primitive's extras name its role ("surface", "structure" or "details").
 The mesh's extras.elite holds the original data that the game itself uses:
-gunVertex (the vertex the ship fires from), explosionVertices (how many
-vertices its explosion cloud starts from) and dotDistance (the distance, as
-z_hi, beyond which the original draws the ship as a dot).
+gunVertex (the vertex the ship fires from) and explosionVertices (how many
+vertices its explosion cloud starts from). The original's other drawing data
+(such as the distance beyond which it draws a ship as a dot) is left out, as
+the renderer decides how to draw the ships from their geometry.
 
 The coordinates are exactly those in the original, which uses a left-handed
 system (x right, y up, z forward). glTF is right-handed with +z forward, so the
@@ -417,6 +418,20 @@ def triangulate(points, poly):
     return triangles
 
 
+def split_along(poly, chords):
+    """
+    Split a polygon (a loop of vertex numbers) along any of the given lines
+    that join two of its corners that aren't next to each other, so the
+    triangles include those lines.
+    """
+    n = len(poly)
+    for i in range(n):
+        for j in range(i + 2, n):
+            if (i, j) != (0, n - 1) and edge_key(poly[i], poly[j]) in chords:
+                return split_along(poly[i:j + 1], chords) + split_along(poly[j:] + poly[:i + 1], chords)
+    return [poly]
+
+
 def signed_volume(points, triangles):
     return sum(vdot(points[a], vcross(points[b], points[c])) for a, b, c in triangles) / 6
 
@@ -487,10 +502,14 @@ def build_surface(name, vertices, edges, faces):
         polygon_faces = [0]
         two_sided = True
 
+    # Triangulate each face, first splitting it along any detail line drawn
+    # from one of its corners to another, so the line lies on the surface
+    # (the Python's rear faces aren't flat, and have their diagonals drawn)
     polygons = orient(polygons)
+    detail_lines = {key for key, _ in details}
     triangles_by_face = []
     for poly in polygons:
-        triangles_by_face.append(triangulate(points, poly))
+        triangles_by_face.append([t for part in split_along(poly, detail_lines) for t in triangulate(points, part)])
     triangles = [t for ts in triangles_by_face for t in ts]
     if two_sided:
         triangles += [(a, c, b) for a, b, c in triangles]
@@ -609,7 +628,6 @@ def build_gltf(name, s):
             "primitives": primitives,
             "extras": {
                 "elite": {
-                    "dotDistance": s["vis"],
                     "gunVertex": s["gun"] // 4,
                     "explosionVertices": (s["expl"] - 6) // 4,
                 },

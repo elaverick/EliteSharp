@@ -129,8 +129,9 @@ public sealed class Ship
     // The bits in byte #31 (Flags), which also holds the number of missiles in
     // bits 0-2
 
-    /// <summary>Bit 3 of byte #31: the ship is being drawn on-screen.</summary>
-    public const int FlagDrawn = 0x08;
+    // Bit 3 of byte #31 is set in the original while the ship is drawn on its
+    // screen; the game doesn't need it, as the renderer decides what can be
+    // seen (and an explosion's cloud is decided by InOriginalFieldOfView)
 
     /// <summary>Bit 4 of byte #31: the ship is being shown on the scanner.</summary>
     public const int FlagScanner = 0x10;

@@ -56,7 +56,6 @@
       ],
       "extras": {
         "elite": {
-          "dotDistance": 20,
           "gunVertex": 0,
           "explosionVertices": 6
         }

@@ -1,3 +1,4 @@
+using System.Numerics;
 using EliteSharp.Game.Missions;
 using EliteSharp.Game.Ships;
 
@@ -132,7 +133,7 @@ public sealed partial class EliteGame : IMissionHost
         _shipType = shipType;
         AddShip(_shipType);
         _cursorX = 1;
-        _currentShip.Z = 1 << 8;
+        _currentShip.Position.Z = 256;
         ClearScreen(13);
         _mainLoopCounter = 64;
 
@@ -148,27 +149,20 @@ public sealed partial class EliteGame : IMissionHost
         }
         while (_mainLoopCounter != 0);
 
+        // BRL2: fly the ship away, moving it 2 further away and 1 higher each
+        // time (up to 120), until it is 512 away (the original adds 2 to z_lo
+        // until it overflows), and halving x (x_lo in the original), which
+        // stops our roll from moving the ship sideways
         while (true)
         {
-            // BRL2: fly the ship away
-            int xLo = _currentShip.XLo >> 1;
-            _currentShip.X = ComposeCoordinate(xLo, _currentShip.XHi, _currentShip.XSign);
-            int zLo = _currentShip.ZLo;
-            zLo = (zLo + 1) & 0xFF;
-            if (zLo == 0)
+            _currentShip.Position.X /= 2;
+            if (_currentShip.Position.Z + 2 >= 512)
             {
                 break;
             }
 
-            zLo = (zLo + 1) & 0xFF;
-            _currentShip.Z = ComposeCoordinate(zLo, _currentShip.ZHi, _currentShip.ZSign);
-            if (zLo == 0)
-            {
-                break;
-            }
-
-            int yLo = Math.Min(_currentShip.YLo + 1, 120);
-            _currentShip.Y = ComposeCoordinate(yLo, _currentShip.YHi, _currentShip.YSign);
+            _currentShip.Position.Z += 2;
+            _currentShip.Position.Y = MathF.Min(_currentShip.Position.Y + 1, 120);
             DrawShip();
             MoveShip();
             ThrottleMainLoop();
@@ -176,7 +170,7 @@ public sealed partial class EliteGame : IMissionHost
         }
 
         // BR2
-        _currentShip.Z = ComposeCoordinate(0, (_currentShip.ZHi + 1) & 0xFF, _currentShip.ZSign);
+        _currentShip.Position.Z = 512;
         ShowRotatingShip();
     }
 
@@ -218,9 +212,7 @@ public sealed partial class EliteGame : IMissionHost
     /// <summary>PAS1: display a rotating ship at the top of the screen and read the keyboard.</summary>
     private int ShowRotatingShip()
     {
-        _currentShip.Y = ComposeCoordinate(120, _currentShip.YHi, _currentShip.YSign);
-        _currentShip.X = ComposeCoordinate(0, _currentShip.XHi, _currentShip.XSign);
-        _currentShip.Z = ComposeCoordinate(0, 2, _currentShip.ZSign);
+        _currentShip.Position = new Vector3(0, 120, 512);
         DrawShip();
         MoveShip();
         ThrottleMainLoop();

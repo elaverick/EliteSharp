@@ -1,3 +1,4 @@
+using System.Numerics;
 using EliteSharp.Data;
 using EliteSharp.Game.Ships;
 using EliteSharp.Input;
@@ -43,8 +44,9 @@ public sealed partial class EliteGame
         ClearScreen(13);
         _colour = Red;
         _viewType = 0;
-        _currentShip.Nose.Z = 96 << 8;
-        _currentShip.Z = 96 << 8;
+        // The ship starts far away (z_hi = 96), pointing away from us
+        _currentShip.Nose.Z = 1;
+        _currentShip.Position.Z = 96 * 256 + distance;
         _currentShip.RollCounter = 127;
         _currentShip.PitchCounter = 127;
         _textCase = 128;
@@ -67,23 +69,19 @@ public sealed partial class EliteGame
         PrintExtendedToken(token);
         _cursorX = 7;
         PrintExtendedToken(12);
-        _turnAngleLimit = 12;
+        _turnAngleLimit = 12 / 36f;
         _mainLoopCounter = 5;
         JoystickEnabled = 0;
 
         while (true)
         {
-            // TLL2: move the ship towards us
-            if (_currentShip.ZHi != 1)
-            {
-                _currentShip.Z -= 256;
-            }
+            // TLL2: move the ship towards us by 256 each time, until it is
+            // 256 plus the title screen's distance away (the original sets
+            // z_lo to the distance, and stops when z_hi is 1)
+            _currentShip.Position.Z = MathF.Max(_currentShip.Position.Z - 256, 256 + _titleShipDistance);
 
             // TL1
             MoveShip();
-            _currentShip.Z = ComposeCoordinate(_titleShipDistance, _currentShip.ZHi, _currentShip.ZSign);
-            _currentShip.X = ComposeCoordinate(0, _currentShip.XHi, _currentShip.XSign);
-            _currentShip.Y = ComposeCoordinate(0, _currentShip.YHi, _currentShip.YSign);
             DrawShip();
             _mainLoopCounter = (_mainLoopCounter - 1) & 0xFF;
 
@@ -130,54 +128,47 @@ public sealed partial class EliteGame
             for (int i = 0; i < 3; i++)
             {
                 // HAL8/HAL9
-                _unitVector[2] = GameData.HangarGroups[offset];
-                _unitVector[1] = GameData.HangarGroups[offset + 1];
-                _unitVector[0] = GameData.HangarGroups[offset + 2];
+                DrawHangarShip(GameData.HangarGroups[offset], GameData.HangarGroups[offset + 1], GameData.HangarGroups[offset + 2]);
                 offset += 3;
-                DrawHangarShip();
             }
         }
         else
         {
             // HA7: draw a single random ship
-            _unitVector[1] = random >> 1;
-            _unitVector[0] = NextRandom();
+            int position = random >> 1;
+            int depth = NextRandom();
             int type = (NextRandom() & 3) + ShipType.Sidewinder + (_carry ? 1 : 0);
-            _unitVector[2] = type;
-            DrawHangarShip();
+            DrawHangarShip(type, position, depth);
         }
 
         // HA9
         DrawHangarBackground();
     }
 
-    /// <summary>HAS1: draw a ship in the hangar, using the type and position bytes in XX15.</summary>
-    private void DrawHangarShip()
+    /// <summary>
+    /// HAS1: draw a ship in the hangar. The position bytes (which the original
+    /// passes in XX15) are x_lo, with bit 0 giving z_hi, and z_lo, with bit 0
+    /// giving the sign of x.
+    /// </summary>
+    private void DrawHangarShip(int type, int xLo, int zLo)
     {
         // Each ship in the hangar is a separate object on the screen
         _currentShip = Ship.Workspace();
         _currentShip.ResetOrientationAndPosition();
 
-        int zLo = _unitVector[0];
-        int xSign = (zLo & 1) != 0 ? 0x80 : 0;
-        int xLo = _unitVector[1];
         int zHi = 1 + (xLo & 1);
-        _currentShip.Z = (zHi << 8) | zLo;
-        _currentShip.X = xSign != 0 ? -xLo : xLo;
-        _rotationTemp2 = 0x80;
+        _currentShip.Position = new Vector3((zLo & 1) != 0 ? -xLo : xLo, 0, (zHi << 8) | zLo);
 
+        // HAL5: rotate the ship around its roof axis by a random multiple of
+        // 1/16 radian
         int rotations = NextRandom();
         do
         {
-            // HAL5: rotate the ship around its roof axis
-            RotateVectorPair(ref _currentShip.Side.X, ref _currentShip.Nose.X);
-            RotateVectorPair(ref _currentShip.Side.Y, ref _currentShip.Nose.Y);
-            RotateVectorPair(ref _currentShip.Side.Z, ref _currentShip.Nose.Z);
+            RotatePair(ref _currentShip.Side, ref _currentShip.Nose, -ShipTurnAngle);
             rotations = (rotations - 1) & 0xFF;
         }
         while (rotations != 0);
 
-        int type = _unitVector[2];
         if (type == 0)
         {
             return;
@@ -192,10 +183,10 @@ public sealed partial class EliteGame
         _blueprint = blueprint;
         _shipType = type;
 
-        // Sit the ship on the hangar floor, using its size
-        int size = EliteMaths.SquareRoot(blueprint.TargetableArea & 0xFFFF);
-        int yLo = ((100 - size) & 0xFF) >> 1;
-        _currentShip.Y = -yLo;
+        // Sit the ship on the hangar floor, using its size (the square root
+        // of its targetable area)
+        float size = MathF.Sqrt(blueprint.TargetableArea);
+        _currentShip.Position.Y = -(100 - size) / 2;
 
         OrthonormaliseOrientation();
         DrawShip();

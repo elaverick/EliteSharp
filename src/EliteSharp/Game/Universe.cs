@@ -1,3 +1,4 @@
+using System.Numerics;
 using EliteSharp.Data;
 using EliteSharp.Game.Ships;
 
@@ -102,7 +103,7 @@ public sealed partial class EliteGame
             ResetSunLines();
             InSafeZone = 0;
             ToggleStationBulb();
-            _currentShip.Y = 6 << 16;
+            _currentShip.Position.Y = 6 << 16;
             AddShip(ShipType.Sun);
             return;
         }
@@ -204,13 +205,11 @@ public sealed partial class EliteGame
         ResetBubble();
 
         // Zero BETA through BETA+6
-        _pitchAngle = 0;
-        _pitchMagnitude = 0;
+        _pitch = 0;
         _hyperspaceTicks = 0;
         _hyperspaceCountdown = 0;
         _ecmCounter = 0;
-        _rollMagnitude = 0;
-        _rollSign = 0;
+        _roll = 0;
 
         // JSTGY = &FF
         ToggleOptions[4] = 0xFF;
@@ -227,16 +226,15 @@ public sealed partial class EliteGame
         _stardustCount = NormalStardustCount;
         _missileTarget = 0xFF;
         _pitchRate = 128;
-        _rollSign = 128;
-        _pitchSign = 128;
-        _pitchAngle = 0;
-        _pitchMagnitude = 0;
-        _rollSignFlipped = 0;
-        _pitchSignFlipped = 0;
+        _pitch = 0;
         _mainLoopCounter = 0;
         _speed = 3;
-        _rollAngle = 3;
-        _rollMagnitude = 3;
+
+        // ALPHA = 3, the roll that turns the ships on the title screen and in
+        // the mission briefings. (The original also sets ALP2, the sign of the
+        // roll that MVEIT uses when it rotates ships' positions, to negative,
+        // which a single roll angle can't express.)
+        _roll = 3;
 
         if (InSafeZone != 0)
         {
@@ -271,9 +269,10 @@ public sealed partial class EliteGame
         ResetWorkspace();
         int random = NextRandom();
         int x = _randomX;
-        _currentShip.X = (random & 0x80) != 0 ? -(25 << 8) : 25 << 8;
-        _currentShip.Y = (x & 0x80) != 0 ? -(25 << 8) : 25 << 8;
-        _currentShip.Z = 25 << 8;
+        _currentShip.Position = new Vector3(
+            (random & 0x80) != 0 ? -(25 << 8) : 25 << 8,
+            (x & 0x80) != 0 ? -(25 << 8) : 25 << 8,
+            25 << 8);
         _currentShip.Ai = ((((x << 1) | (x >= 245 ? 1 : 0)) & 0xFF) | 0b11000000);
 
         // Fall through into DORND2
@@ -290,17 +289,15 @@ public sealed partial class EliteGame
         ResetWorkspace();
         int zSign = ((_selectedSeeds[1] & 3) + 3 + (carry ? 1 : 0)) & 0xFF;
         int xySign = zSign >> 1;
-        _currentShip.Z = zSign << 16;
-        _currentShip.X = xySign << 16;
-        _currentShip.Y = xySign << 16;
+        _currentShip.Position = new Vector3(xySign << 16, xySign << 16, zSign << 16);
         AddPlanet();
 
         // Set up the sun
         int sunZSign = (_selectedSeeds[3] & 7) | 0b10000001;
-        _currentShip.Z = -((sunZSign & 0x7F) << 16);
+        _currentShip.Position.Z = -((sunZSign & 0x7F) << 16);
         // Only x_sign and x_hi are set, so the sun keeps the planet's y
         int sunXHigh = _selectedSeeds[5] & 3;
-        _currentShip.X = (sunXHigh << 16) | (sunXHigh << 8);
+        _currentShip.Position.X = (sunXHigh << 16) | (sunXHigh << 8);
         _currentShip.RollCounter = 0;
         _currentShip.PitchCounter = 0;
         AddShip(ShipType.Sun);
@@ -334,8 +331,8 @@ public sealed partial class EliteGame
         for (int particle = _stardustCount; particle > 0; particle--)
         {
             _dustZ[particle] = NextRandom() | 8;
-            _dustX[particle] = NextRandom();
-            _dustY[particle] = NextRandom();
+            _dustX[particle] = SignedByte(NextRandom());
+            _dustY[particle] = SignedByte(NextRandom());
         }
 
         UpdateStardustImage();
@@ -403,7 +400,7 @@ public sealed partial class EliteGame
         _currentShip.RollCounter = 0xFF;
 
         // Flip the signs of nosev
-        _currentShip.Nose = new IntVector3(-_currentShip.Nose.X, -_currentShip.Nose.Y, -_currentShip.Nose.Z);
+        _currentShip.Nose = -_currentShip.Nose;
 
         _dodoStation = _techLevel >= 10;
         AddShip(ShipType.SpaceStation);
@@ -502,12 +499,12 @@ public sealed partial class EliteGame
             SelectNearestSystem();
 
             // INC INWK+8 puts the planet at z = 65536, in front of us
-            _currentShip.Z = 1 << 16;
+            _currentShip.Position.Z = 1 << 16;
             AddPlanet();
 
             // Setting z_sign to &80 and incrementing z_hi puts the station at
             // z = -256, just behind us
-            _currentShip.Z = -(1 << 8);
+            _currentShip.Position.Z = -(1 << 8);
             AddStation();
             _speed = 12;
             _legalStatus |= ContrabandBadness();

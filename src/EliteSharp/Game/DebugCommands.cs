@@ -39,9 +39,10 @@ public sealed partial class EliteGame
                     var saved = _currentShip;
                     ResetWorkspace();
                     int type = int.Parse(parts[1]);
-                    _currentShip.Z = (parts.Length > 2 ? int.Parse(parts[2]) : 8) << 8;
-                    _currentShip.X = parts.Length > 3 ? int.Parse(parts[3]) : 0;
-                    _currentShip.Y = parts.Length > 4 ? int.Parse(parts[4]) : 0;
+                    _currentShip.Position = new System.Numerics.Vector3(
+                        parts.Length > 3 ? int.Parse(parts[3]) : 0,
+                        parts.Length > 4 ? int.Parse(parts[4]) : 0,
+                        (parts.Length > 2 ? int.Parse(parts[2]) : 8) << 8);
                     _currentShip.Ai = parts.Length > 5 ? Convert.ToInt32(parts[5], 16) : 0;
                     _currentShip.Behaviour = parts.Length > 6 ? Convert.ToInt32(parts[6], 16) : 0;
                     _currentShip.Speed = 0;

@@ -74,10 +74,10 @@ public sealed partial class EliteGame
     private Vector3 ViewToWorld(float x, float y, float z) => Camera.ViewToWorld(_drawView, new Vector3(x, y, z));
 
     /// <summary>A direction in world space, as a unit vector, from one of INWK's orientation vectors.</summary>
-    private Vector3 ViewDirectionToWorld(IntVector3 vector) => Vector3.Normalize(ViewToWorld(vector.X, vector.Y, vector.Z));
+    private Vector3 ViewDirectionToWorld(Vector3 vector) => Vector3.Normalize(Camera.ViewToWorld(_drawView, vector));
 
     /// <summary>The position in world space of the ship in INWK.</summary>
-    private Vector3 CurrentShipPosition() => ViewToWorld(_currentShip.X, _currentShip.Y, _currentShip.Z);
+    private Vector3 CurrentShipPosition() => Camera.ViewToWorld(_drawView, _currentShip.Position);
 
     /// <summary>
     /// The model-to-world transform of the ship in INWK: its orientation

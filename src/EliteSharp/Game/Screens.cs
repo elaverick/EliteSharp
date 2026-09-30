@@ -257,20 +257,11 @@ public sealed partial class EliteGame
     /// </summary>
     private void CalculateDistance(int systemX)
     {
-        int dx = Math.Abs(systemX - _currentSystemX) & 0xFF;
-        int dxSquared = dx * dx;
-        int dy = (Math.Abs(_selectedSeeds[1] - _currentSystemY) & 0xFF) >> 1;
-        int dySquared = dy * dy;
-        int sum = dxSquared + dySquared;
-        int sumLow = sum & 0xFF;
-        int sumHigh = sum >> 8;
-        if (sumHigh > 0xFF)
-        {
-            sumHigh = 255;
-        }
-
-        int root = EliteMaths.SquareRoot((sumHigh << 8) | sumLow);
-        _selectedDistance = (root << 2) & 0x3FF;
+        // The galaxy's y-coordinates are at twice the scale of its
+        // x-coordinates, and each unit is 0.4 light years
+        float dx = systemX - _currentSystemX;
+        float dy = (_selectedSeeds[1] - _currentSystemY) / 2f;
+        _selectedDistance = (int)(4 * MathF.Sqrt(dx * dx + dy * dy));
         CalculateSystemData();
     }
 

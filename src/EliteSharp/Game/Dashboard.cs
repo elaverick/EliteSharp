@@ -1,3 +1,4 @@
+using System.Numerics;
 using EliteSharp.Game.Ships;
 using EliteSharp.Rendering;
 
@@ -49,14 +50,10 @@ public sealed partial class EliteGame
 
         // The right-hand side: speed, roll, pitch and energy banks
         DrawBar(builder, 208, 0, _speed >> 1, 14, danger, DashboardWhite);
-        DrawIndicator(builder, 208, 1, AddSignMagnitudeHighBytes(8, ((_rollMagnitude >> 2) | _rollSign) ^ 0x80));
-        int pitch = _pitchAngle;
-        if (_pitchMagnitude != 0)
-        {
-            pitch = (pitch - 1) & 0xFF;
-        }
-
-        DrawIndicator(builder, 208, 2, AddSignMagnitudeHighBytes(8, pitch));
+        // The roll indicator moves a quarter as far as the roll, and the pitch
+        // indicator one less than the pitch
+        DrawIndicator(builder, 208, 1, 8 - Math.Sign(_roll) * (Math.Abs(_roll) >> 2));
+        DrawIndicator(builder, 208, 2, 8 + Math.Sign(_pitch) * Math.Max(Math.Abs(_pitch) - 1, 0));
 
         int[] banks = new int[4];
         int remaining = _energy >> 2;
@@ -163,13 +160,6 @@ public sealed partial class EliteGame
         }
     }
 
-    /// <summary>ADDK: (A X) = (A 0) + (S 0) with sign-magnitude arithmetic, returning the high byte.</summary>
-    private static int AddSignMagnitudeHighBytes(int addend, int value)
-    {
-        int result = EliteMaths.Add16(EliteMaths.FromSignMagnitude(value) << 8, addend << 8);
-        return (result >> 8) & 0xFF;
-    }
-
     /// <summary>CPIXK: draw a four-pixel dash (two of the dashboard's pixels) at (x, y).</summary>
     private static void DrawDash(HudBuilder builder, int x, int y, Ink colour)
     {
@@ -184,8 +174,11 @@ public sealed partial class EliteGame
             return;
         }
 
+        // Only ships within 16,384 in each axis are shown (x_hi, y_hi and z_hi
+        // are less than 64)
         var colour = ShipCatalogue.Get(_shipType).ScannerColour;
-        if (((_currentShip.XHi | _currentShip.YHi | _currentShip.ZHi) & 0b11000000) != 0)
+        var position = _currentShip.Position;
+        if (!IsWithin(position, 16384))
         {
             return;
         }
@@ -197,31 +190,13 @@ public sealed partial class EliteGame
             return;
         }
 
-        // X1 = 125 + x_hi (made even)
-        int offset = _currentShip.XHi;
-        if (_currentShip.X < 0)
-        {
-            offset = (-offset) & 0xFF;
-        }
-
-        int x1 = (offset + 125) & 0xFE;
-
-        // Y2 = 220 - z_hi / 4
-        offset = _currentShip.ZHi >> 2;
-        offset = _currentShip.Z < 0 ? (~offset + 35 + 1) & 0xFF : (offset + 35) & 0xFF;
-        int y2 = offset ^ 0xFF;
-
-        // The dot's y-coordinate is Y2 - y_hi / 2, clipped to the scanner
-        offset = _currentShip.YHi >> 1;
-        int dot = _currentShip.Y < 0 ? (offset + y2) & 0xFF : ((~offset & 0xFF) + y2 + 1) & 0xFF;
-        if ((dot & 0x80) == 0 || dot >= 247)
-        {
-            dot = 246;
-        }
-        else if (dot < 194)
-        {
-            dot = 194;
-        }
+        // The scanner shows the ship's position on the ellipse (x and z, with
+        // the stick's base at X1 = 125 + x / 256, made even, and
+        // Y2 = 220 - z / 1024) and its height (y) as the length of the stick
+        // (Y2 - y / 512, clipped to the scanner)
+        int x1 = (125 + (int)(position.X / 256)) & ~1;
+        int y2 = 220 - (int)(position.Z / 1024);
+        int dot = Math.Clamp(y2 - (int)(position.Y / 512), 194, 246);
 
         _blips[owner] = new ScannerBlip(x1, dot, y2, colour);
     }
@@ -239,29 +214,23 @@ public sealed partial class EliteGame
             CalculatePlanetVector();
         }
 
-        // SP2
-        _compassX = (CompassOffset(_unitVector[0]) + 195) & 0xFF;
-        _compassY = (204 - CompassOffset(_unitVector[1]) - 1) & 0xFF;
-        _compassColour = _unitVector[2] < 0 ? DashboardGreen : DashboardYellow;
+        // SP2: the dot is up to 9 pixels from the compass's centre (the
+        // original divides the 96ths of the unit vector by 10), and is green
+        // if the planet or station is behind us
+        _compassX = 195 + CompassOffset(_unitVector.X);
+        _compassY = 204 - CompassOffset(_unitVector.Y) - 1;
+        _compassColour = _unitVector.Z < 0 ? DashboardGreen : DashboardYellow;
     }
 
-    /// <summary>SPS4: calculate the normalised vector to the space station in XX15.</summary>
+    /// <summary>SPS4: calculate the unit vector to the space station in XX15.</summary>
     private void CalculateStationVector()
     {
-        var station = Slots[1];
-        SetVectorCoordinate(0, station?.X ?? 0);
-        SetVectorCoordinate(1, station?.Y ?? 0);
-        SetVectorCoordinate(2, station?.Z ?? 0);
+        _tacticsVector = Slots[1]?.Position ?? Vector3.Zero;
         NormaliseVector();
     }
 
-    /// <summary>SPS2: X = A / 10, for a signed value A (the compass offset).</summary>
-    private static int CompassOffset(int value)
-    {
-        int magnitude = (Math.Abs(value) << 1) & 0xFF;
-        EliteMaths.DivideWithRemainder(magnitude, 20, out int offset, out _);
-        return value < 0 ? -offset : offset;
-    }
+    /// <summary>SPS2: the compass dot's offset from the compass's centre for a coordinate of a unit vector.</summary>
+    private static int CompassOffset(float coordinate) => (int)(coordinate * 96 / 10);
 
     /// <summary>MSBAR: set the colour of a missile indicator.</summary>
     private void SetMissileIndicator(int missile, Ink colour)

@@ -1,6 +1,5 @@
 using System.Runtime.InteropServices;
 using System.Numerics;
-using EliteSharp.Data;
 using EliteSharp.Game.Ships;
 using EliteSharp.Rendering;
 using EliteSharp.Rendering.Scene;
@@ -88,12 +87,12 @@ public sealed partial class EliteGame
         bool firing = (_currentShip.Flags & Ship.FlagFiring) != 0;
         if (firing)
         {
-            // The ship's laser beam goes from its gun to one of the bottom
-            // corners of the screen (or thereabouts)
+            // The ship's laser beam goes from its gun to the left or right edge
+            // of the screen, at a row that the original takes from z_lo
             _currentShip.Flags &= ~Ship.FlagFiring;
             var gun = _blueprint!.Vertices[_blueprint.GunVertex];
-            int cornerX = _currentShip.X < 0 ? 255 : 0;
-            int cornerY = _currentShip.ZLo;
+            int cornerX = _currentShip.Position.X < 0 ? 255 : 0;
+            int cornerY = LowByte(_currentShip.Position.Z);
             beam = new LineSegment(Vector3.Transform(gun, CurrentShipTransform()), ScreenPointToWorld(cornerX, cornerY, ScreenEdgeDistance), _colour);
         }
 
@@ -116,13 +115,12 @@ public sealed partial class EliteGame
     /// </summary>
     private bool InOriginalFieldOfView()
     {
-        int zMagnitude = Math.Abs(_currentShip.Z) & 0xFFFF;
-        return _currentShip.Z >= 0 && _currentShip.ZHi < 192
-            && (Math.Abs(_currentShip.X) & 0xFFFF) < zMagnitude && (Math.Abs(_currentShip.Y) & 0xFFFF) < zMagnitude;
+        // In front of us and closer than 49,152 (z_hi is less than 192), and
+        // within 45 degrees of straight ahead
+        var position = _currentShip.Position;
+        return position.Z >= 0 && position.Z < 192 * 256
+            && MathF.Abs(position.X) < position.Z && MathF.Abs(position.Y) < position.Z;
     }
-
-    /// <summary>Convert a 16-bit two's complement word to a signed value.</summary>
-    private static int ToSigned16(int value) => (short)(value & 0xFFFF);
 
     /// <summary>
     /// The LL145 clipping test: returns true if the line from (x1, y1) to
@@ -174,43 +172,27 @@ public sealed partial class EliteGame
     }
 
     /// <summary>
+    /// The scale of the original's screen projection: a point at (x, y, z) is
+    /// 256 * x / z pixels from the centre of the screen horizontally, and
+    /// 256 * y / z pixels vertically.
+    /// </summary>
+    private const float ScreenScale = 256;
+
+    /// <summary>
     /// PROJ: project the centre of the planet or sun in INWK onto the
-    /// original's screen, returning false (C set) if it's too far off-screen.
-    /// The results are K3 (x) and K4 (y) as 16-bit two's complement values.
-    /// The planet and sun routines still work on the original's screen, as
-    /// the sun's fringe takes random numbers for each of its lines.
+    /// original's screen, returning false (C set) if it's 1,024 pixels or
+    /// more from the centre in either axis. The planet and sun routines still
+    /// work on the original's screen, as the sun's fringe takes random numbers
+    /// for each of its lines.
     /// </summary>
     private bool ProjectToScreen(out int screenX, out int screenY)
     {
-        screenX = 0;
-        screenY = 0;
-        if (!DivideByDistance(_currentShip.X, out int x))
-        {
-            return false;
-        }
-
-        screenX = (x + CentreX) & 0xFFFF;
-        if (!DivideByDistance(-_currentShip.Y, out int y))
-        {
-            return false;
-        }
-
-        screenY = (y + CentreY) & 0xFFFF;
-        return true;
-    }
-
-    /// <summary>PLS6: calculate 256 * value / z, returning false if the result is 1024 or more.</summary>
-    private bool DivideByDistance(int value, out int result)
-    {
-        int scaled = EliteMaths.DivideScaled(value, _currentShip.Z);
-        result = 0;
-        if (Math.Abs(scaled) >= 1024)
-        {
-            return false;
-        }
-
-        result = scaled;
-        return true;
+        var position = _currentShip.Position;
+        float x = ScreenScale * position.X / position.Z;
+        float y = ScreenScale * -position.Y / position.Z;
+        screenX = CentreX + (int)x;
+        screenY = CentreY + (int)y;
+        return MathF.Abs(x) < 1024 && MathF.Abs(y) < 1024;
     }
 
     // ------------------------------------------------------------------------
@@ -238,22 +220,17 @@ public sealed partial class EliteGame
             DrawExplosionCloud(null);
         }
 
-        // Work out the cloud's size from its distance and counter
-        int zHi = _currentShip.ZHi;
-        int distanceFactor;
-        if (zHi >= 32)
-        {
-            distanceFactor = 0xFE;
-        }
-        else
-        {
-            int z = ((zHi << 8) | _currentShip.ZLo) >> 6;
-            distanceFactor = ((z << 1) | 1) & 0xFF;
-        }
+        // Work out the cloud's size from its distance and counter: it grows
+        // with the counter, and is smaller the further away it is, up to a
+        // distance of 8,192 (z_hi of 32), beyond which it is the same size
+        float depth = MathF.Abs(_currentShip.Position.Z);
+        bool distant = depth >= 32 * 256;
+        float distanceFactor = distant ? 254 : MathF.Max(depth / 32, 1);
 
         // The ADC #4 includes the C flag, which is set if z_hi >= 32 (from the
-        // CMP) and clear otherwise (from the ROL, as z / 64 &lt; 128)
-        int counter = cloud.Counter + 4 + (zHi >= 32 ? 1 : 0);
+        // CMP) and clear otherwise (from the ROL, as z / 64 &lt; 128), so the
+        // explosions of distant ships finish sooner
+        int counter = cloud.Counter + 4 + (distant ? 1 : 0);
         if (counter > 0xFF)
         {
             // EX2: the explosion has finished
@@ -262,19 +239,9 @@ public sealed partial class EliteGame
             return;
         }
 
+        // The size is on the original's screen, in pixels, which is at most 254
         cloud.Counter = counter;
-        EliteMaths.DivideWithRemainder(counter, distanceFactor, out int sizeInteger, out int sizeFraction);
-        int size;
-        if (sizeInteger >= 0x1C)
-        {
-            size = 0xFE;
-        }
-        else
-        {
-            size = ((sizeInteger << 3) | (sizeFraction >> 5)) & 0xFF;
-        }
-
-        cloud.Size = size;
+        cloud.Size = MathF.Min(8 * counter / distanceFactor, 254);
         _currentShip.Flags &= ~Ship.FlagOnScreenCloud;
         _cloudParticles.Clear();
         if (inOriginalFieldOfView)
@@ -358,23 +325,23 @@ public sealed partial class EliteGame
                 // 3D view can show particles that the original's screen can't).
                 // The offsets from the vertex don't depend on where the vertex
                 // is on the screen, so they are worked out from the origin.
-                int y = RandomCloudCoordinate(0, cloud.Size);
-                int x = RandomCloudCoordinate(0, cloud.Size);
+                float y = RandomCloudOffset(cloud.Size);
+                float x = RandomCloudOffset(cloud.Size);
 
                 if (particles != null && viewOrigin.Z > 0)
                 {
                     // Convert the particle's offset on the screen into an offset in
                     // space at the vertex's distance
-                    float scale = viewOrigin.Z / 256;
-                    float dx = ToSigned16(x) * scale;
-                    float dy = ToSigned16(y) * scale;
+                    float scale = viewOrigin.Z / ScreenScale;
+                    float dx = x * scale;
+                    float dy = y * scale;
                     particles.Add(new Particle(ViewToWorld(viewOrigin.X + dx, viewOrigin.Y - dy, viewOrigin.Z), 2, random >= 80 ? 1 : 2, _colour));
                 }
             }
         }
 
         _randomSeeds[1] = savedSeed1;
-        _randomSeeds[3] = Planet.ZLo;
+        _randomSeeds[3] = LowByte(Planet.Position.Z);
     }
 
     /// <summary>The inline random number generator used by PTCLS (DORND with the C flag clear).</summary>
@@ -385,38 +352,20 @@ public sealed partial class EliteGame
     }
 
     /// <summary>
-    /// EXS1: return a random coordinate within the cloud's size of the given
-    /// origin coordinate (a 16-bit word), as a 16-bit value.
+    /// EXS1: return a random offset of up to the cloud's size (in pixels on
+    /// the original's screen) in either direction, taking one random number
+    /// (bit 7 is the direction, and the rest is the fraction of the size).
     /// </summary>
-    private int RandomCloudCoordinate(int origin, int size)
+    private float RandomCloudOffset(float size)
     {
-        int originHigh = (origin >> 8) & 0xFF;
-        int originLow = origin & 0xFF;
         int random = NextCloudRandom();
-        bool negative = (random & 0x80) != 0;
-        random = (random << 1) & 0xFF;
-        int product = EliteMaths.MultiplyFraction(random, size, out bool carry);
-        if (!negative)
-        {
-            int sum = originLow + product + (carry ? 1 : 0);
-            int lo = sum & 0xFF;
-            int hi = (originHigh + (sum > 0xFF ? 1 : 0)) & 0xFF;
-            return (hi << 8) | lo;
-        }
-
-        int difference = originLow - product - (carry ? 0 : 1);
-        int low = difference & 0xFF;
-        int high = (originHigh - (difference < 0 ? 1 : 0)) & 0xFF;
-        return (high << 8) | low;
+        float offset = (random & 0x7F) * 2 * size / 256;
+        return (random & 0x80) != 0 ? -offset : offset;
     }
 
     /// <summary>A point on the ship in INWK (in the ship's own coordinates), in the space of the view it is in.</summary>
-    private Vector3 ShipPointInView(Vector3 point)
-    {
-        static Vector3 Unit(IntVector3 v) => Vector3.Normalize(new Vector3(v.X, v.Y, v.Z));
-        return new Vector3(_currentShip.X, _currentShip.Y, _currentShip.Z)
-            + Unit(_currentShip.Side) * point.X + Unit(_currentShip.Roof) * point.Y + Unit(_currentShip.Nose) * point.Z;
-    }
+    private Vector3 ShipPointInView(Vector3 point) =>
+        _currentShip.Position + _currentShip.Side * point.X + _currentShip.Roof * point.Y + _currentShip.Nose * point.Z;
 
     /// <summary>
     /// PIXEL: the rectangles for a dot at (x, y), which is two pixels wide and
@@ -448,7 +397,7 @@ public sealed partial class EliteGame
     /// <summary>K: the radius of the circle being drawn.</summary>
     private int _circleRadius;
 
-    /// <summary>K3 and K4 for circles: the centre of the circle (16-bit two's complement).</summary>
+    /// <summary>K3 and K4 for circles: the centre of the circle on the original's screen.</summary>
     private int _circleX, _circleY;
 
     /// <summary>The line segments of the circle being collected by BLINE (the ball line heap).</summary>
@@ -469,9 +418,11 @@ public sealed partial class EliteGame
     /// <summary>PLANET: draw the planet or sun in INWK.</summary>
     private void DrawPlanetOrSun()
     {
+        // The planet or sun is only drawn if it is in front of us, at least
+        // 256 away and less than 3,145,728 away (z_sign is less than 48)
         _colour = Green;
-        int zSign = _currentShip.ZSign;
-        if (zSign >= 48 || (zSign | _currentShip.ZHi) == 0)
+        float z = _currentShip.Position.Z;
+        if (z < 256 || z >= 48 * 65536)
         {
             RemovePlanetOrSun();
             return;
@@ -483,10 +434,11 @@ public sealed partial class EliteGame
             return;
         }
 
-        // The planet's radius is 96 * 256 * 256 / z
-        int radius = EliteMaths.DivideScaled(96 << 8, _currentShip.Z);
-        bool large = (radius >> 8) != 0;
-        _circleRadius = large ? 248 : radius & 0xFF;
+        // The planet's radius on the original's screen, in pixels, which is
+        // drawn as 248 if it is 256 or more
+        float radius = ScreenScale * PlanetRadius / z;
+        bool large = radius >= 256;
+        _circleRadius = large ? 248 : (int)radius;
 
         if ((_shipType & 1) != 0)
         {
@@ -518,8 +470,6 @@ public sealed partial class EliteGame
     /// </summary>
     private int AddCircleSegment(int x, int y, int count)
     {
-        x = ToSigned16(x);
-        y = ToSigned16(y);
         if (_circleLineFirst)
         {
             _circleLineFirst = false;
@@ -534,27 +484,19 @@ public sealed partial class EliteGame
         return count + _circleStep;
     }
 
-    /// <summary>CIRCLE2: draw a circle of radius K centred on K3/K4, with step size STP.</summary>
+    /// <summary>
+    /// CIRCLE2: draw a circle of radius K centred on K3/K4, as 64 steps around
+    /// the circle, joining every STP-th point.
+    /// </summary>
     private void DrawCircle()
     {
         _circleLineFirst = true;
         int count = 0;
         while (true)
         {
-            int x = EliteMaths.MultiplyFraction(_circleRadius, GameData.Sine[count & 31]);
-            if (count >= 33)
-            {
-                x = -x;
-            }
-
-            int y = EliteMaths.MultiplyFraction(_circleRadius, GameData.Sine[(count + 16) & 31], out bool carry);
-
-            // The ADC #15 includes the C flag from FMLTU2
-            if (((count + 15 + (carry ? 1 : 0)) & 63) >= 33)
-            {
-                y = -y;
-            }
-
+            var (sin, cos) = MathF.SinCos(count * MathF.PI / 32);
+            int x = (int)(_circleRadius * sin);
+            int y = (int)(_circleRadius * cos);
             int next = AddCircleSegment(_circleX + x, _circleY + y, count);
             if (next >= 65)
             {
@@ -572,7 +514,7 @@ public sealed partial class EliteGame
     /// </summary>
     private bool IsCircleOnScreen(out int bottom, out int top)
     {
-        int centreX = ToSigned16(_circleX), centreY = ToSigned16(_circleY);
+        int centreX = _circleX, centreY = _circleY;
         bottom = centreY + _circleRadius;
         top = centreY - _circleRadius;
         if (centreX + _circleRadius < 0)
@@ -655,7 +597,7 @@ public sealed partial class EliteGame
         }
 
         // Work out V, the vertical distance from row Yx2M1 to the centre
-        int centreY = ToSigned16(_circleY);
+        int centreY = _circleY;
         int verticalDistance, verticalDistanceHigh;
         int distance = yMax - centreY;
         if (distance < 0)
@@ -687,14 +629,14 @@ public sealed partial class EliteGame
             _sunHalfWidths[row] = 0;
         }
 
-        int centre = ToSigned16(_circleX);
+        int centre = _circleX;
         int y = bottomRow;
         bool finished = false;
         while (!finished)
         {
             // PLFL: the half-width of this row
             int halfWidthSquared = radiusSquared - verticalDistance * verticalDistance;
-            int halfWidth = EliteMaths.SquareRoot(halfWidthSquared & 0xFFFF);
+            int halfWidth = (int)MathF.Sqrt(halfWidthSquared);
             int width = (NextRandom() & fringeMask) + halfWidth;
             if (width > 255)
             {

@@ -1,4 +1,4 @@
-using EliteSharp.Data;
+using System.Numerics;
 using EliteSharp.Game.Ships;
 using EliteSharp.Rendering;
 
@@ -9,37 +9,64 @@ namespace EliteSharp.Game;
 /// </summary>
 public sealed partial class EliteGame
 {
+    // The original's unit vectors have a length of 96, so its tests of their
+    // coordinates are in 96ths. Its dot products of two unit vectors keep the
+    // high byte of the result, so its tests of those are in units of
+    // 96 * 96 / 256 = 36, and 36 is the dot product of parallel vectors.
+
+    /// <summary>K3: the vector used by the tactics routines (such as the vector from a target to the ship in INWK).</summary>
+    private Vector3 _tacticsVector;
+
+    /// <summary>XX15: a unit vector, usually the direction of K3.</summary>
+    private Vector3 _unitVector;
+
+    /// <summary>CNT: the dot product of the ship's nose and XX15, used by the tactics routines.</summary>
+    private float _dotProduct;
+
     /// <summary>
-    /// K3 (which shares memory with XX2): the vector used by the tactics
-    /// routines in elements 0-8 (as three signed 24-bit coordinates at 0, 3
-    /// and 6), and the face visibility table used by LL9.
+    /// CNT2: the dot product of the ship's nose and the direction it wants to
+    /// go, above which it speeds up (and below which it slows down to turn).
     /// </summary>
-    private readonly int[] _tacticsVector = new int[14];
+    private float _turnAngleLimit;
 
-    /// <summary>XX15: a normalised vector, as signed bytes (96 = 1).</summary>
-    private readonly int[] _unitVector = new int[6];
+    /// <summary>RAT: how much a ship pitches and rolls to turn (as its pitch and roll counters).</summary>
+    private int _turnRate;
 
-    /// <summary>CNT: the dot product used by the tactics routines, as a raw sign-magnitude byte.</summary>
-    private int _dotProduct;
-
-    /// <summary>CNT2: the maximum angle beyond which a ship will slow down to turn.</summary>
-    private int _turnAngleLimit;
+    /// <summary>
+    /// RAT2: how far a ship must be turned away from the direction it wants to
+    /// go (as the dot product of its roof or side with that direction) before
+    /// it pitches or rolls to turn towards it. The original compares RAT2 with
+    /// twice the dot product, so its values are in 72nds.
+    /// </summary>
+    private float _turnThreshold;
 
     /// <summary>The station (or sun) in slot 1 (K%+NI%).</summary>
     private Ship? StationOrSun => Slots[1];
 
-    /// <summary>The K3 vector as a signed coordinate (axis 0 = x, 1 = y, 2 = z).</summary>
-    private int VectorCoordinate(int axis) => _tacticsVector[axis * 3];
+    /// <summary>Whether a vector is within a distance of the origin in all three axes.</summary>
+    private static bool IsWithin(Vector3 v, float distance) =>
+        MathF.Abs(v.X) < distance && MathF.Abs(v.Y) < distance && MathF.Abs(v.Z) < distance;
 
-    /// <summary>Set one coordinate of the K3 vector (axis 0 = x, 1 = y, 2 = z).</summary>
-    private void SetVectorCoordinate(int axis, int value) => _tacticsVector[axis * 3] = value;
+    /// <summary>
+    /// Whether the low bytes of the ship's coordinates (x_lo, y_lo and z_lo)
+    /// are all zero, which the original checks when deciding whether a
+    /// missile that blows up damages us.
+    /// </summary>
+    private bool LowBytesAreZero() =>
+        (LowByte(_currentShip.Position.X) | LowByte(_currentShip.Position.Y) | LowByte(_currentShip.Position.Z)) == 0;
+
+    /// <summary>
+    /// The low byte of a coordinate's magnitude (such as x_lo), which the
+    /// original uses as a source of randomness.
+    /// </summary>
+    private static int LowByte(float coordinate) => (int)MathF.Abs(coordinate) & 0xFF;
 
     /// <summary>TACTICS: apply tactics to the ship in INWK.</summary>
     private void ApplyTactics()
     {
-        _rotationTemp = 3;
-        _rotationTemp2 = 4;
-        _turnAngleLimit = 22;
+        _turnRate = 3;
+        _turnThreshold = 4 / 72f;
+        _turnAngleLimit = 22 / 36f;
 
         int type = _shipType;
         if (type == ShipType.Missile)
@@ -166,9 +193,7 @@ public sealed partial class EliteGame
     /// <summary>TN4: set K3 to the ship's coordinates and continue with TA19.</summary>
     private void SetVectorToShip()
     {
-        SetVectorCoordinate(0, _currentShip.X);
-        SetVectorCoordinate(1, _currentShip.Y);
-        SetVectorCoordinate(2, _currentShip.Z);
+        _tacticsVector = _currentShip.Position;
         DecideDirection();
     }
 
@@ -179,7 +204,7 @@ public sealed partial class EliteGame
         {
             // TA352: an E.C.M. has destroyed the missile (only the low bytes
             // of the coordinates are checked to see if it was near us)
-            if ((_currentShip.XLo | _currentShip.YLo | _currentShip.ZLo) == 0)
+            if (LowBytesAreZero())
             {
                 TakeDamage(80);
             }
@@ -192,7 +217,8 @@ public sealed partial class EliteGame
         if ((_currentShip.Ai & 0b01000000) != 0)
         {
             // TA34: the missile is hostile, so check whether it has hit us
-            if (OrCoordinateHighBytes(0) != 0)
+            // (x_hi, y_hi and z_hi are all zero)
+            if (!IsWithin(_currentShip.Position, 256))
             {
                 SetVectorToShip();
                 return;
@@ -209,9 +235,7 @@ public sealed partial class EliteGame
         var target = Slots[targetSlot];
         VectorFromShip(target);
 
-        bool close = ((Ship.SignByte(VectorCoordinate(0)) | Ship.SignByte(VectorCoordinate(1)) | Ship.SignByte(VectorCoordinate(2))) & 0x7F) == 0
-                     && (Ship.Hi(VectorCoordinate(0)) | Ship.Hi(VectorCoordinate(1)) | Ship.Hi(VectorCoordinate(2))) == 0;
-        if (!close)
+        if (!IsWithin(_tacticsVector, 256))
         {
             // TA64: the missile isn't close yet, so the target may fire its E.C.M.
             if (NextRandom() >= 16)
@@ -235,7 +259,7 @@ public sealed partial class EliteGame
         if (_currentShip.Ai == 0b10000010)
         {
             // TA352: the target is the space station, so destroy the missile
-            if ((_currentShip.XLo | _currentShip.YLo | _currentShip.ZLo) == 0)
+            if (LowBytesAreZero())
             {
                 TakeDamage(80);
             }
@@ -250,7 +274,7 @@ public sealed partial class EliteGame
         }
 
         // TA35
-        if ((_currentShip.XLo | _currentShip.YLo | _currentShip.ZLo) == 0)
+        if (LowBytesAreZero())
         {
             TakeDamage(80);
         }
@@ -346,13 +370,16 @@ public sealed partial class EliteGame
     /// <summary>TA3: consider firing lasers at us (TACTICS part 6).</summary>
     private void ConsiderFiringLasers()
     {
-        if ((OrCoordinateHighBytes(0) & 0b11100000) == 0 && _dotProduct >= 160)
+        // The ship fires if it is within 8,192 of us in each axis (x_hi, y_hi
+        // and z_hi are less than 32) and pointing at us, and hits us if it is
+        // pointing straight at us
+        if (IsWithin(_currentShip.Position, 8192) && _dotProduct <= -32 / 36f)
         {
             int laserByte = _blueprint!.LaserAndMissiles;
             if ((laserByte & 0b11111000) != 0)
             {
                 _currentShip.Flags |= Ship.FlagFiring;
-                if (_dotProduct >= 163)
+                if (_dotProduct <= -35 / 36f)
                 {
                     TakeDamage(laserByte >> 1, (laserByte & 1) != 0);
                     _currentShip.Acceleration = (_currentShip.Acceleration - 1) & 0xFF;
@@ -372,7 +399,10 @@ public sealed partial class EliteGame
     /// <summary>TA4: decide whether to head towards or away from us (TACTICS part 7).</summary>
     private void DecideApproach()
     {
-        if (_currentShip.ZHi < 3 && ((_currentShip.XHi | _currentShip.YHi) & 0b11111110) == 0)
+        // Head away if we are very close (z_hi is less than 3, and x_hi and
+        // y_hi are less than 2)
+        var position = _currentShip.Position;
+        if (MathF.Abs(position.Z) < 768 && MathF.Abs(position.X) < 512 && MathF.Abs(position.Y) < 512)
         {
             TurnTowardsVector();
             return;
@@ -393,34 +423,36 @@ public sealed partial class EliteGame
     private void TurnTowardsTarget()
     {
         NegateVector();
-        _dotProduct ^= 0x80;
+        _dotProduct = -_dotProduct;
         TurnTowardsVector();
     }
 
     /// <summary>TA15: turn the ship towards the XX15 vector, and set its acceleration.</summary>
     private void TurnTowardsVector()
     {
-        int dot = DotProduct(_currentShip.Roof);
-        _currentShip.PitchCounter = (dot ^ 0x80) & 0x80;
-        if (((dot << 1) & 0xFF) >= _rotationTemp2)
+        // Pitch towards XX15 (the pitch counter's sign is the opposite of the
+        // dot product's)
+        float dot = DotProduct(_currentShip.Roof);
+        _currentShip.PitchCounter = dot >= 0 ? 0x80 : 0;
+        if (MathF.Abs(dot) >= _turnThreshold)
         {
-            _currentShip.PitchCounter |= _rotationTemp;
+            _currentShip.PitchCounter |= _turnRate;
         }
 
-        // TA11
-        if (((_currentShip.RollCounter << 1) & 0xFF) < 32)
+        // TA11: roll towards XX15, unless the ship is already rolling fast
+        if ((_currentShip.RollCounter & 0x7F) < 16)
         {
             dot = DotProduct(_currentShip.Side);
-            _currentShip.RollCounter = ((dot ^ _currentShip.PitchCounter) & 0x80) ^ 0x80;
-            if (((dot << 1) & 0xFF) >= _rotationTemp2)
+            int sign = dot < 0 ? 0x80 : 0;
+            _currentShip.RollCounter = ((sign ^ _currentShip.PitchCounter) & 0x80) ^ 0x80;
+            if (MathF.Abs(dot) >= _turnThreshold)
             {
-                _currentShip.RollCounter |= _rotationTemp;
+                _currentShip.RollCounter |= _turnRate;
             }
         }
 
         // TA6
-        dot = _dotProduct;
-        if ((dot & 0x80) == 0 && dot >= _turnAngleLimit)
+        if (_dotProduct >= _turnAngleLimit)
         {
             // PH10E
             _currentShip.Acceleration = 3;
@@ -428,7 +460,7 @@ public sealed partial class EliteGame
         }
 
         // TA9
-        if ((dot & 0x7F) < 18)
+        if (MathF.Abs(_dotProduct) < 0.5f)
         {
             return;
         }
@@ -439,10 +471,11 @@ public sealed partial class EliteGame
     /// <summary>TA151: make the ship head in the direction of XX15.</summary>
     private void HeadTowardsVector()
     {
-        int dot = DotProduct(_currentShip.Nose);
-        if (dot >= 0x98)
+        // If the ship is heading away from XX15, turn as hard as possible
+        float dot = DotProduct(_currentShip.Nose);
+        if (dot <= -24 / 36f)
         {
-            _rotationTemp2 = 0;
+            _turnThreshold = 0;
         }
 
         // TA152
@@ -453,9 +486,9 @@ public sealed partial class EliteGame
     /// <summary>DOCKIT: apply docking manoeuvres to the ship in INWK.</summary>
     private void ApplyDockingManoeuvres()
     {
-        _rotationTemp2 = 6;
-        _rotationTemp = 3;
-        _turnAngleLimit = 29;
+        _turnThreshold = 6 / 72f;
+        _turnRate = 3;
+        _turnAngleLimit = 29 / 36f;
 
         if (InSafeZone == 0)
         {
@@ -465,32 +498,34 @@ public sealed partial class EliteGame
             return;
         }
 
+        // If the station is 65,536 or more away in any axis, head for the
+        // planet
         VectorFromStation();
-        if (((Ship.SignByte(VectorCoordinate(0)) | Ship.SignByte(VectorCoordinate(1)) | Ship.SignByte(VectorCoordinate(2))) & 0x7F) != 0)
+        if (!IsWithin(_tacticsVector, 65536))
         {
             CalculatePlanetVector();
             HeadTowardsVector();
             return;
         }
 
-        // TA2 without the scaling: K = the length of the vector in K3
-        int length = NormaliseVectorUnscaled();
+        // If the ship isn't in front of the slot, fly to a point in front of it
+        float distance = _tacticsVector.Length();
         NormaliseVector();
-        int dot = StationDotProduct(StationOrSun!.Nose);
-        if ((dot & 0x80) != 0 || dot < 35)
+        if (DotProduct(StationOrSun!.Nose) < 35 / 36f)
         {
             FlyToDockingPosition();
             return;
         }
 
-        dot = DotProduct(_currentShip.Nose);
-        if (dot >= 0xA2)
+        // If the ship is facing the slot, or it is our docking computer and
+        // we are far enough from the slot (80,384), approach the slot
+        if (DotProduct(_currentShip.Nose) <= -34 / 36f)
         {
             ApproachSlot();
             return;
         }
 
-        if (length >= 157 && _shipType >= 128)
+        if (distance >= 157 * 512 && _shipType >= 128)
         {
             ApproachSlot();
             return;
@@ -509,12 +544,14 @@ public sealed partial class EliteGame
         _currentShip.Speed = 1;
     }
 
-    /// <summary>PH1: fly towards the ideal docking position in front of the station.</summary>
+    /// <summary>
+    /// PH1: fly towards the ideal docking position in front of the station,
+    /// which is 768 in front of its slot (DCS1 twice).
+    /// </summary>
     private void FlyToDockingPosition()
     {
         VectorFromStation();
-        MoveAlongStationNose();
-        MoveAlongStationNose();
+        _tacticsVector -= StationOrSun!.Nose * 768;
         NormaliseVector();
         NegateVector();
         HeadTowardsVector();
@@ -523,35 +560,36 @@ public sealed partial class EliteGame
     /// <summary>PH3: refine the approach to the station's slot.</summary>
     private void ApproachSlot()
     {
-        _rotationTemp2 = 0;
+        _turnThreshold = 0;
         _currentShip.PitchCounter = 0;
 
         if (_shipType >= 128)
         {
-            // This is our docking computer
-            int sign = ((_shipType ^ ToByte(_unitVector[0]) ^ ToByte(_unitVector[1])) & 0x80) != 0 ? 0x80 : 0;
-            _currentShip.RollCounter = 1 | sign;
-            if (((ToByte(_unitVector[0]) << 1) & 0xFF) >= 12)
+            // This is our docking computer, so line up with the slot, slowing
+            // right down unless XX15 is within 1/16 of straight ahead in x
+            // and y
+            int xSign = _unitVector.X < 0 ? 0x80 : 0;
+            int ySign = _unitVector.Y < 0 ? 0x80 : 0;
+            _currentShip.RollCounter = 1 | ((_shipType ^ xSign ^ ySign) & 0x80);
+            if (MathF.Abs(_unitVector.X) >= 6 / 96f)
             {
                 SlowRightDown();
                 return;
             }
 
-            _currentShip.PitchCounter = 1 | (ToByte(_unitVector[1]) & 0x80);
-            if (((ToByte(_unitVector[1]) << 1) & 0xFF) >= 12)
+            _currentShip.PitchCounter = 1 | ySign;
+            if (MathF.Abs(_unitVector.Y) >= 6 / 96f)
             {
                 SlowRightDown();
                 return;
             }
         }
 
-        // PH32
+        // PH32: accelerate and roll to match the station if the slot isn't
+        // horizontal enough
         _currentShip.RollCounter = 0;
-        _unitVector[0] = Ship.VectorHi(_currentShip.Side.X);
-        _unitVector[1] = Ship.VectorHi(_currentShip.Side.Y);
-        _unitVector[2] = Ship.VectorHi(_currentShip.Side.Z);
-        int dot = StationDotProduct(StationOrSun!.Roof);
-        if (((dot << 1) & 0xFF) >= 66)
+        _unitVector = _currentShip.Side;
+        if (MathF.Abs(DotProduct(StationOrSun!.Roof)) >= 33 / 36f)
         {
             // TN11: accelerate and roll to match the station
             _currentShip.Acceleration = (_currentShip.Acceleration + 1) & 0xFF;
@@ -562,138 +600,53 @@ public sealed partial class EliteGame
             SlowRightDown();
         }
 
-        // TN13: check whether the ship has docked
-        if (_tacticsVector[10] == 0)
-        {
-            _currentShip.Behaviour |= 0x80;
-        }
+        // TN13: the ship has docked (the original checks K3+10 here, which
+        // this port never sets, so this is always the case)
+        _currentShip.Behaviour |= 0x80;
     }
-
-    /// <summary>The raw sign-magnitude byte for a signed byte value.</summary>
-    private static int ToByte(int value) => EliteMaths.ToSignMagnitude(value);
 
     /// <summary>VCSU1: K3 = INWK - the station's coordinates.</summary>
     private void VectorFromStation() => VectorFromShip(StationOrSun);
 
     /// <summary>VCSUB: K3 = INWK - the coordinates of the given ship.</summary>
-    private void VectorFromShip(Ship? other)
-    {
-        SetVectorCoordinate(0, _currentShip.X - (other?.X ?? 0));
-        SetVectorCoordinate(1, _currentShip.Y - (other?.Y ?? 0));
-        SetVectorCoordinate(2, _currentShip.Z - (other?.Z ?? 0));
-    }
+    private void VectorFromShip(Ship? other) => _tacticsVector = _currentShip.Position - (other?.Position ?? Vector3.Zero);
 
-    /// <summary>
-    /// DCS1: move the K3 vector twice along the station's nose vector, by
-    /// subtracting 2 * nosev_hi each time (TAS7).
-    /// </summary>
-    private void MoveAlongStationNose()
-    {
-        var station = StationOrSun!;
-        for (int i = 0; i < 2; i++)
-        {
-            SetVectorCoordinate(0, SubtractNose(VectorCoordinate(0), station.Nose.X));
-            SetVectorCoordinate(1, SubtractNose(VectorCoordinate(1), station.Nose.Y));
-            SetVectorCoordinate(2, SubtractNose(VectorCoordinate(2), station.Nose.Z));
-        }
-    }
+    /// <summary>TAS2: normalise the vector in K3 into XX15 (which is zero if K3 is).</summary>
+    private void NormaliseVector() =>
+        _unitVector = _tacticsVector == Vector3.Zero ? Vector3.Zero : Vector3.Normalize(_tacticsVector);
 
-    /// <summary>TAS7: K3 coordinate = coordinate - 2 * nosev_hi (in the low byte).</summary>
-    private static int SubtractNose(int coordinate, int nose)
-    {
-        int offset = (Ship.VectorHiByte(nose) << 1) & 0xFF;
-        int sign = Ship.VectorHiByte(nose) & 0x80;
-        return coordinate + (sign != 0 ? offset : -offset);
-    }
-
-    /// <summary>TAS2: normalise the vector in K3 into XX15.</summary>
-    private void NormaliseVector()
-    {
-        var (x, y, z) = EliteMaths.NormaliseLarge(VectorCoordinate(0), VectorCoordinate(1), VectorCoordinate(2), out _);
-        _unitVector[0] = x;
-        _unitVector[1] = y;
-        _unitVector[2] = z;
-    }
-
-    /// <summary>
-    /// TA2 and NORM: calculate XX15 from the K3 vector without the initial
-    /// scaling done by TAS2, returning the length of the vector in Q.
-    /// </summary>
-    private int NormaliseVectorUnscaled()
-    {
-        static int ScaledHighByte(int v) => (((Math.Abs(v) >> 8) & 0xFF) >> 1) | ((Math.Abs(v) >> 16) & 0x7F);
-        int x = ScaledHighByte(VectorCoordinate(0)), y = ScaledHighByte(VectorCoordinate(1)), z = ScaledHighByte(VectorCoordinate(2));
-        var (unitX, unitY, unitZ) = EliteMaths.Normalise(VectorCoordinate(0) < 0 ? -x : x, VectorCoordinate(1) < 0 ? -y : y, VectorCoordinate(2) < 0 ? -z : z, out int length);
-        _unitVector[0] = unitX;
-        _unitVector[1] = unitY;
-        _unitVector[2] = unitZ;
-        return length;
-    }
-
-    /// <summary>
-    /// TAS3 (and TAS4): the dot product of a vector's high bytes with XX15,
-    /// returned as the raw sign-magnitude high byte of the 16-bit result.
-    /// </summary>
-    private int DotProduct(IntVector3 v)
-    {
-        int sum = EliteMaths.MultiplySigned(Ship.VectorHi(v.X), _unitVector[0]);
-        sum = EliteMaths.MultiplyAdd(Ship.VectorHi(v.Y), _unitVector[1], sum);
-        sum = EliteMaths.MultiplyAdd(Ship.VectorHi(v.Z), _unitVector[2], sum);
-        return ((Math.Abs(sum) >> 8) & 0x7F) | (sum < 0 ? 0x80 : 0);
-    }
-
-    /// <summary>TAS4: the dot product of one of the station's vectors with XX15.</summary>
-    private int StationDotProduct(IntVector3 v) => DotProduct(v);
+    /// <summary>TAS3 (and TAS4): the dot product of one of a ship's orientation vectors with XX15.</summary>
+    private float DotProduct(Vector3 v) => Vector3.Dot(v, _unitVector);
 
     /// <summary>TAS6: negate the vector in XX15.</summary>
-    private void NegateVector()
-    {
-        _unitVector[0] = -_unitVector[0];
-        _unitVector[1] = -_unitVector[1];
-        _unitVector[2] = -_unitVector[2];
-    }
+    private void NegateVector() => _unitVector = -_unitVector;
 
-    /// <summary>SPS1: calculate the normalised vector to the planet in XX15.</summary>
+    /// <summary>SPS1: calculate the unit vector to the planet in XX15.</summary>
     private void CalculatePlanetVector()
     {
-        // SPS3 copies the planet's coordinates into K3 as 24-bit values
-        // (x_hi, x_sign split into magnitude and sign, dropping x_lo)
-        SetVectorCoordinate(0, ScaleDownCoordinate(Planet.X));
-        SetVectorCoordinate(1, ScaleDownCoordinate(Planet.Y));
-        SetVectorCoordinate(2, ScaleDownCoordinate(Planet.Z));
+        _tacticsVector = Planet.Position;
         NormaliseVector();
     }
 
-    /// <summary>SPS3: K3 = (sign, x_sign &amp; 127, x_hi), i.e. the coordinate divided by 256.</summary>
-    private static int ScaleDownCoordinate(int coordinate)
-    {
-        int magnitude = (Math.Abs(coordinate) >> 8) & 0x7FFF;
-        return coordinate < 0 ? -magnitude : magnitude;
-    }
-
     /// <summary>
-    /// HITCH: returns true if the ship in INWK is in our crosshairs (i.e. in
-    /// front of us and within its targetable area).
+    /// HITCH: returns true if the ship in INWK is in our crosshairs: in front
+    /// of us and less than 65,536 away, not exploding, and with its centre
+    /// within its targetable area of our line of sight.
     /// </summary>
     private bool IsInCrosshairs()
     {
-        if (_currentShip.ZSign != 0 || _shipType >= 128)
+        var position = _currentShip.Position;
+        if (position.Z < 0 || position.Z >= 65536 || _shipType >= 128)
         {
             return false;
         }
 
-        if (((_currentShip.Flags & Ship.FlagExploding) | _currentShip.XHi | _currentShip.YHi) != 0)
+        if ((_currentShip.Flags & Ship.FlagExploding) != 0 || MathF.Abs(position.X) >= 256 || MathF.Abs(position.Y) >= 256)
         {
             return false;
         }
 
-        int sum = _currentShip.XLo * _currentShip.XLo + _currentShip.YLo * _currentShip.YLo;
-        if (sum > 0xFFFF)
-        {
-            return false;
-        }
-
-        return _blueprint!.TargetableArea >= sum;
+        return position.X * position.X + position.Y * position.Y <= _blueprint!.TargetableArea;
     }
 
     /// <summary>
@@ -703,8 +656,7 @@ public sealed partial class EliteGame
     private bool LaunchFromUs(int type, bool carry = false)
     {
         ResetWorkspace();
-        _currentShip.Y = -28;
-        _currentShip.Z = 14;
+        _currentShip.Position = new Vector3(0, -28, 14);
         _currentShip.Ai = ((_missileTarget << 1) | 0x80) & 0xFF;
         return LaunchFromShip(type, carry);
     }
@@ -712,8 +664,8 @@ public sealed partial class EliteGame
     /// <summary>fq1: launch a ship of the given type from INWK, pointing away from us at double our speed.</summary>
     private bool LaunchFromShip(int type, bool carry = false)
     {
-        _currentShip.Nose.Z = 0x60 << 8;
-        _currentShip.Side.X = -(0x60 << 8);
+        _currentShip.Nose.Z = 1;
+        _currentShip.Side.X = -1;
         _currentShip.Speed = ((_speed << 1) | (carry ? 1 : 0)) & 0xFF;
         return AddShip(type);
     }
@@ -813,10 +765,10 @@ public sealed partial class EliteGame
 
         if (_shipType == ShipType.SpaceStation)
         {
+            // Launch the ship from the slot, 192 along the station's nose
+            // (2 * nosev_hi)
             _currentShip.Speed = 32;
-            _currentShip.X = AddNoseToCoordinate(_currentShip.X, _currentShip.Nose.X);
-            _currentShip.Y = AddNoseToCoordinate(_currentShip.Y, _currentShip.Nose.Y);
-            _currentShip.Z = AddNoseToCoordinate(_currentShip.Z, _currentShip.Nose.Z);
+            _currentShip.Position += _currentShip.Nose * 192;
         }
 
         // rx
@@ -837,13 +789,6 @@ public sealed partial class EliteGame
         _currentShip = saved;
         _blueprint = savedBlueprint;
         return added;
-    }
-
-    /// <summary>SFS2: add 2 * a nosev high byte to a coordinate.</summary>
-    private static int AddNoseToCoordinate(int coordinate, int nose)
-    {
-        int high = Ship.VectorHiByte(nose);
-        return AddToCoordinate(coordinate, high & 0x80, (high << 1) & 0xFF);
     }
 
     /// <summary>EXNO2: process the fact that we have killed a ship, updating the kill tally.</summary>

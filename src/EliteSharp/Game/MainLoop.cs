@@ -1,3 +1,4 @@
+using System.Numerics;
 using EliteSharp.Game.Ships;
 using EliteSharp.Rendering;
 
@@ -205,14 +206,14 @@ public sealed partial class EliteGame
         {
             // Spawn a trader, asteroid or cargo canister
             ResetWorkspace();
-            _currentShip.Z = 38 * 256;
+            _currentShip.Position.Z = 38 * 256;
             random = NextRandom();
             int randomX = _randomX;
 
             // ROL x_hi twice sets bit 1 of x_hi to the C flag
             int xHi = _carry ? 2 : 0;
-            _currentShip.X = ComposeCoordinate(random, xHi, random & 0x80);
-            _currentShip.Y = ComposeCoordinate(randomX, 0, randomX & 0x80);
+            _currentShip.Position.X = ComposeCoordinate(random, xHi, random & 0x80);
+            _currentShip.Position.Y = ComposeCoordinate(randomX, 0, randomX & 0x80);
 
             random = NextRandom();
             randomX = _randomX;
@@ -274,8 +275,9 @@ public sealed partial class EliteGame
         random = SetUpDistantShip();
         if (random == 136)
         {
-            // fothg: spawn a Thargoid, or very rarely a Cougar
-            if ((Planet.ZLo & 0b00111110) == 0)
+            // fothg: spawn a Thargoid, or very rarely a Cougar (depending on
+            // the planet's z_lo)
+            if ((LowByte(Planet.Position.Z) & 0b00111110) == 0)
             {
                 _currentShip.Speed = 18;
                 _currentShip.Ai = 0b01111001;
@@ -394,7 +396,10 @@ public sealed partial class EliteGame
         AddShip(type);
     }
 
-    /// <summary>Compose a signed coordinate from sign-magnitude bytes.</summary>
+    /// <summary>
+    /// Compose a coordinate from sign-magnitude bytes (low, high and sign), as
+    /// the original sets up new ships' positions from random numbers.
+    /// </summary>
     private static int ComposeCoordinate(int lo, int hi, int sign)
     {
         int magnitude = (lo & 0xFF) | ((hi & 0xFF) << 8) | ((sign & 0x7F) << 16);
@@ -564,16 +569,11 @@ public sealed partial class EliteGame
     private int ContrabandBadness() => ((_cargo[3] + _cargo[6]) * 2 + _cargo[10]) & 0xFF;
 
     /// <summary>
-    /// FAROF2: returns true (C set) if INWK is within distance A of us in all
-    /// three axes (i.e. x_hi, y_hi and z_hi are all less than or equal to A).
+    /// FAROF: returns true if INWK is within 57,600 of us in all three axes
+    /// (x_hi, y_hi and z_hi are all 224 or less); ships any further away leave
+    /// the local bubble.
     /// </summary>
-    private bool IsWithinDistance(int distance) => distance >= _currentShip.XHi && distance >= _currentShip.YHi && distance >= _currentShip.ZHi;
-
-    /// <summary>FAROF: FAROF2 with a distance of 224.</summary>
-    private bool IsNearby() => IsWithinDistance(224);
-
-    /// <summary>MAS4: OR A with the high bytes of the ship's coordinates.</summary>
-    private int OrCoordinateHighBytes(int value) => value | _currentShip.XHi | _currentShip.YHi | _currentShip.ZHi;
+    private bool IsNearby() => IsWithin(_currentShip.Position, 225 * 256);
 
     /// <summary>DEATH: display the death screen.</summary>
     private void ShowDeathScreen()
@@ -606,9 +606,11 @@ public sealed partial class EliteGame
             _mainLoopCounter = 0xFF;
             int yLo = random ^ 0b00101010;
             int zLo = yLo | 0b01010000;
-            _currentShip.X = ComposeCoordinate(xLo, 0, _currentShip.XSign & 0x80);
-            _currentShip.Y = ComposeCoordinate(yLo, 0, _currentShip.YSign & 0x80);
-            _currentShip.Z = zLo;
+            // Keep the signs of x and y from Ze
+            _currentShip.Position = new Vector3(
+                _currentShip.Position.X < 0 ? -xLo : xLo,
+                _currentShip.Position.Y < 0 ? -yLo : yLo,
+                zLo);
             _currentShip.Ai = 0;
             int roll = randomX & 0b10001111;
             _currentShip.RollCounter = roll;

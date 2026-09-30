@@ -4,44 +4,20 @@ using EliteSharp.Rendering.Scene;
 namespace EliteSharp.Game;
 
 /// <summary>
-/// The stardust particles. The particles' coordinates are stored as in the
-/// original, with sign-magnitude high bytes in SX, SY and SZ, and low bytes in
-/// SXL, SYL and SZL.
+/// The stardust particles. Each particle has a position on the screen (x and
+/// y, in pixels from the centre of the original's screen, with y up) and a
+/// distance (z), and moves across the screen as we fly and turn.
 /// </summary>
 public sealed partial class EliteGame
 {
     /// <summary>The owner of the stardust in the 3D world.</summary>
     private readonly object _dustOwner = new();
 
-    /// <summary>A 16-bit sign-magnitude value from a sign-magnitude high byte and a low byte.</summary>
-    private static int SignMagnitude16(int hi, int lo)
-    {
-        int magnitude = ((hi & 0x7F) << 8) | (lo & 0xFF);
-        return (hi & 0x80) != 0 ? -magnitude : magnitude;
-    }
-
-    /// <summary>The sign-magnitude high byte of a 16-bit value.</summary>
-    private static int SignMagnitudeHigh(int value) => ((Math.Abs(value) >> 8) & 0x7F) | (value < 0 ? 0x80 : 0);
-
-    /// <summary>The low byte of a 16-bit sign-magnitude value.</summary>
-    private static int SignMagnitudeLow(int value) => Math.Abs(value) & 0xFF;
-
-    /// <summary>MULTS: (A P) = P * |A| with the sign of A, for a sign-magnitude byte A.</summary>
-    private static int MultiplyBySignMagnitude(int value, int signMagnitude)
-    {
-        int magnitude = (signMagnitude & 0x7F) * (value & 0xFF);
-        return (signMagnitude & 0x80) != 0 ? -magnitude : magnitude;
-    }
-
-    /// <summary>The high byte of a 16-bit result as a sign-magnitude byte (as stored in A).</summary>
-    private static int HiByte(int value) => SignMagnitudeHigh(value);
-
-    /// <summary>DV42 then (P R) >> 2 | 1: the stardust speed factor for a particle.</summary>
-    private int DustSpeedFactor(int z)
-    {
-        EliteMaths.DivideWithRemainder(_speed, z, out int quotient, out int remainder);
-        return ((((quotient << 8) | remainder) >> 2) & 0xFF) | 1;
-    }
+    /// <summary>
+    /// The signed value of a sign-magnitude byte (bit 7 is the sign), as the
+    /// original places new stardust particles using random numbers.
+    /// </summary>
+    private static int SignedByte(int value) => (value & 0x80) != 0 ? -(value & 0x7F) : value & 0x7F;
 
     /// <summary>STARS: move the stardust for the current view.</summary>
     private void MoveStardust()
@@ -62,188 +38,149 @@ public sealed partial class EliteGame
         UpdateStardustImage();
     }
 
-    /// <summary>STARS1: process the stardust for the front view.</summary>
+    /// <summary>
+    /// STARS1: process the stardust for the front view. The particles come
+    /// towards us at a quarter of our speed, and move away from the centre of
+    /// the screen as they get closer.
+    /// </summary>
     private void MoveStardustFront()
     {
+        float roll = _roll / 256f;
         for (int particle = _stardustCount; particle > 0; particle--)
         {
-            int speedFactor = DustSpeedFactor(_dustZ[particle]);
+            float x = _dustX[particle], y = _dustY[particle], z = _dustZ[particle];
 
-            // Move the particle towards us
-            int z = ((_dustZ[particle] << 8) | _dustZLow[particle]) - _speedTimes64;
-            _dustZLow[particle] = z & 0xFF;
-            _dustZ[particle] = (z >> 8) & 0xFF;
-
-            // Move the particle away from the centre
-            int positionY = SignMagnitude16(_dustY[particle], _dustYLow[particle]);
-            positionY = MoveOutwards(positionY, _dustY[particle], speedFactor);
-            int positionX = SignMagnitude16(_dustX[particle], _dustXLow[particle]);
-            positionX = MoveOutwards(positionX, _dustX[particle], speedFactor);
-
-            // Roll: y = y - alpha * x_hi, x = x + alpha * y_hi
-            positionY = EliteMaths.Add16(MultiplyBySignMagnitude(_rollMagnitude, HiByte(positionX) ^ _rollSignFlipped), positionY);
-            positionX = EliteMaths.Add16(MultiplyBySignMagnitude(_rollMagnitude, HiByte(positionY) ^ _rollSign), positionX);
-
-            // Pitch: x = x + 2 * (beta * y / 256)^2, y = y - beta * 256
-            int pitchTerm = HiByte(MultiplyBySignMagnitude(_pitchMagnitude, HiByte(positionY) ^ _pitchSignFlipped));
-            int square = EliteMaths.MultiplySigned(EliteMaths.FromSignMagnitude(pitchTerm), EliteMaths.FromSignMagnitude(pitchTerm));
-            positionX = EliteMaths.Add16(square * 2, positionX);
-            _dustXLow[particle] = SignMagnitudeLow(positionX);
-
-            positionY = EliteMaths.Add16(EliteMaths.FromSignMagnitude(_pitchAngle ^ 0x80) << 8, positionY);
-            _dustYLow[particle] = SignMagnitudeLow(positionY);
-
-            _dustX[particle] = HiByte(positionX);
-            _dustY[particle] = HiByte(positionY);
-            if ((_dustX[particle] & 0x7F) >= 120 || (_dustY[particle] & 0x7F) >= 120 || _dustZ[particle] < 16)
-            {
-                // KILL1: recycle the particle in the distance
-                _dustY[particle] = NextRandom() | 4;
-                _dustX[particle] = NextRandom() | 8;
-                _dustZ[particle] = NextRandom() | 144;
-            }
-        }
-    }
-
-    /// <summary>Add |hi| * q to the magnitude of a 16-bit sign-magnitude value.</summary>
-    private static int MoveOutwards(int value, int high, int speedFactor)
-    {
-        int magnitude = (Math.Abs(value) + (high & 0x7F) * speedFactor) & 0x7FFF;
-        return value < 0 || (value == 0 && (high & 0x80) != 0) ? -magnitude : magnitude;
-    }
-
-    /// <summary>Subtract |hi| * q from the magnitude of a 16-bit sign-magnitude value.</summary>
-    private static int MoveInwards(int value, int high, int speedFactor)
-    {
-        int magnitude = Math.Abs(value) - (high & 0x7F) * speedFactor;
-        bool negative = value < 0 || (value == 0 && (high & 0x80) != 0);
-        if (magnitude < 0)
-        {
-            magnitude = -magnitude;
-            negative = !negative;
-        }
-
-        magnitude &= 0x7FFF;
-        return negative ? -magnitude : magnitude;
-    }
-
-    /// <summary>STARS6: process the stardust for the rear view.</summary>
-    private void MoveStardustRear()
-    {
-        for (int particle = _stardustCount; particle > 0; particle--)
-        {
-            int speedFactor = DustSpeedFactor(_dustZ[particle]);
-
-            int positionX = MoveInwards(SignMagnitude16(_dustX[particle], _dustXLow[particle]), _dustX[particle], speedFactor);
-            int positionY = MoveInwards(SignMagnitude16(_dustY[particle], _dustYLow[particle]), _dustY[particle], speedFactor);
-
-            // Move the particle away from us
-            int z = ((_dustZ[particle] << 8) | _dustZLow[particle]) + _speedTimes64;
-            _dustZLow[particle] = z & 0xFF;
-            _dustZ[particle] = (z >> 8) & 0xFF;
+            // Move the particle towards us, and away from the centre
+            float outwards = _speed / (4 * z);
+            z -= _speed / 4f;
+            y += y * outwards;
+            x += x * outwards;
 
             // Roll
-            positionY = EliteMaths.Add16(MultiplyBySignMagnitude(_rollMagnitude, HiByte(positionX) ^ _rollSign), positionY);
-            positionX = EliteMaths.Add16(MultiplyBySignMagnitude(_rollMagnitude, HiByte(positionY) ^ _rollSignFlipped), positionX);
+            y -= roll * x;
+            x += roll * y;
 
-            // Pitch: x = x - 2 * (beta * y / 256) * x_hi, y = y + beta * 256
-            int pitchTerm = HiByte(MultiplyBySignMagnitude(_pitchMagnitude, HiByte(positionY) ^ _pitchSignFlipped));
-            int product = EliteMaths.MultiplySigned(EliteMaths.FromSignMagnitude(pitchTerm), EliteMaths.FromSignMagnitude(HiByte(positionX) ^ 0x80));
-            positionX = EliteMaths.Add16(product * 2, positionX);
-            _dustXLow[particle] = SignMagnitudeLow(positionX);
+            // Pitch, which moves the particle up or down the screen (and
+            // slightly sideways)
+            float pitchTerm = _pitch * y / 256;
+            x += 2 * pitchTerm * pitchTerm / 256;
+            y -= _pitch;
 
-            positionY = EliteMaths.Add16(EliteMaths.FromSignMagnitude(_pitchAngle) << 8, positionY);
-            _dustYLow[particle] = SignMagnitudeLow(positionY);
+            if (MathF.Abs(x) >= 120 || MathF.Abs(y) >= 120 || z < 16)
+            {
+                // KILL1: recycle the particle in the distance
+                y = SignedByte(NextRandom() | 4);
+                x = SignedByte(NextRandom() | 8);
+                z = NextRandom() | 144;
+            }
 
-            _dustX[particle] = HiByte(positionX);
-            _dustY[particle] = HiByte(positionY);
-            if ((_dustY[particle] & 0x7F) >= 110 || _dustZ[particle] >= 160)
+            (_dustX[particle], _dustY[particle], _dustZ[particle]) = (x, y, z);
+        }
+    }
+
+    /// <summary>
+    /// STARS6: process the stardust for the rear view. The particles move away
+    /// from us at a quarter of our speed, and towards the centre of the
+    /// screen as they get further away.
+    /// </summary>
+    private void MoveStardustRear()
+    {
+        float roll = _roll / 256f;
+        for (int particle = _stardustCount; particle > 0; particle--)
+        {
+            float x = _dustX[particle], y = _dustY[particle], z = _dustZ[particle];
+
+            // Move the particle towards the centre, and away from us
+            float inwards = _speed / (4 * z);
+            x -= x * inwards;
+            y -= y * inwards;
+            z += _speed / 4f;
+
+            // Roll
+            y += roll * x;
+            x -= roll * y;
+
+            // Pitch
+            x += 2 * (_pitch * y / 256) * x / 256;
+            y += _pitch;
+
+            if (MathF.Abs(y) >= 110 || z >= 160)
             {
                 // KILL6: recycle the particle at the edge of the screen
                 int depth = NextRandom() & 0x7F;
                 depth = (depth + 10 + (_carry ? 1 : 0)) & 0xFF;
-                _dustZ[particle] = depth;
+                z = depth;
                 if ((depth & 1) != 0)
                 {
                     // ST4: along the top or bottom edge
                     int random = NextRandom();
-                    _dustX[particle] = random;
-                    _dustY[particle] = (230 >> 1) | ((random & 1) << 7);
+                    x = SignedByte(random);
+                    y = (random & 1) != 0 ? -115 : 115;
                 }
                 else
                 {
                     // Along the left or right edge
-                    int carry = (depth >> 1) & 1;
-                    _dustX[particle] = (252 >> 1) | (carry << 7);
-                    _dustY[particle] = NextRandom();
+                    x = ((depth >> 1) & 1) != 0 ? -126 : 126;
+                    y = SignedByte(NextRandom());
                 }
             }
+
+            (_dustX[particle], _dustY[particle], _dustZ[particle]) = (x, y, z);
         }
     }
 
-    /// <summary>STARS2: process the stardust for the left or right view.</summary>
+    /// <summary>
+    /// STARS2: process the stardust for the left or right view. The particles
+    /// move across the screen, faster the closer they are, and our pitch and
+    /// roll act as roll and pitch in these views.
+    /// </summary>
     private void MoveStardustSide()
     {
-        int viewSign = _view == 3 ? 0x80 : 0;
-        int viewSignFlipped = viewSign ^ 0x80;
-        FlipAnglesForSideView(viewSign);
+        // ST2: in the right view, the particles move to the left, and our
+        // pitch and roll turn the view the other way
+        int direction = _view == 3 ? -1 : 1;
+        float pitch = direction * _pitch;
+        float roll = direction * _roll;
 
         for (int particle = _stardustCount; particle > 0; particle--)
         {
-            int depth = _dustZ[particle];
-            EliteMaths.DivideWithRemainder(_speed, depth >> 3, out int quotient, out int remainder);
-            int step = quotient;
+            float x = _dustX[particle], y = _dustY[particle], z = _dustZ[particle];
 
-            // x = x + speed factor (in the direction of the view)
-            int positionX = EliteMaths.Add16(SignMagnitude16(step ^ viewSignFlipped, remainder), SignMagnitude16(_dustX[particle], _dustXLow[particle]));
+            // Move the particle across the screen
+            float step = _speed / (z / 8);
+            x -= direction * step;
 
-            // x = x + beta * y_hi
-            positionX = EliteMaths.Add16(MultiplyBySignMagnitude(_pitchMagnitude, _dustY[particle] ^ _pitchSign), positionX);
+            // Pitch rolls the view
+            x += pitch * y / 256;
+            y -= pitch * x / 256;
 
-            // y = y - beta * x_hi
-            int positionY = EliteMaths.Add16(MultiplyBySignMagnitude(_pitchMagnitude, HiByte(positionX) ^ _pitchSignFlipped), SignMagnitude16(_dustY[particle], _dustYLow[particle]));
+            // Roll pitches the view
+            float rollTerm = roll * y / 256;
+            x -= rollTerm * x / 256;
+            y += rollTerm * x / 256;
+            y += roll;
 
-            // Roll
-            int rollTerm = HiByte(MultiplyBySignMagnitude(_rollMagnitude, HiByte(positionY) ^ _rollSign));
-            int rollTermSigned = EliteMaths.FromSignMagnitude(rollTerm);
-            positionX = EliteMaths.MultiplyAdd(rollTermSigned, EliteMaths.FromSignMagnitude(HiByte(positionX) ^ 0x80), positionX);
-            _dustXLow[particle] = SignMagnitudeLow(positionX);
-            positionY = EliteMaths.MultiplyAdd(rollTermSigned, EliteMaths.FromSignMagnitude(HiByte(positionX)), positionY);
-            positionY = EliteMaths.Add16(EliteMaths.FromSignMagnitude(_rollAngle) << 8, positionY);
-            _dustYLow[particle] = SignMagnitudeLow(positionY);
-
-            _dustX[particle] = HiByte(positionX);
-            int limit = (_dustX[particle] & 0x7F) ^ 0x7F;
-            if (limit <= step)
+            if (MathF.Abs(x) >= 127 - step)
             {
-                // KILL2
-                _dustY[particle] = NextRandom();
-                _dustX[particle] = 115 | viewSign;
+                // KILL2: recycle the particle at the side of the screen it
+                // comes in from
+                _dustY[particle] = SignedByte(NextRandom());
+                _dustX[particle] = 115 * direction;
                 _dustZ[particle] = NextRandom() | 8;
                 continue;
             }
 
-            _dustY[particle] = HiByte(positionY);
-            if ((_dustY[particle] & 0x7F) >= 116)
+            if (MathF.Abs(y) >= 116)
             {
-                // ST5
-                _dustX[particle] = NextRandom();
-                _dustY[particle] = 110 | _rollSignFlipped;
-                _dustZ[particle] = NextRandom() | 8;
+                // ST5: recycle the particle at the top or bottom of the
+                // screen, depending on which way we are turning
+                x = SignedByte(NextRandom());
+                y = roll >= 0 ? -110 : 110;
+                z = NextRandom() | 8;
             }
+
+            (_dustX[particle], _dustY[particle], _dustZ[particle]) = (x, y, z);
         }
-
-        FlipAnglesForSideView(viewSign);
-    }
-
-    /// <summary>ST2: flip the signs of alpha and beta for the side views.</summary>
-    private void FlipAnglesForSideView(int viewSign)
-    {
-        _rollAngle ^= viewSign;
-        _rollSign ^= viewSign;
-        _rollSignFlipped = _rollSign ^ 0x80;
-        _pitchSign ^= viewSign;
-        _pitchSignFlipped = _pitchSign ^ 0x80;
     }
 
     /// <summary>FLIP: swap the x and y coordinates of the stardust (when changing view).</summary>
@@ -275,10 +212,8 @@ public sealed partial class EliteGame
             // The stardust's coordinates are its position on the screen (in
             // pixels from the centre) and its distance, so in space it is at
             // that distance along the line of sight through that point
-            int screenX = EliteMaths.FromSignMagnitude(_dustX[particle]);
-            int screenY = EliteMaths.FromSignMagnitude(_dustY[particle]);
-            float distance = Math.Max(_dustZ[particle], 4);
-            var position = ViewToWorld(screenX * distance / 256, screenY * distance / 256, distance);
+            float distance = MathF.Max(_dustZ[particle], 4);
+            var position = ViewToWorld(_dustX[particle] * distance / 256, _dustY[particle] * distance / 256, distance);
             particles[particle - 1] = new Particle(position, 2, _dustZ[particle] >= 80 ? 1 : 2, DustColour, Stardust: true);
         }
 

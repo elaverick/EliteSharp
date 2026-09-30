@@ -312,26 +312,11 @@ public sealed partial class EliteGame
     /// <summary>DELTA: our current speed (1-40).</summary>
     private int _speed;
 
-    /// <summary>DELT4: our speed * 64 as a 16-bit value (DELT4+1 is the high byte).</summary>
-    private int _speedTimes64;
+    /// <summary>ALPHA: our roll angle this iteration, in steps of 1/256 radian (-31 to +31).</summary>
+    private int _roll;
 
-    /// <summary>ALPHA: the roll angle as a sign-magnitude byte.</summary>
-    private int _rollAngle;
-
-    /// <summary>ALP1: the magnitude of the roll angle (0-31).</summary>
-    private int _rollMagnitude;
-
-    /// <summary>ALP2 and ALP2+1: the sign of the roll angle, and its flipped sign.</summary>
-    private int _rollSign, _rollSignFlipped;
-
-    /// <summary>BETA: the pitch angle as a sign-magnitude byte.</summary>
-    private int _pitchAngle;
-
-    /// <summary>BET1: the magnitude of the pitch angle (0-8).</summary>
-    private int _pitchMagnitude;
-
-    /// <summary>BET2 and BET2+1: the sign of the pitch angle, and its flipped sign.</summary>
-    private int _pitchSign, _pitchSignFlipped;
+    /// <summary>BETA: our pitch angle this iteration, in steps of 1/256 radian (-8 to +8).</summary>
+    private int _pitch;
 
     /// <summary>
     /// JSTX and JSTY: the current roll and pitch rates (128 = centre). These
@@ -483,27 +468,18 @@ public sealed partial class EliteGame
     /// <summary>KY20: "P" is being pressed (turn off the docking computer).</summary>
     private bool _keyDockingComputerOff;
 
-    // The stardust particles (index 1 to _stardustCount). The coordinates are
-    // stored as in the original: a sign-magnitude high byte (so the particle
-    // positions are -127 to +127 from the centre), with a separate low byte
+    // The stardust particles (index 1 to _stardustCount). Each particle is at
+    // a point on the screen (in pixels from the centre, with y up) and at a
+    // distance from us
 
-    /// <summary>SX: the x-coordinate high byte (sign-magnitude) of each stardust particle.</summary>
-    private readonly int[] _dustX = new int[NormalStardustCount + 1];
+    /// <summary>SX: the x-coordinate of each stardust particle.</summary>
+    private readonly float[] _dustX = new float[NormalStardustCount + 1];
 
-    /// <summary>SY: the y-coordinate high byte (sign-magnitude) of each stardust particle.</summary>
-    private readonly int[] _dustY = new int[NormalStardustCount + 1];
+    /// <summary>SY: the y-coordinate of each stardust particle.</summary>
+    private readonly float[] _dustY = new float[NormalStardustCount + 1];
 
     /// <summary>SZ: the distance of each stardust particle.</summary>
-    private readonly int[] _dustZ = new int[NormalStardustCount + 1];
-
-    /// <summary>SXL: the x-coordinate low byte of each stardust particle.</summary>
-    private readonly int[] _dustXLow = new int[NormalStardustCount + 1];
-
-    /// <summary>SYL: the y-coordinate low byte of each stardust particle.</summary>
-    private readonly int[] _dustYLow = new int[NormalStardustCount + 1];
-
-    /// <summary>SZL: the distance low byte of each stardust particle.</summary>
-    private readonly int[] _dustZLow = new int[NormalStardustCount + 1];
+    private readonly float[] _dustZ = new float[NormalStardustCount + 1];
 
     // ------------------------------------------------------------------------
     // Universe and commander state

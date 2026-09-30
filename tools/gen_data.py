@@ -2,10 +2,10 @@
 """
 Generates the C# data files for EliteSharp from the BBC Master Elite source.
 
-The data tables (text token tables, maths tables, font, dashboard bitmap,
-market data and so on) are lifted byte-for-byte from the assembled binaries,
-using the label addresses in the assembler listing, so the port uses exactly the
-same data as the game. The ships are exported separately, as assets, by
+The data tables (text token tables, font, dashboard bitmap, market data and
+so on) are lifted byte-for-byte from the assembled binaries, using the label
+addresses in the assembler listing, so the port uses exactly the same data as
+the game. The ships are exported separately, as assets, by
 tools/export_ships.py.
 
 The one exception is the mission text: the missions are defined in
@@ -191,15 +191,9 @@ def gen_tables():
                    "RUGAL: galaxy numbers (bit 7 set) for the RUPLA overrides."))
     tables.append(("ExtendedDescriptionTokens", descriptions,
                    "RUTOK: extended description override tokens, EOR'd with VE (&57)."))
-    tables.append(("Sine", data_bytes("SNE", 32),
-                   "SNE: sine table, 32 segments of a half circle, scaled so 1.0 = 256."))
-    tables.append(("Arctan", data_bytes("ACT", 32),
-                   "ACT: arctan table for 0 to 45 degrees, 256 = full circle."))
 
-    # Tables in the main code block
-    tables.append(("LogHigh", code_bytes("log", 256), "log: high byte of 32 * log2(n) * 256."))
-    tables.append(("LogLow", code_bytes("logL", 256), "logL: low byte of 32 * log2(n) * 256."))
-    tables.append(("AntiLog", code_bytes("alogh", 256), "alogh: 2^((n / 2 + 128) / 16) / 256."))
+    # Tables in the main code block (the maths tables, such as the sine,
+    # arctan and logarithm tables, are left out, as the game uses real maths)
     tables.append(("ExtendedTwoLetterTokens", code_bytes("TKN2", 26),
                    "TKN2: two-letter tokens 215-227 for extended text."))
     tables.append(("TwoLetterTokens", code_bytes("QQ16", 64),

@@ -1,3 +1,4 @@
+using System.Numerics;
 using System.Reflection;
 using EliteSharp.Game;
 using EliteSharp.Game.Ships;
@@ -27,9 +28,7 @@ public sealed class GameShipDrawingTests
             Call("ResetWorkspace");
             Set("_shipType", shipType);
             Set("_blueprint", Call("BlueprintFor", shipType));
-            Ship.X = x;
-            Ship.Y = y;
-            Ship.Z = z;
+            Ship.Position = new Vector3(x, y, z);
         }
 
         public Ship Ship => (Ship)typeof(EliteGame).GetField("_currentShip", Private)!.GetValue(_game)!;

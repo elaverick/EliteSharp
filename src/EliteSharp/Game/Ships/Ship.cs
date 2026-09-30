@@ -1,31 +1,6 @@
+using System.Numerics;
+
 namespace EliteSharp.Game.Ships;
-
-/// <summary>
-/// A 3D vector of integers, used for the orientation vectors (nosev, roofv and
-/// sidev) where 96 * 256 represents 1.0.
-/// </summary>
-public struct IntVector3(int x, int y, int z)
-{
-    public int X = x;
-    public int Y = y;
-    public int Z = z;
-
-    public int this[int axis]
-    {
-        readonly get => axis switch { 0 => X, 1 => Y, _ => Z };
-        set
-        {
-            switch (axis)
-            {
-                case 0: X = value; break;
-                case 1: Y = value; break;
-                default: Z = value; break;
-            }
-        }
-    }
-
-    public override readonly string ToString() => $"({X}, {Y}, {Z})";
-}
 
 /// <summary>
 /// The explosion cloud data that the original stores at the start of the ship
@@ -33,8 +8,8 @@ public struct IntVector3(int x, int y, int z)
 /// </summary>
 public sealed class ExplosionCloud
 {
-    /// <summary>Heap byte #0: the projected cloud size.</summary>
-    public int Size;
+    /// <summary>Heap byte #0: the cloud's size on the screen, in pixels.</summary>
+    public float Size;
 
     /// <summary>Heap byte #1: the cloud counter, which increases by 4 each time the cloud is drawn.</summary>
     public int Counter;
@@ -51,8 +26,8 @@ public sealed class ExplosionCloud
 
 /// <summary>
 /// A ship (or planet, or sun) in the local bubble of universe. This mirrors the
-/// 37-byte ship data block (INWK / K%) from the original, with coordinates and
-/// orientation vectors held as signed integers rather than sign-magnitude bytes.
+/// 37-byte ship data block (INWK / K%) from the original, with the position
+/// and orientation held as vectors rather than sign-magnitude bytes.
 /// What makes each type of ship different is its blueprint, which comes from
 /// the ship assets (see ShipCatalogue); use <see cref="Create"/> to make one.
 /// </summary>
@@ -77,17 +52,21 @@ public sealed class Ship
     /// <summary>True if this is the planet or the sun (bit 7 of the type is set).</summary>
     public bool IsPlanetOrSun => Type >= 128;
 
-    /// <summary>Bytes #0-2, #3-5, #6-8: the ship's position relative to us.</summary>
-    public int X, Y, Z;
+    /// <summary>
+    /// Bytes #0-8: the ship's position relative to us, in the original's
+    /// units (the planet's radius is 24,576), with x to the right, y up and z
+    /// straight ahead.
+    /// </summary>
+    public Vector3 Position;
 
-    /// <summary>Bytes #9-14: nosev, the direction the ship is pointing.</summary>
-    public IntVector3 Nose;
+    /// <summary>Bytes #9-14: nosev, the direction the ship is pointing, as a unit vector.</summary>
+    public Vector3 Nose;
 
-    /// <summary>Bytes #15-20: roofv, the direction of the ship's roof.</summary>
-    public IntVector3 Roof;
+    /// <summary>Bytes #15-20: roofv, the direction of the ship's roof, as a unit vector.</summary>
+    public Vector3 Roof;
 
-    /// <summary>Bytes #21-26: sidev, the direction out of the ship's right side.</summary>
-    public IntVector3 Side;
+    /// <summary>Bytes #21-26: sidev, the direction out of the ship's right side, as a unit vector.</summary>
+    public Vector3 Side;
 
     /// <summary>Byte #27: speed.</summary>
     public int Speed;
@@ -102,7 +81,7 @@ public sealed class Ship
     public int PitchCounter;
 
     /// <summary>
-    /// Byte #31: bits 0-2 = missiles, bit 3 = drawn on-screen, bit 4 = shown on
+    /// Byte #31: bits 0-2 = missiles, bit 3 = unused, bit 4 = shown on
     /// the scanner, bit 5 = exploding, bit 6 = firing lasers, bit 7 = killed.
     /// </summary>
     public int Flags;
@@ -155,51 +134,6 @@ public sealed class Ship
         set => Flags = (Flags & ~7) | (value & 7);
     }
 
-    /// <summary>Byte #0 (x_lo) etc: the low byte of |x|.</summary>
-    public static int Lo(int value) => Math.Abs(value) & 0xFF;
-
-    /// <summary>The high byte of a 24-bit sign-magnitude coordinate, e.g. x_hi.</summary>
-    public static int Hi(int value) => (Math.Abs(value) >> 8) & 0xFF;
-
-    /// <summary>The sign byte of a 24-bit sign-magnitude coordinate, e.g. x_sign (bit 7 = sign).</summary>
-    public static int SignByte(int value) => ((Math.Abs(value) >> 16) & 0x7F) | (value < 0 ? 0x80 : 0);
-
-    /// <summary>Byte #0: x_lo, the low byte of the x-coordinate's magnitude.</summary>
-    public int XLo => Lo(X);
-
-    /// <summary>Byte #1: x_hi, the high byte of the x-coordinate's magnitude.</summary>
-    public int XHi => Hi(X);
-
-    /// <summary>Byte #3: y_lo, the low byte of the y-coordinate's magnitude.</summary>
-    public int YLo => Lo(Y);
-
-    /// <summary>Byte #4: y_hi, the high byte of the y-coordinate's magnitude.</summary>
-    public int YHi => Hi(Y);
-
-    /// <summary>Byte #6: z_lo, the low byte of the z-coordinate's magnitude.</summary>
-    public int ZLo => Lo(Z);
-
-    /// <summary>Byte #7: z_hi, the high byte of the z-coordinate's magnitude.</summary>
-    public int ZHi => Hi(Z);
-
-    /// <summary>Byte #2: x_sign, the sign byte of the x-coordinate.</summary>
-    public int XSign => SignByte(X);
-
-    /// <summary>Byte #5: y_sign, the sign byte of the y-coordinate.</summary>
-    public int YSign => SignByte(Y);
-
-    /// <summary>Byte #8: z_sign, the sign byte of the z-coordinate.</summary>
-    public int ZSign => SignByte(Z);
-
-    /// <summary>
-    /// The high byte of a 16-bit sign-magnitude vector coordinate as a signed
-    /// value, e.g. nosev_x_hi with its sign applied.
-    /// </summary>
-    public static int VectorHi(int value) => value < 0 ? -((-value) >> 8) : value >> 8;
-
-    /// <summary>The raw sign-magnitude byte for the high byte of a vector coordinate, e.g. nosev_x_hi.</summary>
-    public static int VectorHiByte(int value) => ((Math.Abs(value) >> 8) & 0x7F) | (value < 0 ? 0x80 : 0);
-
     /// <summary>
     /// Create a shallow copy of this ship's data block, as the original does when
     /// it copies K% into INWK. The copy shares this ship's explosion data and
@@ -219,7 +153,7 @@ public sealed class Ship
     /// </summary>
     public void CopyStateFrom(Ship other)
     {
-        X = other.X; Y = other.Y; Z = other.Z;
+        Position = other.Position;
         Nose = other.Nose; Roof = other.Roof; Side = other.Side;
         Speed = other.Speed;
         Acceleration = other.Acceleration;
@@ -244,10 +178,10 @@ public sealed class Ship
     /// </summary>
     public void ResetOrientationAndPosition()
     {
-        X = Y = Z = 0;
-        Nose = new IntVector3(0, 0, -96 * 256);
-        Roof = new IntVector3(0, 96 * 256, 0);
-        Side = new IntVector3(96 * 256, 0, 0);
+        Position = Vector3.Zero;
+        Nose = new Vector3(0, 0, -1);
+        Roof = new Vector3(0, 1, 0);
+        Side = new Vector3(1, 0, 0);
         Speed = 0;
         Acceleration = 0;
         RollCounter = 0;
@@ -258,7 +192,7 @@ public sealed class Ship
         Behaviour = 0;
     }
 
-    public override string ToString() => $"{Blueprint?.Name ?? TypeName(Type)} (type {Type}) at ({X}, {Y}, {Z})";
+    public override string ToString() => $"{Blueprint?.Name ?? TypeName(Type)} (type {Type}) at {Position}";
 
     /// <summary>
     /// Create a new ship of the given type (as stored in FRIN): 1-33 for ships,

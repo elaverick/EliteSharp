@@ -1,3 +1,4 @@
+using System.Numerics;
 using EliteSharp.Data;
 using EliteSharp.Game.Ships;
 using EliteSharp.Rendering;
@@ -14,21 +15,21 @@ public sealed partial class EliteGame
     /// <summary>M%: the main flight loop.</summary>
     private void MainFlightLoop()
     {
-        // Part 1: seed the random number generator
-        _randomSeeds[0] = Planet.XLo;
+        // Part 1: seed the random number generator from x_lo of the planet
+        _randomSeeds[0] = LowByte(Planet.Position.X);
 
-        // Part 2: calculate the alpha and beta angles from the current pitch
-        // and roll of our ship
+        // Part 2: calculate the alpha and beta angles from the current roll
+        // and pitch rates of our ship. The rates (JSTX and JSTY) are 128 when
+        // centred, and the angles are in steps of 1/256 radian, with the
+        // original's response to the controls (including its use of the C flag
+        // from the roll calculation in the pitch calculation)
         int rate = _rollRate;
         rate = DampRate(rate);
         rate = DampRate(rate);
-        int angle = rate ^ 0x80;
-        int signedRate = angle;
-        _rollSign = angle & 0x80;
         _rollRate = rate;
-        _rollSignFlipped = _rollSign ^ 0x80;
-        angle = signedRate;
-        if ((angle & 0x80) != 0)
+        int angle = rate ^ 0x80;
+        bool rollNegative = (angle & 0x80) != 0;
+        if (rollNegative)
         {
             angle = (-angle) & 0xFF;
         }
@@ -45,19 +46,14 @@ public sealed partial class EliteGame
             angle >>= 1;
         }
 
-        _rollMagnitude = angle;
-        _rollAngle = angle | _rollSign;
+        _roll = rollNegative ? -angle : angle;
 
         rate = _pitchRate;
         rate = DampRate(rate);
-        angle = rate ^ 0x80;
-        signedRate = angle;
-        angle &= 0x80;
         _pitchRate = rate;
-        _pitchSignFlipped = angle;
-        _pitchSign = angle ^ 0x80;
-        angle = signedRate;
-        if ((angle & 0x80) != 0)
+        angle = rate ^ 0x80;
+        bool pitchNegative = (angle & 0x80) == 0;
+        if (!pitchNegative)
         {
             angle ^= 0xFF;
         }
@@ -69,8 +65,7 @@ public sealed partial class EliteGame
             angle >>= 1;
         }
 
-        _pitchMagnitude = angle;
-        _pitchAngle = angle | _pitchSign;
+        _pitch = pitchNegative ? -angle : angle;
 
         // Part 3: scan for flight keys and process the results
         // BS2 (the Bitstik isn't supported)
@@ -163,7 +158,6 @@ public sealed partial class EliteGame
 
         // MA68
         _firingLaserPower = 0;
-        _speedTimes64 = _speed << 6;
 
         if (_laserPulseCounter == 0 && _keyFireLaser && _laserTemperature < 242)
         {
@@ -181,7 +175,7 @@ public sealed partial class EliteGame
 
         if (_trace != null)
         {
-            Trace($"MCNT={_mainLoopCounter} QQ11={_viewType} NOSTM={_stardustCount} MJ={_inWitchspace} delta={_speed} slots=" + string.Join(" ", Slots.Where(s => s != null).Select(s => $"{s!.Type}:({s.X},{s.Y},{s.Z})")) + " dust=" + string.Join(",", Enumerable.Range(1, _stardustCount).Select(i => $"{_dustX[i]:X2}/{_dustY[i]:X2}/{_dustZ[i]:X2}")));
+            Trace($"MCNT={_mainLoopCounter} QQ11={_viewType} NOSTM={_stardustCount} MJ={_inWitchspace} delta={_speed} slots=" + string.Join(" ", Slots.Where(s => s != null).Select(s => $"{s!.Type}:{s.Position}")) + " dust=" + string.Join(",", Enumerable.Range(1, _stardustCount).Select(i => $"{_dustX[i]:F1}/{_dustY[i]:F1}/{_dustZ[i]:F1}")));
         }
 
         // Part 4: start looping through all the ships in the local bubble
@@ -325,13 +319,17 @@ public sealed partial class EliteGame
     /// </summary>
     private bool ProcessShipInteractions(Ship ship)
     {
-        // Part 7: check whether we are docking, scooping or colliding with it
+        // Part 7: check whether we are docking, scooping or colliding with it,
+        // which is only possible if it is within 256 of us in each axis (and
+        // isn't exploding or killed): we can dock with the station within 128,
+        // and scoop or collide with anything else within 64
         bool skipToDrawing = false;
-        if (OrCoordinateHighBytes(_currentShip.Flags & 0b10100000) != 0)
+        var position = _currentShip.Position;
+        if ((_currentShip.Flags & 0b10100000) != 0 || !IsWithin(position, 256))
         {
             skipToDrawing = true;
         }
-        else if (((_currentShip.XLo | _currentShip.YLo | _currentShip.ZLo) & 0x80) != 0 || _shipType >= 128)
+        else if (!IsWithin(position, 128) || _shipType >= 128)
         {
             skipToDrawing = true;
         }
@@ -355,13 +353,14 @@ public sealed partial class EliteGame
             TakeDamage(5, false);
             ExplosionSound();
         }
-        else if (((_currentShip.XLo | _currentShip.YLo | _currentShip.ZLo) & 0b11000000) != 0 || _shipType == ShipType.Missile)
+        else if (!IsWithin(position, 64) || _shipType == ShipType.Missile)
         {
             skipToDrawing = true;
         }
-        else if ((_fuelScoops & _currentShip.YSign & 0x80) == 0)
+        else if ((_fuelScoops & 0x80) == 0 || position.Y >= 0)
         {
-            // MA58: a potentially fatal collision
+            // MA58: a potentially fatal collision (we can only scoop things
+            // below us)
             Collide();
         }
         else
@@ -424,30 +423,31 @@ public sealed partial class EliteGame
     private bool CheckDocking()
     {
         CalculatePlanetVector();
-        if (_trace != null) Trace($"ISDK newb={Slots[1]!.Behaviour:X2} nosez={Ship.VectorHiByte(_currentShip.Nose.Z)} xx15z={_unitVector[2]} roofx={Ship.VectorHiByte(_currentShip.Roof.X) & 0x7F} delta={_speed}");
+        if (_trace != null) Trace($"ISDK newb={Slots[1]!.Behaviour:X2} nose={_currentShip.Nose} xx15={_unitVector} roof={_currentShip.Roof} delta={_speed}");
         // 1. The station must not be hostile
         if ((Slots[1]!.Behaviour & 0b00000100) != 0)
         {
             return false;
         }
 
-        // 2. The angle of approach must be less than 26 degrees
-        if (Ship.VectorHiByte(_currentShip.Nose.Z) < 214)
+        // 2. The angle of approach must be less than 26 degrees (the
+        // station's nose must point at us, with nosev_z of -86/96 or less)
+        if (_currentShip.Nose.Z > -86 / 96f)
         {
             return false;
         }
 
-        // 4. We must be within the 22 degree safe cone of approach (this
-        // compares the raw sign-magnitude byte, as the original omits the
-        // sign check)
+        // 4. We must be within the 22 degree safe cone of approach, with
+        // XX15's z-coordinate at least 89/96 (the original compares the
+        // sign-magnitude byte, so any negative z-coordinate also passes)
         CalculatePlanetVector();
-        if (ToByte(_unitVector[2]) < 89)
+        if (_unitVector.Z >= 0 && _unitVector.Z < 89 / 96f)
         {
             return false;
         }
 
         // 5. The slot must be horizontal to within 36.6 degrees
-        if ((Ship.VectorHiByte(_currentShip.Roof.X) & 0x7F) < 80)
+        if (MathF.Abs(_currentShip.Roof.X) < 80 / 96f)
         {
             return false;
         }
@@ -567,6 +567,39 @@ public sealed partial class EliteGame
         return true;
     }
 
+    /// <summary>
+    /// The distance from the planet's centre to the station's, along the
+    /// planet's nose: twice the planet's radius (MAS1 adds 2 * nosev, and the
+    /// original's nosev is as long as the planet's radius).
+    /// </summary>
+    private const float StationOrbitRadius = 2 * PlanetRadius;
+
+    /// <summary>
+    /// The distance from us (in each axis) within which the station is
+    /// spawned: x_hi, y_hi and z_hi must all be 192 or less.
+    /// </summary>
+    private const float StationSpawnDistance = 193 * 256;
+
+    /// <summary>
+    /// The altimeter, the cabin temperature and fuel scooping measure the
+    /// distance to the planet and sun in units of 256 (the high bytes of the
+    /// coordinates in the original).
+    /// </summary>
+    private const float AltimeterUnit = 256;
+
+    /// <summary>
+    /// The square of the planet's radius for the altimeter, in altimeter units
+    /// (the original's MAS3 result, x_hi^2 + y_hi^2 + z_hi^2 in 256ths, must be
+    /// at least 37), so we crash at about 97.3 (24,915 in space).
+    /// </summary>
+    private const float PlanetSurfaceSquared = 37 * 256;
+
+    /// <summary>
+    /// The square of the altimeter's range, in altimeter units: MAS3 returns
+    /// 255 (in 256ths) if the distance is any greater.
+    /// </summary>
+    private const float AltimeterRangeSquared = 255 * 256;
+
     /// <summary>Main flight loop part 14: spawn a space station if we are close enough to the planet.</summary>
     private void SpawnStationIfClose()
     {
@@ -575,77 +608,38 @@ public sealed partial class EliteGame
             return;
         }
 
-        if (CombinedSignBytes(Planet) != 0)
+        // The planet must be within 65,536 of us in each axis (MAS2)
+        if (!IsWithin(Planet.Position, 65536))
         {
             return;
         }
 
-        // Copy the planet's position and orientation into INWK
+        // Copy the planet's position and orientation into INWK, and move it
+        // along the planet's nose to where the station is
         var saved = _currentShip;
         _currentShip = _workspace;
         _currentShip.ResetOrientationAndPosition();
-        _currentShip.X = Planet.X;
-        _currentShip.Y = Planet.Y;
-        _currentShip.Z = Planet.Z;
+        _currentShip.Position = Planet.Position + Planet.Nose * StationOrbitRadius;
         _currentShip.Nose = Planet.Nose;
         _currentShip.Roof = Planet.Roof;
         _currentShip.Side = Planet.Side;
         _currentShip.Speed = Planet.Speed;
         _currentShip.Acceleration = Planet.Acceleration;
 
-        _currentShip.X = AddVectorToCoordinate(_currentShip.X, _currentShip.Nose.X, out int xSign);
-        if (xSign == 0)
+        if (IsWithin(_currentShip.Position, StationSpawnDistance))
         {
-            _currentShip.Y = AddVectorToCoordinate(_currentShip.Y, _currentShip.Nose.Y, out int ySign);
-            if (ySign == 0)
-            {
-                _currentShip.Z = AddVectorToCoordinate(_currentShip.Z, _currentShip.Nose.Z, out int zSign);
-                if (zSign == 0 && IsWithinDistance(192))
-                {
-                    RemoveSun();
-                    AddStation();
-                }
-            }
+            RemoveSun();
+            AddStation();
         }
 
         _currentShip = saved;
     }
 
     /// <summary>
-    /// MAS1: add 2 * a vector coordinate to a position coordinate, returning the
-    /// new coordinate and |sign byte| in signMagnitude.
+    /// MAS3: the square of a ship's distance from us, in altimeter units
+    /// (x_hi^2 + y_hi^2 + z_hi^2).
     /// </summary>
-    private static int AddVectorToCoordinate(int coordinate, int vector, out int signMagnitude)
-    {
-        int result = AddToCoordinate24(coordinate, vector * 2);
-        signMagnitude = Ship.SignByte(result) & 0x7F;
-        return result;
-    }
-
-    /// <summary>MAS2: the OR of the sign bytes (without the sign bits) of a ship's coordinates.</summary>
-    private static int CombinedSignBytes(Ship ship, int initial = 0) => (initial | ship.XSign | ship.YSign | ship.ZSign) & 0x7F;
-
-    /// <summary>MAS3: A = x_hi^2 + y_hi^2 + z_hi^2 (high bytes only), returning 255 and C set on overflow.</summary>
-    private static int DistanceSquared(Ship ship, out bool overflow)
-    {
-        overflow = false;
-        int sum = (ship.XHi * ship.XHi) >> 8;
-        sum += (ship.YHi * ship.YHi) >> 8;
-        if (sum > 0xFF)
-        {
-            overflow = true;
-            return 0xFF;
-        }
-
-        sum += (ship.ZHi * ship.ZHi) >> 8;
-        if (sum > 0xFF)
-        {
-            overflow = true;
-            return 0xFF;
-        }
-
-        return sum;
-    }
+    private static float AltimeterDistanceSquared(Ship ship) => ship.Position.LengthSquared() / (AltimeterUnit * AltimeterUnit);
 
     /// <summary>Main flight loop part 15: altitude checks with the planet and sun, and fuel scooping.</summary>
     private void AltitudeChecks(int loopCounter)
@@ -658,26 +652,27 @@ public sealed partial class EliteGame
                 ShowMessage(100);
             }
 
+            // The altimeter shows our height above the planet's surface, and
+            // is full if the planet is out of its range
             _altitude = 0xFF;
-            if (CombinedSignBytes(Planet) != 0)
+            if (!IsWithin(Planet.Position, 65536))
             {
                 return;
             }
 
-            int squared = DistanceSquared(Planet, out bool overflow);
-            if (overflow)
+            float distanceSquared = AltimeterDistanceSquared(Planet);
+            if (distanceSquared > AltimeterRangeSquared)
             {
                 return;
             }
 
-            squared -= 37;
-            if (squared < 0)
+            float altitudeSquared = distanceSquared - PlanetSurfaceSquared;
+            if (altitudeSquared < 0)
             {
                 ShowDeathScreen();
             }
 
-            // LL5 with R = A and Q left over from earlier (assumed to be 0)
-            _altitude = EliteMaths.SquareRoot(squared << 8);
+            _altitude = (int)MathF.Sqrt(altitudeSquared);
             if (_altitude == 0)
             {
                 ShowDeathScreen();
@@ -709,14 +704,16 @@ public sealed partial class EliteGame
             return;
         }
 
+        // The cabin temperature rises as we get closer to the sun, from 30
+        // at the altimeter's range, and we burn up if it goes over 255
         var sun = Slots[1];
-        if (sun == null || CombinedSignBytes(sun) != 0)
+        if (sun == null || !IsWithin(sun.Position, 65536))
         {
             return;
         }
 
-        int value = DistanceSquared(sun, out bool sunOverflow);
-        int temperature = (value ^ 0xFF) + 30 + (sunOverflow ? 1 : 0);
+        int distance = (int)MathF.Min(AltimeterDistanceSquared(sun) / AltimeterUnit, 255);
+        int temperature = 255 - distance + 30;
         _cabinTemperature = temperature & 0xFF;
         if (temperature > 0xFF)
         {
@@ -728,8 +725,8 @@ public sealed partial class EliteGame
             return;
         }
 
-        // Fuel scooping (the C flag is clear here)
-        int fuel = ((_speedTimes64 >> 8) >> 1) + _fuel;
+        // Fuel scooping: we scoop speed / 8 tenths of a light year
+        int fuel = _speed / 8 + _fuel;
         if (fuel >= 70)
         {
             fuel = 70;
@@ -790,8 +787,8 @@ public sealed partial class EliteGame
     /// </summary>
     private void TakeDamage(int damage, bool carry = true)
     {
-        // Work out which shield is hit from the z_sign of the ship in K%
-        bool behind = _slotShip != null && _slotShip.Z < 0;
+        // Work out which shield is hit from whether the ship in K% is behind us
+        bool behind = _slotShip != null && _slotShip.Position.Z < 0;
         int borrow = carry ? 0 : 1;
         int shield;
         if (!behind)
@@ -842,55 +839,30 @@ public sealed partial class EliteGame
             return;
         }
 
-        if (Planet.Z >= 0)
+        // We can't jump if the planet or sun is in front of us and within
+        // 131,072 in each axis (so their sign bytes are all less than 2)
+        if (Planet.Position.Z >= 0 && IsWithin(Planet.Position, 2 * 65536))
         {
-            if (CombinedSignBytes(Planet) < 2)
-            {
-                Boop();
-                return;
-            }
+            Boop();
+            return;
         }
 
         // WA3
         var sun = Slots[1]!;
-        if (sun.Z >= 0)
+        if (sun.Position.Z >= 0 && IsWithin(sun.Position, 2 * 65536))
         {
-            if (CombinedSignBytes(sun) < 2)
-            {
-                Boop();
-                return;
-            }
+            Boop();
+            return;
         }
 
-        // WA2: subtract 1 from the sign bytes of z for the planet and sun (i.e.
-        // move them 65536 closer)
-        Planet.Z = WarpZ(Planet.Z);
-        sun.Z = WarpZ(sun.Z);
+        // WA2: jump forwards by 65,536, moving the planet and sun towards us
+        Planet.Position.Z -= 65536;
+        sun.Position.Z -= 65536;
 
         _viewType = 1;
         _mainLoopCounter = 1;
         _extraVesselsDelay = 0;
         SwitchView(_view);
-    }
-
-    /// <summary>
-    /// WARP moves the planet and sun by calling ADD with (A P) = (z_sign &amp;81)
-    /// and (S R) = -&amp;0181, and storing the high byte of the result as the new
-    /// z_sign, which effectively reduces z_sign by 1 (for objects in front).
-    /// </summary>
-    private static int WarpZ(int coordinate)
-    {
-        int sign = Ship.SignByte(coordinate);
-        int value = ((sign & 0x7F) << 8) | 0x81;
-        if ((sign & 0x80) != 0)
-        {
-            value = -value;
-        }
-
-        int result = EliteMaths.Add16(value, -0x181);
-        int newSign = ((Math.Abs(result) >> 8) & 0x7F) | (result < 0 ? 0x80 : 0);
-        int magnitude = (Math.Abs(coordinate) & 0xFFFF) | ((newSign & 0x7F) << 16);
-        return (newSign & 0x80) != 0 ? -magnitude : magnitude;
     }
 
     /// <summary>LASLI: draw the laser lines for when we fire our laser.</summary>

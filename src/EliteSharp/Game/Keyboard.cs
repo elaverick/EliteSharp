@@ -147,8 +147,8 @@ public sealed partial class EliteGame
             // The docking computer "presses" the flight keys
             var saved = _currentShip;
             ResetWorkspace();
-            _currentShip.Nose.Z = 96 << 8;
-            _currentShip.Side.X = -(96 << 8);
+            _currentShip.Nose.Z = 1;
+            _currentShip.Side.X = -1;
             int savedType = _shipType;
             _shipType = 0x80 | 96;
             _currentShip.Speed = _speed;

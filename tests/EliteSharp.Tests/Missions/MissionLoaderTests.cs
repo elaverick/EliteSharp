@@ -68,7 +68,7 @@ public sealed class MissionLoaderTests
     [Fact]
     public void TheExampleInTheReadmeLoads()
     {
-        string readme = File.ReadAllText(Path.Combine(MissionLoader.DefaultFolder, "README.md"));
+        string readme = File.ReadAllText(Path.Combine(MissionLoader.DefaultFolder, "README.md")).ReplaceLineEndings("\n");
         string section = readme[readme.IndexOf("## Adding a mission", StringComparison.Ordinal)..];
         string example = Regex.Match(section, "```yaml\n(.*?)```", RegexOptions.Singleline).Groups[1].Value;
         var catalogue = LoadWith("my-mission.yml", example);
@@ -111,7 +111,7 @@ public sealed class MissionLoaderTests
     [Fact]
     public void MissingFieldsAreReported()
     {
-        var error = LoadFails(TestMission.Replace("name: Test\n", "", StringComparison.Ordinal));
+        var error = LoadFails(TestMission.ReplaceLineEndings("\n").Replace("name: Test\n", "", StringComparison.Ordinal));
         Assert.Contains("the field 'name' is missing", Assert.Single(error.Errors));
     }
 

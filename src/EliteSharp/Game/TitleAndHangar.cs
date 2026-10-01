@@ -1,5 +1,4 @@
 using System.Numerics;
-using EliteSharp.Data;
 using EliteSharp.Game.Ships;
 using EliteSharp.Input;
 using EliteSharp.Rendering.Scene;
@@ -129,6 +128,21 @@ public sealed partial class EliteGame
     /// <summary>The owner of the hangar's floor and back wall in the 3D world.</summary>
     private readonly object _hangarOwner = new();
 
+    /// <summary>
+    /// HATB: the groups of ships that can be in the hangar, each ship with its
+    /// type and its position across (x) and in front of us (z). The ships sit
+    /// on the hangar floor, so how far below us each one is depends on its
+    /// size. The original has room for three ships in each group, and fills
+    /// the rest with empty slots.
+    /// </summary>
+    private static readonly (int Type, int X, int Z)[][] HangarGroups =
+    [
+        [(ShipType.CobraMkIII, -68, 315)],
+        [(ShipType.CargoCanister, -80, 273), (ShipType.CargoCanister, 209, 552), (ShipType.CargoCanister, 64, 262)],
+        [(ShipType.Viper, 96, 400), (ShipType.Krait, -16, 465)],
+        [(ShipType.Adder, 81, 760), (ShipType.Viper, -96, 373)],
+    ];
+
     /// <summary>HALL: draw the ships in the hangar, then the hangar itself.</summary>
     private void DrawHangar()
     {
@@ -137,42 +151,39 @@ public sealed partial class EliteGame
         int random = NextRandom();
         if ((random & 0x80) != 0)
         {
-            // Draw a group of three ships from HATB
-            random &= 3;
-            int offset = random * 9;
-            for (int i = 0; i < 3; i++)
+            // Draw a group of ships from HATB (HAL8/HAL9), where an empty slot
+            // is still a ship of type 0, which takes a random number for its
+            // rotation but isn't drawn
+            var group = HangarGroups[random & 3];
+            for (int slot = 0; slot < 3; slot++)
             {
-                // HAL8/HAL9
-                DrawHangarShip(GameData.HangarGroups[offset], GameData.HangarGroups[offset + 1], GameData.HangarGroups[offset + 2]);
-                offset += 3;
+                var (type, x, z) = slot < group.Length ? group[slot] : (0, 0, 0);
+                DrawHangarShip(type, new Vector3(x, 0, z));
             }
         }
         else
         {
-            // HA7: draw a single random ship
-            int position = random >> 1;
-            int depth = NextRandom();
+            // HA7: draw a single random ship, at a random position. The
+            // original's position bytes (which it passes in XX15) are x_lo,
+            // with bit 0 giving z_hi, and z_lo, with bit 0 giving the sign of x
+            int xLo = random >> 1;
+            int zLo = NextRandom();
             int type = (NextRandom() & 3) + ShipType.Sidewinder + (_carry ? 1 : 0);
-            DrawHangarShip(type, position, depth);
+            int zHi = 1 + (xLo & 1);
+            DrawHangarShip(type, new Vector3((zLo & 1) != 0 ? -xLo : xLo, 0, (zHi << 8) | zLo));
         }
 
         // HA9
         DrawHangarBackground();
     }
 
-    /// <summary>
-    /// HAS1: draw a ship in the hangar. The position bytes (which the original
-    /// passes in XX15) are x_lo, with bit 0 giving z_hi, and z_lo, with bit 0
-    /// giving the sign of x.
-    /// </summary>
-    private void DrawHangarShip(int type, int xLo, int zLo)
+    /// <summary>HAS1: draw a ship in the hangar, at a position across (x) and in front of us (z).</summary>
+    private void DrawHangarShip(int type, Vector3 position)
     {
         // Each ship in the hangar is a separate object on the screen
         _currentShip = Ship.Workspace();
         _currentShip.ResetOrientationAndPosition();
-
-        int zHi = 1 + (xLo & 1);
-        _currentShip.Position = new Vector3((zLo & 1) != 0 ? -xLo : xLo, 0, (zHi << 8) | zLo);
+        _currentShip.Position = position;
 
         // HAL5: rotate the ship around its roof axis by a random multiple of
         // 1/16 radian

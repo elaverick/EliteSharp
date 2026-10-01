@@ -181,6 +181,35 @@ public sealed class OriginalDataTests
     }
 
     [Fact]
+    public void TheHangarGroupsAreTheOriginals()
+    {
+        // HATB: four groups of three ships, each its type, x_lo (with bit 0
+        // giving z_hi) and z_lo (with bit 0 giving the sign of x), where an
+        // empty slot is type 0 (and its position isn't used)
+        var groups = StaticField<(int Type, int X, int Z)[][]>("HangarGroups");
+        Assert.Equal(4, groups.Length);
+        for (int group = 0; group < 4; group++)
+        {
+            for (int slot = 0; slot < 3; slot++)
+            {
+                int i = (group * 3 + slot) * 3;
+                if (slot >= groups[group].Length)
+                {
+                    Assert.Equal(0, OriginalHangarGroups[i]);
+                    continue;
+                }
+
+                var (type, x, z) = groups[group][slot];
+                int xLo = Math.Abs(x);
+                int zLo = z & 0xFF;
+                Assert.Equal(OriginalHangarGroups[i..(i + 3)], new[] { (byte)type, (byte)xLo, (byte)zLo });
+                Assert.Equal(1 + (xLo & 1), z >> 8);
+                Assert.Equal(x < 0, (zLo & 1) != 0);
+            }
+        }
+    }
+
+    [Fact]
     public void TheEnergyBombsBoltIsTheOriginals() =>
         Assert.Equal(OriginalBombBaseX.Select(b => (int)b), StaticField<int[]>("BombBoltBaseX"));
 
@@ -192,7 +221,14 @@ public sealed class OriginalDataTests
         (T)typeof(EliteGame).GetField(name, BindingFlags.Static | BindingFlags.NonPublic)!.GetValue(null)!;
 
     // The original bytes, as assembled from the BBC Master source (QQ23, PRXS,
-    // NA%, BOMBPOS, TGINT, QQ16, ECBT and SPBT)
+    // NA%, BOMBPOS, TGINT, QQ16, HATB, ECBT and SPBT)
+
+    private static readonly byte[] OriginalHangarGroups =
+    [
+        0x0B, 0x44, 0x3B, 0x00, 0x82, 0xB0, 0x00, 0x00, 0x00, 0x05, 0x50, 0x11, 0x05, 0xD1, 0x28, 0x05,
+        0x40, 0x06, 0x10, 0x60, 0x90, 0x13, 0x10, 0xD1, 0x00, 0x00, 0x00, 0x14, 0x51, 0xF8, 0x10, 0x60,
+        0x75, 0x00, 0x00, 0x00,
+    ];
 
     private static readonly byte[] OriginalEcmBulb =
     [

@@ -2,17 +2,18 @@
 """
 Generates the C# data files for EliteSharp from the BBC Master Elite source.
 
-The data tables (the hangar and the sound data) are lifted byte-for-byte
-from the assembled binaries, using the label addresses in the assembler
-listing, so the port uses exactly the same data as the game. The dashboard,
-its bulbs and the font (P.DIALS2P, ECBT, SPBT and P.FONT) are PNG images in
-src/EliteSharp/Assets/Images, which the tests check against the original. The ships are exported separately, as assets, by
-tools/export_ships.py.
+The data tables (the sound data) are lifted byte-for-byte from the
+assembled binaries, using the label addresses in the assembler listing, so
+the port uses exactly the same data as the game. The dashboard, its bulbs
+and the font (P.DIALS2P, ECBT, SPBT and P.FONT) are PNG images in
+src/EliteSharp/Assets/Images, which the tests check against the original.
+The ships are exported separately, as assets, by tools/export_ships.py.
 
 The markets and equipment prices (QQ23 and PRXS) are in
 src/EliteSharp/Assets/trading.yml, and the default commander (NA%), the energy
-bomb's bolt (BOMBPOS) and the pause keys (TGINT) are in the game's code; the
-tests check them against the original bytes.
+bomb's bolt (BOMBPOS), the pause keys (TGINT) and the groups of ships in the
+hangar (HATB) are in the game's code; the tests check them against the
+original bytes.
 
 The original's text token tables aren't needed: the game's fixed text and the
 system descriptions are in src/EliteSharp/Assets/Strings, the missions' text is
@@ -100,8 +101,6 @@ def gen_tables():
 
     # Tables in the main code block (the maths tables, such as the sine,
     # arctan and logarithm tables, are left out, as the game uses real maths)
-    tables.append(("HangarGroups", code_bytes("HATB", 36),
-                   "HATB: ship hangar groups (type, x_hi/z_hi, z_lo/x_sign) * 3 * 4."))
     tables.append(("SoundPriority", code_bytes("SFXPR", 12), "SFXPR: sound data block 1."))
     tables.append(("SoundBits", code_bytes("SFXBT", 12), "SFXBT: sound data block 2."))
     tables.append(("SoundFrequency", code_bytes("SFXFQ", 12), "SFXFQ: sound data block 3."))

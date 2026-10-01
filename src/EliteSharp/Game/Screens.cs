@@ -39,7 +39,7 @@ public sealed partial class EliteGame
         ShowTradingScreen(8);
         SelectNearestSystem();
         _cursorX = 7;
-        PrintTitle("status.title");
+        PrintStatusTitle();
 
         if (_docked != 0)
         {
@@ -59,7 +59,7 @@ public sealed partial class EliteGame
             PrintTextLine(condition);
         }
 
-        PrintTextSpace("status.legal_status");
+        PrintLegalStatusLabel();
 
         string legal = "status.clean";
         if (_legalStatus != 0)
@@ -92,7 +92,7 @@ public sealed partial class EliteGame
 
         // st3
         PrintTextLine(RatingKeys[rating - 1]);
-        PrintTextLineIndented("status.equipment");
+        PrintEquipmentHeading();
 
         if (_escapePod != 0)
         {
@@ -147,6 +147,49 @@ public sealed partial class EliteGame
 
             PrintTextLineIndented(name);
         }
+    }
+
+    /// <summary>
+    /// Print the Status screen's title: the commander's name, then the present
+    /// and hyperspace systems and the label for the condition, each with a
+    /// colon in column 21, and the line under the title.
+    /// </summary>
+    private void PrintStatusTitle()
+    {
+        PrintText("status.commander");
+        PrintNewline();
+        PrintNewline();
+        PrintNewline();
+        _textCase = 0x80;
+        PrintText("status.present_system");
+        PrintColumnColon();
+        PrintCurrentSystemName();
+        PrintNewline();
+        PrintText("status.hyperspace_system");
+        PrintColumnColon();
+        PrintSystemName();
+        PrintNewline();
+        PrintText("status.condition");
+        PrintColumnColon();
+        DrawTitleLine();
+    }
+
+    /// <summary>Print our fuel and cash, and the label for our legal status.</summary>
+    private void PrintLegalStatusLabel()
+    {
+        PrintFuelAndCash();
+        PrintTextSpace("status.legal_status");
+    }
+
+    /// <summary>Print the heading of the equipment list, in capitals, and indent the next line.</summary>
+    private void PrintEquipmentHeading()
+    {
+        PrintNewline();
+        _textCase = 0;
+        PrintText("status.equipment");
+        _textCase = 0x80;
+        PrintNewline();
+        _cursorX = 6;
     }
 
     /// <summary>The combat ratings, from Harmless (1) to Elite (9), which the original prints as tokens 22 onwards.</summary>
@@ -755,7 +798,8 @@ public sealed partial class EliteGame
     private void FindSystem()
     {
         _colour = Cyan;
-        PrintExtendedText("charts.planet_name");
+        PrintPlanetNamePrompt();
+        ReadLine();
         DrawSmallCrosshairs();
         SelectFirstSystem();
 
@@ -781,6 +825,20 @@ public sealed partial class EliteGame
         SelectNearestSystem();
         DrawSmallCrosshairs();
         Boop();
+        PrintUnknownPlanet();
+    }
+
+    /// <summary>Clear the bottom of the screen and ask for a system's name.</summary>
+    private void PrintPlanetNamePrompt()
+    {
+        ClearBottomRows();
+        PrintExtendedText("charts.planet_name");
+    }
+
+    /// <summary>Say that there is no system with the name we asked for.</summary>
+    private void PrintUnknownPlanet()
+    {
+        SetLeftAligned();
         PrintExtendedText("charts.unknown_planet");
     }
 
@@ -935,6 +993,7 @@ public sealed partial class EliteGame
     {
         _cursorX = 17;
         PrintText("market.headers");
+        PrintToken(10);
     }
 
     /// <summary>TT167: show the Market Price screen (red key f7).</summary>
@@ -1071,19 +1130,19 @@ public sealed partial class EliteGame
             if (error)
             {
                 // TQ4
-                AskQuestion("market.quantity");
+                AskQuestion(() => PrintText("market.quantity"));
                 continue;
             }
 
             if (quantity != 0 && HasRoomInHold(quantity))
             {
-                AskQuestion("market.cargo");
+                AskQuestion(PrintCargo);
                 continue;
             }
 
             if (!SpendCash(CalculateCost(quantity, _itemPrice)))
             {
-                AskQuestion("market.cash");
+                AskQuestion(() => PrintText("market.cash"));
                 continue;
             }
 
@@ -1098,11 +1157,12 @@ public sealed partial class EliteGame
         }
     }
 
-    /// <summary>Tc: print a space, a string of fixed text and a question mark, and beep.</summary>
-    private void AskQuestion(string key)
+    /// <summary>Tc: print a space, a question and a question mark, and beep.</summary>
+    private void AskQuestion(Action printQuestion)
     {
         PrintSpace();
-        PrintTextQuestion(key);
+        printQuestion();
+        PrintToken('?');
 
         // TTX224
         BeepAndWait();
@@ -1224,9 +1284,17 @@ public sealed partial class EliteGame
         ShowTradingScreen(4);
         _cursorX = 10;
         PrintText("market.sell");
-        PrintTitle("market.cargo");
+        PrintCargo();
+        DrawTitleLine();
         PrintNewline();
         ListCargo();
+    }
+
+    /// <summary>Print " CARGO", and switch to Sentence Case.</summary>
+    private void PrintCargo()
+    {
+        PrintText("market.cargo");
+        _textCase = 0x80;
     }
 
     /// <summary>TT213: show the Inventory screen (red key f9).</summary>
@@ -1276,7 +1344,7 @@ public sealed partial class EliteGame
 
                 // Sell this item?
                 PrintText("market.sell");
-                PrintExtendedText("market.yes_no");
+                PrintYesNo();
                 var (quantity, error) = ReadNumber();
                 if (quantity == 0)
                 {

@@ -42,7 +42,7 @@ public sealed partial class EliteGame
     {
         ClearKeyLogger();
         _cursorX = 3;
-        int key = ShowTitleScreen("title.load_new_commander", ShipType.CobraMkIII, 200);
+        int key = ShowTitleScreen("title.load_new_commander", ShipType.CobraMkIII, 200, askYesNo: true);
         if (key == 'Y')
         {
             ApplySavedCommander();
@@ -575,6 +575,13 @@ public sealed partial class EliteGame
     /// </summary>
     private bool IsNearby() => IsWithin(_currentShip.Position, 225 * 256);
 
+    /// <summary>Print "GAME OVER" in capitals.</summary>
+    private void PrintGameOver()
+    {
+        _textCase = 0;
+        PrintText("messages.game_over");
+    }
+
     /// <summary>DEATH: display the death screen.</summary>
     private void ShowDeathScreen()
     {
@@ -594,7 +601,7 @@ public sealed partial class EliteGame
         _colour = Cyan;
         _cursorX = 12;
         _cursorY = 12;
-        PrintText("messages.game_over");
+        PrintGameOver();
 
         do
         {

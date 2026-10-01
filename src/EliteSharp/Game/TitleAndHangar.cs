@@ -20,12 +20,12 @@ public sealed partial class EliteGame
     /// string of fixed text), and wait for a key press, returning its ASCII
     /// code.
     /// </summary>
-    private int ShowTitleScreen(string prompt, int type, int distance)
+    private int ShowTitleScreen(string prompt, int type, int distance, bool askYesNo = false)
     {
         _padContextOverride = PadContext.Screen;
         try
         {
-            return RunTitleScreen(prompt, type, distance);
+            return RunTitleScreen(prompt, type, distance, askYesNo);
         }
         finally
         {
@@ -33,8 +33,22 @@ public sealed partial class EliteGame
         }
     }
 
+    /// <summary>Print the title screen's prompt, followed by "(Y/N)?" if it asks a question, and a blank line.</summary>
+    private void PrintTitlePrompt(string prompt, bool askYesNo)
+    {
+        PrintExtendedText(prompt);
+        if (askYesNo)
+        {
+            PrintYesNo();
+            SetSentenceCase();
+        }
+
+        PrintCharacter(12);
+        PrintCharacter(12);
+    }
+
     /// <summary>The body of <see cref="ShowTitleScreen"/>.</summary>
-    private int RunTitleScreen(string prompt, int type, int distance)
+    private int RunTitleScreen(string prompt, int type, int distance, bool askYesNo)
     {
         _titleShipDistance = distance;
         _shipType = type;
@@ -67,7 +81,7 @@ public sealed partial class EliteGame
         JoystickEnabled = 0;
         _cursorY = 20;
         _cursorX = 1;
-        PrintExtendedText(prompt);
+        PrintTitlePrompt(prompt, askYesNo);
         _cursorX = 7;
         PrintExtendedText("title.copyright");
         _turnAngleLimit = 12 / 36f;

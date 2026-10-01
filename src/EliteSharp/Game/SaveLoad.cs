@@ -212,7 +212,7 @@ public sealed partial class EliteGame
         while (true)
         {
             SetTradingPalette();
-            PrintExtendedText("disk.menu");
+            PrintDiscAccessMenu();
             int key = WaitForKey();
             switch (key)
             {
@@ -458,7 +458,7 @@ public sealed partial class EliteGame
         if (data == null || data.Length < CommanderDataSize + 1 || (data[0] & 0x80) != 0)
         {
             // ELT2F: not a valid file
-            PrintExtendedText("disk.illegal_file");
+            PrintIllegalFile();
             WaitForKey();
             return false;
         }
@@ -477,7 +477,7 @@ public sealed partial class EliteGame
         }
 
         _catalogueDriveCharacter = '0' + drive;
-        PrintExtendedText("disk.catalogue_header");
+        PrintCatalogueHeader();
         _printingCatalogue = 1;
         _cursorX = 1;
 
@@ -566,7 +566,7 @@ public sealed partial class EliteGame
     {
         if (FilingSystemToggle == 0)
         {
-            PrintExtendedText("disk.catalogue_header");
+            PrintCatalogueHeader();
         }
     }
 
@@ -575,5 +575,59 @@ public sealed partial class EliteGame
     /// prints extended token 2 - DISK, which in this version is the drive
     /// prompt or the disc access menu (and nothing uses this).
     /// </summary>
-    private void PrintOtherFilingSystem() => PrintExtendedText(FilingSystemToggle == 0 ? "disk.which_drive" : "disk.menu");
+    private void PrintOtherFilingSystem()
+    {
+        if (FilingSystemToggle == 0)
+        {
+            PrintExtendedText("disk.which_drive");
+        }
+        else
+        {
+            PrintDiscAccessMenu();
+        }
+    }
+
+    /// <summary>Clear the screen for a disc screen, and start its title in capitals in column 6.</summary>
+    private void StartDiscScreen()
+    {
+        _cursorX = 1;
+        ClearScreen(1);
+        DrawTitleLine();
+        SetAllCaps();
+        MoveToColumn6();
+    }
+
+    /// <summary>Print the disc access menu.</summary>
+    private void PrintDiscAccessMenu()
+    {
+        StartDiscScreen();
+        PrintExtendedText("disk_menu.title");
+        PrintCharacter(12);
+        PrintCharacter(10);
+        PrintCharacter(10);
+        SetSentenceCase();
+        foreach (string item in new[] { "load", "save", "catalogue", "delete", "default", "exit" })
+        {
+            PrintExtendedText("disk_menu." + item);
+            PrintCharacter(12);
+            PrintCharacter(10);
+        }
+    }
+
+    /// <summary>Print the title of the disc catalogue.</summary>
+    private void PrintCatalogueHeader()
+    {
+        StartDiscScreen();
+        PrintExtendedText("disk.catalogue_header");
+        PrintCharacter(12);
+        PrintCharacter(10);
+    }
+
+    /// <summary>Say that the file isn't a commander file, in capitals.</summary>
+    private void PrintIllegalFile()
+    {
+        PrintCharacter(12);
+        SetAllCaps();
+        PrintExtendedText("disk.illegal_file");
+    }
 }

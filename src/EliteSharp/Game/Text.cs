@@ -531,8 +531,7 @@ public sealed partial class EliteGame
                 _standardTokens = 0xFF;
                 break;
             case 8:
-                _cursorX = 6;
-                _notPrintingWord = 0xFF;
+                MoveToColumn6();
                 break;
             case 9:
                 _cursorX = 1;
@@ -606,6 +605,13 @@ public sealed partial class EliteGame
     {
         _lowerCaseMask = 0b00100000;
         _lowerCaseEnabled = 0;
+    }
+
+    /// <summary>MT8: move the text cursor to column 6, between words.</summary>
+    private void MoveToColumn6()
+    {
+        _cursorX = 6;
+        _notPrintingWord = 0xFF;
     }
 
     /// <summary>MT14: switch to justified text.</summary>
@@ -741,29 +747,22 @@ public sealed partial class EliteGame
         ["current_system"] = 2,
         ["system"] = 3,
         ["commander"] = 4,
-        ["fuel_and_cash"] = 5,
-        ["sentence_case"] = 6,
-        ["bell"] = 7,
-        ["all_caps"] = 8,
-        ["tab_colon"] = 9,
-        ["line_feed"] = 10,
     };
+
+    /// <summary>
+    /// The code that {default_commander} stands for in the fixed text that
+    /// <see cref="PrintExtendedText"/> prints, which prints the default
+    /// commander's name as it is (as the original prints it in capitals).
+    /// </summary>
+    private const int DefaultCommanderCode = 256;
 
     /// <summary>The codes in braces in the fixed text that <see cref="PrintExtendedText"/> prints, and the DETOK control codes they stand for.</summary>
     private static readonly Dictionary<string, int> ExtendedTextCodes = new()
     {
-        ["all_caps"] = 1,
-        ["sentence_case"] = 2,
         ["commander"] = 4,
-        ["tab"] = 8,
-        ["clear_screen"] = 9,
-        ["line_feed"] = 10,
-        ["title_line"] = 11,
-        ["left_align"] = 15,
         ["drive"] = 16,
         ["capitalise"] = 19,
-        ["clear_bottom"] = 21,
-        ["input"] = 26,
+        ["default_commander"] = DefaultCommanderCode,
     };
 
     /// <summary>The fixed text that has been printed, as the characters and control codes that TT27 prints.</summary>
@@ -808,14 +807,24 @@ public sealed partial class EliteGame
     {
         foreach (int code in TextToCodes(key, _extendedTextCodes, ExtendedTextCodes, 'Z'))
         {
-            PrintExtendedCharacter(code);
+            if (code == DefaultCommanderCode)
+            {
+                foreach (char c in DefaultCommander.Name)
+                {
+                    PrintCharacter(c);
+                }
+            }
+            else
+            {
+                PrintExtendedCharacter(code);
+            }
         }
     }
 
     /// <summary>
     /// Convert a string of fixed text into the characters and control codes
-    /// that the original's token prints: a newline is 12, and a code in braces
-    /// is a control code. Only the characters up to the given one can be
+    /// that the original's token prints: a newline is 12, \a is a beep (7),
+    /// and a code in braces is a control code. Only the characters up to the given one can be
     /// printed, as the higher ones print tokens, so letters must be capitals
     /// (the case is applied as the text is printed).
     /// </summary>
@@ -846,6 +855,10 @@ public sealed partial class EliteGame
             else if (c == '\n')
             {
                 output.Add(12);
+            }
+            else if (c == '\a')
+            {
+                output.Add(7);
             }
             else if (c >= ' ' && c <= highestCharacter)
             {
@@ -1049,6 +1062,13 @@ public sealed partial class EliteGame
     {
         PrintText(key);
         PrintSpace();
+    }
+
+    /// <summary>Print "(Y/N)?", in capitals.</summary>
+    private void PrintYesNo()
+    {
+        SetAllCaps();
+        PrintExtendedText("prompts.yes_no");
     }
 
     /// <summary>prq: print a string of fixed text followed by a question mark.</summary>

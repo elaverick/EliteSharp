@@ -9,53 +9,48 @@
 #
 #   - Letters are written in capitals, as the game applies the case (such as
 #     Sentence Case) as it prints them, and the font only has ASCII characters.
-#   - \n is a newline.
-#   - The words in braces print something, or change how the text is printed:
+#   - \n is a newline, and \a is a beep.
+#   - The words in braces print something:
 #
-#       {cash}            our cash, then " CR" and a newline
-#       {galaxy}          the galaxy number
-#       {current_system}  the name of the system we are in
-#       {system}          the name of the selected system
-#       {commander}       the commander's name
-#       {fuel_and_cash}   our fuel and cash, as on the Status screen
-#       {sentence_case}   switch to Sentence Case
-#       {all_caps}        switch to capitals
-#       {lower_case}      switch to lower case
-#       {capitalise}      print the next letter in capitals
-#       {tab_colon}       move to column 21 and print a colon
-#       {tab}             move to column 6
-#       {line_feed}       move down a line without returning to the left
-#       {bell}            beep
-#       {left_align}      stop justifying text
-#       {clear_screen}    clear the screen
-#       {clear_bottom}    clear the bottom three rows of the screen
-#       {title_line}      draw the line under the screen title
-#       {drive}           the drive number, in the disc catalogue
-#       {input}           read a line from the keyboard
+#       {cash}               our cash, then " CR" and a newline
+#       {galaxy}             the galaxy number
+#       {current_system}     the name of the system we are in
+#       {system}             the name of the selected system
+#       {commander}          the commander's name
+#       {default_commander}  the default commander's name (JAMESON)
+#       {drive}              the drive number, in the disc catalogue
+#       {capitalise}         print the next letter in capitals, where the game
+#                            would otherwise print it in lower case
 #
+# Where the text goes on the screen and its case are up to the game, so a
+# translation only needs to translate the words.
+
 # The text that the game generates (the "goat soup" system descriptions and
 # the species names) is not here, but in en-descriptions.yml, and the
 # missions' text is in Assets/Missions.
 
 title:
   banner: "---- E L I T E ----"
-  load_new_commander: "  LOAD NEW {capitalise}COMMANDER {all_caps}(Y/N)?{sentence_case}\n\n"
-  press_space: "PRESS SPACE OR FIRE,{capitalise}COMMANDER.\n\n"
+  load_new_commander: "  LOAD NEW COMMANDER "
+  press_space: "PRESS SPACE OR FIRE,{capitalise}COMMANDER."
   copyright: "({capitalise}C) ACORNSOFT 1986"
   authors: "BY D.BRABEN & I.BELL"
 
 status:
-  title: "COMMANDER {commander}\n\n\n{sentence_case}PRESENT SYSTEM{tab_colon}{current_system}\nHYPERSPACE SYSTEM{tab_colon}{system}\nCONDITION{tab_colon}"
+  commander: "COMMANDER {commander}"
+  present_system: "PRESENT SYSTEM"
+  hyperspace_system: "HYPERSPACE SYSTEM"
+  condition: "CONDITION"
   docked: "DOCKED"
   condition_green: "GREEN"
   condition_yellow: "YELLOW"
   condition_red: "RED"
-  legal_status: "{fuel_and_cash}LEGAL STATUS:"
+  legal_status: "LEGAL STATUS:"
   clean: "CLEAN"
   offender: "OFFENDER"
   fugitive: "FUGITIVE"
   rating: "RATING:"
-  equipment: "\n{all_caps}EQUIPMENT:{sentence_case}"
+  equipment: "EQUIPMENT:"
 
 ratings:
   harmless: "HARMLESS"
@@ -71,7 +66,7 @@ ratings:
 equipment:
   fuel: "FUEL"
   missile: "MISSILE"
-  large_cargo_bay: "LARGE CARGO{sentence_case} BAY"
+  large_cargo_bay: "LARGE CARGO BAY"
   ecm: "E.C.M.SYSTEM"
   extra_pulse_lasers: "EXTRA PULSE LASERS"
   extra_beam_lasers: "EXTRA BEAM LASERS"
@@ -116,12 +111,11 @@ commodities:
 
 market:
   title: "{current_system} MARKET PRICES"
-  headers: "UNIT  QUANTITY\n PRODUCT   UNIT PRICE FOR SALE\n{line_feed}"
+  headers: "UNIT  QUANTITY\n PRODUCT   UNIT PRICE FOR SALE\n"
   quantity_of: "QUANTITY OF "
   quantity: "QUANTITY"
   sell: "SELL"
-  cargo: " CARGO{sentence_case}"
-  yes_no: "{all_caps}(Y/N)?"
+  cargo: " CARGO"
   inventory: "INVENTORY\n"
   cash: "CASH"
   cash_balance: "CASH:{cash}"
@@ -165,25 +159,36 @@ charts:
   galactic: "GALACTIC CHART{galaxy}"
   hyperspace: "HYPERSPACE "
   range: "RANGE"
-  planet_name: "{clear_bottom}PLANET NAME? {input}"
-  unknown_planet: "{left_align} UNKNOWN PLANET"
+  planet_name: "PLANET NAME? "
+  unknown_planet: " UNKNOWN PLANET"
 
 messages:
   bounty: "{cash}"
-  energy_low: "ENERGY LOW{bell}"
+  energy_low: "ENERGY LOW\a"
   right_on_commander: "RIGHT ON COMMANDER!"
   incoming_missile: "INCOMING MISSILE"
   docking_computers_on: "DOCKING COMPUTERS ON"
-  fuel_scoops_on: "FUEL SCOOPS ON {bell}"
+  fuel_scoops_on: "FUEL SCOOPS ON \a"
   target_lost: "TARGET LOST"
   missile_jammed: "MISSILE JAMMED"
   destroyed: " DESTROYED"
-  game_over: "{all_caps}GAME OVER"
+  game_over: "GAME OVER"
+
+prompts:
+  yes_no: "(Y/N)?"
+
+disk_menu:
+  title: " DISK ACCESS MENU"
+  load: "1. LOAD NEW COMMANDER"
+  save: "2. SAVE COMMANDER {commander}"
+  catalogue: "3. CATALOGUE DISK"
+  delete: "4. DELETE FILE"
+  default: "5. DEFAULT {default_commander}"
+  exit: "6. EXIT"
 
 disk:
-  menu: "{clear_screen}{title_line}{all_caps}{tab} DISK ACCESS MENU\n{line_feed}{line_feed}{sentence_case}1. LOAD NEW {capitalise}COMMANDER\n{line_feed}2. SAVE {capitalise}COMMANDER {commander}\n{line_feed}3. CATALOGUE DISK\n{line_feed}4. DELETE FILE\n{line_feed}5. DEFAULT {all_caps}JAMESON{sentence_case}\n{line_feed}6. EXIT\n{line_feed}"
   which_drive: "\nWHICH DRIVE?"
-  catalogue_header: "{clear_screen}{title_line}{all_caps}{tab}DRIVE {drive} CATALOGUE\n{line_feed}"
-  commander_name: "{capitalise}COMMANDER'S NAME? "
-  illegal_file: "\n{all_caps}ILLEGAL ELITE II FILE"
+  catalogue_header: "DRIVE {drive} CATALOGUE"
+  commander_name: "COMMANDER'S NAME? "
+  illegal_file: "ILLEGAL ELITE II FILE"
   are_you_sure: "ARE YOU SURE?"

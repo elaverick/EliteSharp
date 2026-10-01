@@ -2,10 +2,16 @@
 """
 Generates the C# data files for EliteSharp from the BBC Master Elite source.
 
-The data tables (font, dashboard bitmap, market data and so on) are lifted
-byte-for-byte from the assembled binaries, using the label addresses in the
-assembler listing, so the port uses exactly the same data as the game. The
-ships are exported separately, as assets, by tools/export_ships.py.
+The data tables (the font, the dashboard and other bitmaps, and the sound
+data) are lifted byte-for-byte from the assembled binaries, using the label
+addresses in the assembler listing, so the port uses exactly the same data as
+the game. The ships are exported separately, as assets, by
+tools/export_ships.py.
+
+The markets and equipment prices (QQ23 and PRXS) are in
+src/EliteSharp/Data/trading.yml, and the default commander (NA%), the energy
+bomb's bolt (BOMBPOS) and the pause keys (TGINT) are in the game's code; the
+tests check them against the original bytes.
 
 The original's text token tables aren't needed: the game's fixed text and the
 system descriptions are in src/EliteSharp/Data/Strings, and the missions'
@@ -97,16 +103,8 @@ def gen_tables():
     # arctan and logarithm tables, are left out, as the game uses real maths)
     tables.append(("TwoLetterTokens", code_bytes("QQ16", 64),
                    "QQ16: two-letter tokens 128-159."))
-    tables.append(("MarketPrices", code_bytes("QQ23", 17 * 4),
-                   "QQ23: market table (base price, factor/units, base quantity, mask) for 17 items."))
-    tables.append(("EquipmentPrices", code_bytes("PRXS", 28),
-                   "PRXS: equipment prices * 10 as 16-bit little-endian words."))
     tables.append(("HangarGroups", code_bytes("HATB", 36),
                    "HATB: ship hangar groups (type, x_hi/z_hi, z_lo/x_sign) * 3 * 4."))
-    tables.append(("BombBaseX", code_bytes("BOMBPOS", 10),
-                   "BOMBPOS: base x-coordinates for the energy bomb lightning bolt."))
-    tables.append(("DefaultCommander", code_bytes("NA2%", LABELS["NAEND%"] - LABELS["NA2%"]),
-                   "NA2%: the default JAMESON commander (name + data block + checksums)."))
     tables.append(("SoundPriority", code_bytes("SFXPR", 12), "SFXPR: sound data block 1."))
     tables.append(("SoundBits", code_bytes("SFXBT", 12), "SFXBT: sound data block 2."))
     tables.append(("SoundFrequency", code_bytes("SFXFQ", 12), "SFXFQ: sound data block 3."))
@@ -116,8 +114,6 @@ def gen_tables():
     # Rendering/Ink.cs and Rendering/Palette.cs), rather than as screen bytes
     tables.append(("EcmBulb", code_bytes("ECBT", 16), "ECBT: E.C.M. bulb bitmap (mode 2)."))
     tables.append(("StationBulb", code_bytes("SPBT", 16), "SPBT: space station bulb bitmap (mode 2)."))
-    tables.append(("PauseToggleKeys", code_bytes("TGINT", 9),
-                   "TGINT: configuration keys toggled while paused (CAPS LOCK, then AXFYJKUT)."))
 
     tables.append(("Font", list(open(FONT, "rb").read()),
                    "FONT%: the MOS character bitmaps for ASCII 32-127."))

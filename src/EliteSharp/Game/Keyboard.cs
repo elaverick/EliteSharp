@@ -377,10 +377,16 @@ public sealed partial class EliteGame
         }
     }
 
+    /// <summary>
+    /// TGINT: the keys that toggle the configuration options while paused, in
+    /// the order of <see cref="ToggleOptions"/> (the 1 is for CAPS LOCK).
+    /// </summary>
+    private static readonly int[] ToggleOptionKeys = [1, 'A', 'X', 'F', 'Y', 'J', 'K', 'U', 'T'];
+
     /// <summary>DKS3: toggle a configuration option if its key is being pressed.</summary>
     private void ToggleOption(int key, int option)
     {
-        if (key != GameData.PauseToggleKeys[option])
+        if (key != ToggleOptionKeys[option])
         {
             return;
         }

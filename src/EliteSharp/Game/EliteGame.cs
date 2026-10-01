@@ -70,7 +70,8 @@ public sealed partial class EliteGame
     /// <summary>
     /// Create the game. The missions are loaded from Assets/Missions, and the
     /// game's text and system descriptions from Data/Strings (in the language
-    /// in the options), unless they are given.
+    /// in the options), and the markets and equipment prices from
+    /// Data/trading.yml, unless they are given.
     /// </summary>
     public EliteGame(
         Hud hud,
@@ -80,11 +81,14 @@ public sealed partial class EliteGame
         Gamepad? gamepad = null,
         MissionCatalogue? missions = null,
         GameStrings? strings = null,
-        DescriptionGrammar? descriptions = null)
+        DescriptionGrammar? descriptions = null,
+        TradingData? trading = null)
     {
         _missions = new MissionRuntime(missions ?? MissionLoader.Load(MissionLoader.DefaultFolder));
         _strings = strings ?? GameStrings.Load(options.Language);
         _descriptions = descriptions ?? DescriptionGrammar.Load(options.Language);
+        _trading = trading ?? TradingData.Load();
+        CheckTradingNames(_trading);
         _gamepad = gamepad;
         _hud = hud;
         _keyboard = keyboard;
@@ -500,7 +504,7 @@ public sealed partial class EliteGame
     // ------------------------------------------------------------------------
 
     /// <summary>NAME: the commander's name.</summary>
-    private string CommanderName = "JAMESON";
+    private string CommanderName = DefaultCommander.Name;
 
     /// <summary>TP: the mission status.</summary>
     private int _missionStatus;

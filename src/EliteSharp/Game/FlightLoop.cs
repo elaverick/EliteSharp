@@ -963,6 +963,9 @@ public sealed partial class EliteGame
         RandomiseBombBolt();
     }
 
+    /// <summary>BOMBPOS: the base x-coordinates of the points of the energy bomb's lightning bolt.</summary>
+    private static readonly int[] BombBoltBaseX = [0xE0, 0xE0, 0xC0, 0xA0, 0x80, 0x60, 0x40, 0x20, 0x00, 0x00];
+
     /// <summary>BOMBON: randomise and draw the energy bomb's lightning bolt.</summary>
     private void RandomiseBombBolt()
     {
@@ -970,7 +973,7 @@ public sealed partial class EliteGame
         {
             int random = NextRandom();
             _bombBoltY[point] = ((random & 127) + 3 + (_carry ? 1 : 0)) & 0xFF;
-            _bombBoltX[point] = ((_randomX & 31) + GameData.BombBaseX[point]) & 0xFF;
+            _bombBoltX[point] = ((_randomX & 31) + BombBoltBaseX[point]) & 0xFF;
         }
 
         _bombBoltX[9] = 0;

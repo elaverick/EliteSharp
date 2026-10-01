@@ -1,0 +1,60 @@
+# The goods in the markets and the equipment for sale, as in the original
+# (its QQ23 and PRXS tables). Their names are in Strings/<language>-strings.yml
+# (as "commodities.food", "equipment.missile" and so on).
+#
+# A commodity's price and quantity in a system's market are worked out from
+# these, the system's economy (0 for rich industrial to 7 for poor
+# agricultural) and a random number for the market (which changes each time
+# we arrive in a system):
+#
+#   price (in credits) = (base_price + (random AND fluctuation)
+#                         + economic_factor * economy) * 4 / 10
+#
+#   quantity = (base_quantity + (random AND fluctuation)
+#               - economic_factor * economy) AND 63, or 0 if that is negative
+#
+# with the calculations wrapping at 256, as in the original (and the quantity
+# of alien items is always 0, as the original doesn't work it out). So a negative
+# economic_factor makes something cheaper and more plentiful in agricultural
+# economies, and a positive one makes it cheaper and more plentiful in
+# industrial ones. The unit is t (tonnes), kg or g.
+#
+# The commodities must be in this order, as it is the order of the market
+# screens and of the cargo in a saved commander.
+
+commodities:
+  - { name: food,         base_price: 19,  economic_factor: -2,  unit: t,  base_quantity: 6,   fluctuation: 0x01 }
+  - { name: textiles,     base_price: 20,  economic_factor: -1,  unit: t,  base_quantity: 10,  fluctuation: 0x03 }
+  - { name: radioactives, base_price: 65,  economic_factor: -3,  unit: t,  base_quantity: 2,   fluctuation: 0x07 }
+  - { name: slaves,       base_price: 40,  economic_factor: -5,  unit: t,  base_quantity: -30, fluctuation: 0x1F }
+  - { name: liquor_wines, base_price: 83,  economic_factor: -5,  unit: t,  base_quantity: -5,  fluctuation: 0x0F }
+  - { name: luxuries,     base_price: 196, economic_factor: 8,   unit: t,  base_quantity: 54,  fluctuation: 0x03 }
+  - { name: narcotics,    base_price: 235, economic_factor: 29,  unit: t,  base_quantity: 8,   fluctuation: 0x78 }
+  - { name: computers,    base_price: 154, economic_factor: 14,  unit: t,  base_quantity: 56,  fluctuation: 0x03 }
+  - { name: machinery,    base_price: 117, economic_factor: 6,   unit: t,  base_quantity: 40,  fluctuation: 0x07 }
+  - { name: alloys,       base_price: 78,  economic_factor: 1,   unit: t,  base_quantity: 17,  fluctuation: 0x1F }
+  - { name: firearms,     base_price: 124, economic_factor: 13,  unit: t,  base_quantity: 29,  fluctuation: 0x07 }
+  - { name: furs,         base_price: 176, economic_factor: -9,  unit: t,  base_quantity: -36, fluctuation: 0x3F }
+  - { name: minerals,     base_price: 32,  economic_factor: -1,  unit: t,  base_quantity: 53,  fluctuation: 0x03 }
+  - { name: gold,         base_price: 97,  economic_factor: -1,  unit: kg, base_quantity: 66,  fluctuation: 0x07 }
+  - { name: platinum,     base_price: 171, economic_factor: -2,  unit: kg, base_quantity: 55,  fluctuation: 0x1F }
+  - { name: gem_stones,   base_price: 45,  economic_factor: -1,  unit: g,  base_quantity: -6,  fluctuation: 0x0F }
+  - { name: alien_items,  base_price: 53,  economic_factor: 15,  unit: t,  base_quantity: -64, fluctuation: 0x07 }
+
+# The prices of the equipment on the Equip Ship screen, in credits, in the
+# order of the screen (after fuel, whose price is worked out from how much
+# fuel we need)
+equipment:
+  missile: 30.0
+  large_cargo_bay: 400.0
+  ecm: 600.0
+  extra_pulse_lasers: 400.0
+  extra_beam_lasers: 1000.0
+  fuel_scoops: 525.0
+  escape_pod: 1000.0
+  energy_bomb: 900.0
+  energy_unit: 1500.0
+  docking_computers: 1000.0
+  galactic_hyperspace: 5000.0
+  military_laser: 6000.0
+  mining_laser: 800.0

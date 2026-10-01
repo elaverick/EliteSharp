@@ -548,10 +548,10 @@ public sealed partial class EliteGame
         // item (alien items) is not included
         for (int item = 0; item < 16; item++)
         {
-            int priceIndex = item * 4;
-            _scratch[1] = GameData.MarketPrices[priceIndex + 1];
+            var commodity = _trading.Commodities[item];
+            _scratch[1] = commodity.FactorAndUnit;
             CalculateEconomicFactor();
-            int availability = (GameData.MarketPrices[priceIndex + 3] & _marketRandom) + GameData.MarketPrices[priceIndex + 2];
+            int availability = (commodity.Fluctuation & _marketRandom) + commodity.BaseQuantity;
             if ((_scratch[1] & 0x80) != 0)
             {
                 availability += _scratch[3];

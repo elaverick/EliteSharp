@@ -18,12 +18,14 @@ var options = GameOptions.Parse(args);
 MissionCatalogue missions;
 GameStrings strings;
 DescriptionGrammar descriptions;
+TradingData trading;
 try
 {
     ShipCatalogue.Reload();
     missions = MissionLoader.Load(MissionLoader.DefaultFolder);
     strings = GameStrings.Load(options.Language);
     descriptions = DescriptionGrammar.Load(options.Language);
+    trading = TradingData.Load();
 }
 catch (Exception e) when (e is InvalidDataException or IOException or MissionLoadException)
 {
@@ -38,7 +40,7 @@ var hud = new Hud(exchange);
 var keyboard = new BbcKeyboard();
 using var sound = options.Sound ? SoundEngine.TryCreate() : null;
 using var gamepad = options.Gamepad ? Gamepad.TryCreate(keyboard) : null;
-var game = new EliteGame(hud, keyboard, sound, options, gamepad, missions, strings, descriptions);
+var game = new EliteGame(hud, keyboard, sound, options, gamepad, missions, strings, descriptions, trading);
 
 var windowOptions = WindowOptions.DefaultVulkan with
 {

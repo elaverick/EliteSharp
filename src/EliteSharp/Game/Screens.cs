@@ -968,9 +968,9 @@ public sealed partial class EliteGame
         PrintText(CommodityKeys[item]);
         _cursorX = 14;
 
-        int x = _scratch[0];
-        _scratch[1] = GameData.MarketPrices[x + 1];
-        _itemPrice = ((_marketRandom & GameData.MarketPrices[x + 3]) + GameData.MarketPrices[x]) & 0xFF;
+        var commodity = _trading.Commodities[item];
+        _scratch[1] = commodity.FactorAndUnit;
+        _itemPrice = ((_marketRandom & commodity.Fluctuation) + commodity.BasePrice) & 0xFF;
         PrintUnits();
         CalculateEconomicFactor();
 
@@ -1261,7 +1261,7 @@ public sealed partial class EliteGame
                     break;
                 }
 
-                _scratch[1] = GameData.MarketPrices[item * 4 + 1];
+                _scratch[1] = _trading.Commodities[item].FactorAndUnit;
                 PrintSentenceNewline();
                 PrintText(CommodityKeys[_itemNumber]);
                 _cursorX = 14;
@@ -1315,8 +1315,27 @@ public sealed partial class EliteGame
     // Buying equipment
     // ------------------------------------------------------------------------
 
-    /// <summary>PRXS: the price of each item of equipment.</summary>
-    private int ListedEquipmentPrice(int item) => GameData.EquipmentPrices[item * 2] | (GameData.EquipmentPrices[item * 2 + 1] << 8);
+    /// <summary>The goods in the markets and the prices of the equipment for sale (see Data/trading.yml).</summary>
+    private readonly TradingData _trading;
+
+    /// <summary>
+    /// Check that the trading data has the commodities and equipment that the
+    /// game has names for, in the same order.
+    /// </summary>
+    private static void CheckTradingNames(TradingData trading)
+    {
+        var commodities = trading.Commodities.Select(c => "commodities." + c.Name);
+        var equipment = trading.EquipmentPrices.Select(e => "equipment." + e.Name);
+        if (!commodities.SequenceEqual(CommodityKeys) || !equipment.SequenceEqual(EquipmentKeys.Skip(1)))
+        {
+            throw new InvalidDataException(
+                "The trading data must have these commodities and equipment, in this order: "
+                + string.Join(", ", CommodityKeys.Concat(EquipmentKeys.Skip(1))));
+        }
+    }
+
+    /// <summary>PRXS: the price of an item of equipment after fuel (see Data/trading.yml), in tenths of a credit.</summary>
+    private int ListedEquipmentPrice(int item) => _trading.EquipmentPrices[item - 1].Price;
 
     /// <summary>The fuel price, which EQSHP stores in PRXS+0.</summary>
     private int _fuelPrice = 1;

@@ -60,7 +60,8 @@ and the text it generates for each system (the "goat soup" descriptions and
 the species) is in `en-descriptions.yml` beside it. The build copies them to
 `Data\Strings` next to `EliteSharp.exe`. A translation is another pair of
 files named after its language (such as `fr-strings.yml` and
-`fr-descriptions.yml`), which `--language fr` selects.
+`fr-descriptions.yml`), which `--language fr` selects. The goods in the
+markets and the equipment prices are in `src\EliteSharp\Data\trading.yml`.
 
 ## Starting out
 

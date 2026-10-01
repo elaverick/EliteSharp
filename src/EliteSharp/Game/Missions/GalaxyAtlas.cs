@@ -33,13 +33,13 @@ public static class GalaxyAtlas
 
     private static StarSystem[] BuildGalaxy(int galaxy)
     {
-        // The seeds for galaxy 1 are in the default commander (after the name
-        // and the mission byte and coordinates), and each galaxy's seeds are
-        // the previous galaxy's seeds with each byte rotated left
+        // The seeds for galaxy 1 are the default commander's, and each
+        // galaxy's seeds are the previous galaxy's seeds with each byte
+        // rotated left
         var seeds = new int[6];
         for (int i = 0; i < 6; i++)
         {
-            int value = GameData.DefaultCommander[8 + 3 + i];
+            int value = DefaultCommander.GalaxySeeds[i];
             for (int g = 0; g < galaxy; g++)
             {
                 value = ((value << 1) | (value >> 7)) & 0xFF;

@@ -1,5 +1,4 @@
 using System.Text;
-using EliteSharp.Data;
 
 namespace EliteSharp.Game;
 
@@ -33,11 +32,33 @@ public sealed partial class EliteGame
         return folder;
     }
 
-    /// <summary>JAMESON: restore the default JAMESON commander into NA%.</summary>
+    /// <summary>
+    /// JAMESON: restore the default commander into NA%, laid out as a saved
+    /// commander (see <see cref="CopyCommanderToSaveBlock"/>), with its checksums.
+    /// </summary>
     private void RestoreDefaultCommander()
     {
         Array.Clear(_savedCommander);
-        Array.Copy(GameData.DefaultCommander, _savedCommander, Math.Min(GameData.DefaultCommander.Length, _savedCommander.Length));
+        Encoding.ASCII.GetBytes(DefaultCommander.Name, _savedCommander);
+        _savedCommander[DefaultCommander.Name.Length] = 13;
+
+        int b = 8;
+        _savedCommander[b + 1] = DefaultCommander.SystemX;
+        _savedCommander[b + 2] = DefaultCommander.SystemY;
+        DefaultCommander.GalaxySeeds.CopyTo(_savedCommander.AsSpan(b + 3));
+        _savedCommander[b + 11] = DefaultCommander.Cash >> 8;
+        _savedCommander[b + 12] = DefaultCommander.Cash & 0xFF;
+        _savedCommander[b + 13] = DefaultCommander.Fuel;
+        _savedCommander[b + 16] = DefaultCommander.FrontLaser;
+        _savedCommander[b + 22] = DefaultCommander.CargoCapacity;
+        _savedCommander[b + 51] = DefaultCommander.Missiles;
+        DefaultCommander.MarketAvailability.CopyTo(_savedCommander.AsSpan(b + 53));
+        _savedCommander[b + 73] = DefaultCommander.SaveCount;
+
+        // CHK and CHK2
+        int check = CalculateChecksum();
+        _savedCommander[b + 75] = (byte)check;
+        _savedCommander[b + 74] = (byte)(check ^ 0xA9);
     }
 
     /// <summary>CHECK: calculate the checksum of the commander data block in NA%.</summary>

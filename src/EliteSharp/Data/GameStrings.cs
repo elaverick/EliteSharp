@@ -1,3 +1,4 @@
+using EliteSharp.Rendering;
 using YamlDotNet.Core;
 using YamlDotNet.RepresentationModel;
 
@@ -113,8 +114,8 @@ public sealed class GameStrings
 
     /// <summary>
     /// Split a string into its text and placeholders, checking that the game
-    /// can print it (the font has the printable ASCII characters, and \n is a
-    /// newline and \a is a beep).
+    /// can print it (each character must be in the font, apart from \n, which
+    /// is a newline, and \a, which is a beep).
     /// </summary>
     private static List<TextPart> SplitText(string text, string where)
     {
@@ -141,9 +142,9 @@ public sealed class GameStrings
                 i = end;
                 start = end + 1;
             }
-            else if (c is not ('\n' or '\a') && (c < ' ' || c > '~' || c == '}'))
+            else if (c is not ('\n' or '\a') && (c == '}' || !HudAtlas.InFont(c)))
             {
-                throw new InvalidDataException($"{where} contains '{c}', which the game can't print (its font only has the printable ASCII characters)");
+                throw new InvalidDataException($"{where} contains '{c}', which the game can't print (it isn't in the font, Assets/Images/font.png)");
             }
         }
 

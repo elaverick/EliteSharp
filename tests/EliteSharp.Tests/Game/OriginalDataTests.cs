@@ -7,7 +7,7 @@ namespace EliteSharp.Tests.Game;
 
 /// <summary>
 /// The data that used to be lifted from the original's binaries into
-/// GameData.g.cs, and is now in Assets/trading.yml or in the game's code, must be
+/// GameData.g.cs, and is now in Assets/trading.yml, Assets/Images or in the game's code, must be
 /// exactly the original's, so each is checked against the original bytes.
 /// </summary>
 public sealed class OriginalDataTests
@@ -82,13 +82,41 @@ public sealed class OriginalDataTests
         }
     }
 
-    [Theory]
-    [InlineData(8, 8, "ecm-bulb.png (pixel 0, 0): each pixel must be transparent, or one of the dashboard's colours")]
-    [InlineData(9, 8, "ecm-bulb.png: the image must be 8 by 8 pixels, not 9 by 8")]
-    public void AMistakeInAnImageIsReported(int width, int height, string expected)
+    [Fact]
+    public void TheFontIsTheOriginals()
     {
-        // A black bulb (black isn't one of the dashboard's colours), or one
-        // that is the wrong size
+        // P.FONT: the MOS character bitmaps for ASCII 32-127, 8 bytes each,
+        // one bit per pixel (the leftmost pixel in bit 7)
+        var texels = HudAtlas.Texels;
+        var font = File.ReadAllBytes(Path.Combine(OriginalSourceFolder(), "1-source-files", "fonts", "P.FONT.bin"));
+        for (int index = 0; index < 96; index++)
+        {
+            var glyph = HudAtlas.Glyph((char)(' ' + index));
+            Assert.NotNull(glyph);
+            for (int y = 0; y < 8; y++)
+            {
+                for (int x = 0; x < 8; x++)
+                {
+                    byte ink = (font[index * 8 + y] & (0x80 >> x)) != 0 ? HudAtlas.QuadInk : (byte)Ink.None;
+                    Assert.Equal(ink, texels[(glyph.Value.Y + y) * HudAtlas.Width + glyph.Value.X + x]);
+                }
+            }
+        }
+
+        // Nothing after ASCII is in the font yet
+        Assert.False(HudAtlas.InFont('é'));
+        Assert.Null(HudAtlas.Glyph('é'));
+    }
+
+    [Theory]
+    [InlineData("ecm-bulb.png", 8, 8, "ecm-bulb.png (pixel 0, 0): each pixel must be transparent, or one of the dashboard's colours")]
+    [InlineData("ecm-bulb.png", 9, 8, "ecm-bulb.png: the image must be 8 by 8 pixels, not 9 by 8")]
+    [InlineData("font.png", 256, 8, "font.png (pixel 0, 0): each pixel must be transparent, or white")]
+    [InlineData("font.png", 256, 12, "font.png: the image must be 256 pixels wide (32 characters), and a whole number of 8-pixel rows")]
+    public void AMistakeInAnImageIsReported(string image, int width, int height, string expected)
+    {
+        // A black image (black isn't one of the image's colours), or one that
+        // is the wrong size
         string folder = Path.Combine(Path.GetTempPath(), $"elite-images-{Guid.NewGuid():N}");
         Directory.CreateDirectory(folder);
         try
@@ -98,7 +126,7 @@ public sealed class OriginalDataTests
                 File.Copy(file, Path.Combine(folder, Path.GetFileName(file)));
             }
 
-            PngWriter.Write(Path.Combine(folder, "ecm-bulb.png"), width, height, new byte[width * height * 3]);
+            PngWriter.Write(Path.Combine(folder, image), width, height, new byte[width * height * 3]);
             var e = Assert.Throws<InvalidDataException>(() => HudAtlas.Build(folder));
             Assert.StartsWith(expected, e.Message);
         }

@@ -14,7 +14,8 @@
 # quirks (such as "E.C.M.System", "Tech.Level" and the two spaces in
 # "Military  Laser"), so the game looks as it did.
 #
-#   - The font has the printable ASCII characters (so no accents).
+#   - Each character must be in the font (Assets/Images/font.png), which has
+#     the printable ASCII characters (so no accents, yet).
 #   - \n is a newline, and \a is a beep.
 #   - These placeholders print a value:
 #

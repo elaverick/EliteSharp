@@ -3,7 +3,7 @@ using EliteSharp.Data;
 namespace EliteSharp.Tests.Game;
 
 /// <summary>
-/// The system descriptions file (Data/Strings/en-descriptions.yml) loads, and
+/// The system descriptions file (Assets/Strings/en-descriptions.yml) loads, and
 /// a mistake in a descriptions file is reported when the game starts.
 /// </summary>
 public sealed class DescriptionGrammarTests

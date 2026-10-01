@@ -4,7 +4,7 @@ using EliteSharp.Game.Missions;
 namespace EliteSharp.Game;
 
 /// <summary>
-/// Text: printing characters, the game's text (see Data/Strings), the system
+/// Text: printing characters, the game's text (see Assets/Strings), the system
 /// descriptions, numbers, justified text and in-flight messages.
 /// </summary>
 public sealed partial class EliteGame
@@ -319,7 +319,7 @@ public sealed partial class EliteGame
     /// <summary>
     /// TT27: print a two-letter token (128-159, as in the system names), a
     /// control code or a character. The original's recursive tokens are now
-    /// the game's text (see Data/Strings), so there are none to print.
+    /// the game's text (see Assets/Strings), so there are none to print.
     /// </summary>
     private void PrintToken(int token)
     {
@@ -369,7 +369,7 @@ public sealed partial class EliteGame
 
         if (token >= 96 || (token >= 14 && token < 32))
         {
-            throw new ArgumentOutOfRangeException(nameof(token), token, "The original's recursive tokens are now the game's text (see Data/Strings)");
+            throw new ArgumentOutOfRangeException(nameof(token), token, "The original's recursive tokens are now the game's text (see Assets/Strings)");
         }
 
         int textCase = _textCase;
@@ -441,7 +441,7 @@ public sealed partial class EliteGame
     {
         if (token >= 160)
         {
-            throw new ArgumentOutOfRangeException(nameof(token), token, "The original's recursive tokens are now the game's text (see Data/Strings)");
+            throw new ArgumentOutOfRangeException(nameof(token), token, "The original's recursive tokens are now the game's text (see Assets/Strings)");
         }
 
         foreach (char letter in SystemNames.LetterPairs[token & 31])
@@ -457,7 +457,7 @@ public sealed partial class EliteGame
     /// <summary>
     /// DETOK2: print a character or control code of extended text (the game's
     /// text and the system descriptions). The original's extended tokens are
-    /// now the system descriptions (see Data/Strings), so there are none to
+    /// now the system descriptions (see Assets/Strings), so there are none to
     /// print.
     /// </summary>
     private void PrintExtendedCharacter(int character)
@@ -471,7 +471,7 @@ public sealed partial class EliteGame
         // DT8
         if (character >= '[')
         {
-            throw new ArgumentOutOfRangeException(nameof(character), character, "The original's extended tokens are now the system descriptions (see Data/Strings)");
+            throw new ArgumentOutOfRangeException(nameof(character), character, "The original's extended tokens are now the system descriptions (see Assets/Strings)");
         }
 
         PrintLetter(character);
@@ -642,7 +642,7 @@ public sealed partial class EliteGame
     // System descriptions
     // ------------------------------------------------------------------------
 
-    /// <summary>The text that the game generates for the systems, in the chosen language (see Data/Strings).</summary>
+    /// <summary>The text that the game generates for the systems, in the chosen language (see Assets/Strings).</summary>
     private readonly DescriptionGrammar _descriptions;
 
     /// <summary>Print some description text, as DETOK prints an extended token.</summary>
@@ -689,7 +689,7 @@ public sealed partial class EliteGame
     // ------------------------------------------------------------------------
 
     /// <summary>
-    /// The game's fixed text, in the chosen language (see Data/Strings). The
+    /// The game's fixed text, in the chosen language (see Assets/Strings). The
     /// original keeps this text in its token tables, along with the text that
     /// it generates (see <see cref="_descriptions"/>).
     /// </summary>

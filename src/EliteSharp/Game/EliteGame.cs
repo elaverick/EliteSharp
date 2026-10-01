@@ -69,9 +69,9 @@ public sealed partial class EliteGame
 
     /// <summary>
     /// Create the game. The missions are loaded from Assets/Missions, and the
-    /// game's text and system descriptions from Data/Strings (in the language
+    /// game's text and system descriptions from Assets/Strings (in the language
     /// in the options), and the markets and equipment prices from
-    /// Data/trading.yml, unless they are given.
+    /// Assets/trading.yml, unless they are given.
     /// </summary>
     public EliteGame(
         Hud hud,

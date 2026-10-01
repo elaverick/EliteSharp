@@ -68,7 +68,7 @@ public sealed unsafe class HudRenderer : IDisposable
     {
         _gpu = gpu;
         var vk = gpu.Vk;
-        _atlas = gpu.CreateByteTexture(HudAtlas.Width, HudAtlas.Height, HudAtlas.Build());
+        _atlas = gpu.CreateByteTexture(HudAtlas.Width, HudAtlas.Height, HudAtlas.Texels);
 
         // The inks (binding 0) and the atlas (binding 1)
         var bindings = stackalloc DescriptorSetLayoutBinding[2];

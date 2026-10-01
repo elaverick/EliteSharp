@@ -33,7 +33,7 @@ public sealed class GameOptions
     public string DataFolder { get; set; } =
         Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData), "EliteSharp");
 
-    /// <summary>The language of the game's text (the strings file is Data/Strings/&lt;language&gt;-strings.yml).</summary>
+    /// <summary>The language of the game's text (the strings file is Assets/Strings/&lt;language&gt;-strings.yml).</summary>
     public string Language { get; set; } = GameStrings.DefaultLanguage;
 
     public static GameOptions Parse(string[] args)

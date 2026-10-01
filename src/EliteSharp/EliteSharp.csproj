@@ -9,12 +9,9 @@
   </PropertyGroup>
 
   <ItemGroup>
-    <!-- The ship attributes (JSON) and models (glTF) are loaded at run time -->
+    <!-- Everything the game loads at run time: the ships, missions, images,
+         markets and text (in each language) -->
     <None Include="Assets\**\*" CopyToOutputDirectory="PreserveNewest" />
-    <!-- The game's fixed text is loaded at run time, in the language chosen on the command line -->
-    <None Include="Data\Strings\*.yml" CopyToOutputDirectory="PreserveNewest" />
-    <!-- The markets and equipment prices are loaded at run time -->
-    <None Include="Data\*.yml" CopyToOutputDirectory="PreserveNewest" />
   </ItemGroup>
 
   <ItemGroup>
@@ -27,6 +24,7 @@
     <PackageReference Include="Silk.NET.Vulkan" Version="2.23.0" />
     <PackageReference Include="Silk.NET.Vulkan.Extensions.KHR" Version="2.23.0" />
     <PackageReference Include="Silk.NET.Windowing" Version="2.23.0" />
+    <PackageReference Include="StbImageSharp" Version="2.30.16" />
     <PackageReference Include="YamlDotNet" Version="18.1.0" />
   </ItemGroup>
 

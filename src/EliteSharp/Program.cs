@@ -13,8 +13,8 @@ using Silk.NET.Windowing;
 
 var options = GameOptions.Parse(args);
 
-// Load the ship assets, the missions and the game's text before anything
-// else, so any problems are reported straight away
+// Load the ship assets, the missions, the game's text and the HUD's images
+// before anything else, so any problems are reported straight away
 MissionCatalogue missions;
 GameStrings strings;
 DescriptionGrammar descriptions;
@@ -26,6 +26,7 @@ try
     strings = GameStrings.Load(options.Language);
     descriptions = DescriptionGrammar.Load(options.Language);
     trading = TradingData.Load();
+    _ = HudAtlas.Texels;
 }
 catch (Exception e) when (e is InvalidDataException or IOException or MissionLoadException)
 {

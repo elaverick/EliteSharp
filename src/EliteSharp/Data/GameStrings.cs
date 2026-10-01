@@ -5,7 +5,7 @@ namespace EliteSharp.Data;
 
 /// <summary>
 /// The game's fixed text in one language, loaded from a strings file (such as
-/// Data/Strings/en-strings.yml), and looked up by key, such as
+/// Assets/Strings/en-strings.yml), and looked up by key, such as
 /// "equipment.fuel" for the "fuel" string in the "equipment" section.
 /// </summary>
 public sealed class GameStrings
@@ -29,7 +29,7 @@ public sealed class GameStrings
     }
 
     /// <summary>The folder containing the strings files.</summary>
-    public static string DefaultFolder => Path.Combine(AppContext.BaseDirectory, "Data", "Strings");
+    public static string DefaultFolder => Path.Combine(AppContext.BaseDirectory, "Assets", "Strings");
 
     /// <summary>The language, such as "en".</summary>
     public string Language { get; }

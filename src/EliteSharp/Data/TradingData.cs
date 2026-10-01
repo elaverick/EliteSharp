@@ -4,7 +4,7 @@ using YamlDotNet.RepresentationModel;
 
 namespace EliteSharp.Data;
 
-/// <summary>A commodity in the markets (see Data/trading.yml).</summary>
+/// <summary>A commodity in the markets (see Assets/trading.yml).</summary>
 /// <param name="Name">The commodity's name (its text is "commodities.&lt;name&gt;" in the strings).</param>
 /// <param name="BasePrice">The base price, in units of 0.4 credits.</param>
 /// <param name="EconomicFactor">How much the price rises (and the quantity falls) for each step of the economy from rich industrial to poor agricultural.</param>
@@ -24,7 +24,7 @@ public sealed record Commodity(string Name, int BasePrice, int EconomicFactor, i
 
 /// <summary>
 /// The goods in the markets and the prices of the equipment for sale, from
-/// Data/trading.yml (the original's QQ23 and PRXS tables).
+/// Assets/trading.yml (the original's QQ23 and PRXS tables).
 /// </summary>
 public sealed class TradingData
 {
@@ -40,7 +40,7 @@ public sealed class TradingData
     }
 
     /// <summary>The trading data file.</summary>
-    public static string DefaultPath => Path.Combine(AppContext.BaseDirectory, "Data", "trading.yml");
+    public static string DefaultPath => Path.Combine(AppContext.BaseDirectory, "Assets", "trading.yml");
 
     /// <summary>The commodities, in the order of the market.</summary>
     public IReadOnlyList<Commodity> Commodities { get; }

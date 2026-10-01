@@ -5,7 +5,7 @@ namespace EliteSharp.Tests.Game;
 
 /// <summary>
 /// The game's fixed text comes from the strings file for the chosen language
-/// (Data/Strings/en-strings.yml for English), and is printed just as the
+/// (Assets/Strings/en-strings.yml for English), and is printed just as the
 /// original prints it from its token tables.
 /// </summary>
 public sealed class GameStringsTests

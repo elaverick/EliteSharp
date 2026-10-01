@@ -1378,7 +1378,7 @@ public sealed partial class EliteGame
     // Buying equipment
     // ------------------------------------------------------------------------
 
-    /// <summary>The goods in the markets and the prices of the equipment for sale (see Data/trading.yml).</summary>
+    /// <summary>The goods in the markets and the prices of the equipment for sale (see Assets/trading.yml).</summary>
     private readonly TradingData _trading;
 
     /// <summary>
@@ -1397,7 +1397,7 @@ public sealed partial class EliteGame
         }
     }
 
-    /// <summary>PRXS: the price of an item of equipment after fuel (see Data/trading.yml), in tenths of a credit.</summary>
+    /// <summary>PRXS: the price of an item of equipment after fuel (see Assets/trading.yml), in tenths of a credit.</summary>
     private int ListedEquipmentPrice(int item) => _trading.EquipmentPrices[item - 1].Price;
 
     /// <summary>The fuel price, which EQSHP stores in PRXS+0.</summary>

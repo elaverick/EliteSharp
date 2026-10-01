@@ -5,7 +5,7 @@ namespace EliteSharp.Data;
 
 /// <summary>
 /// The text that the game generates for the systems, in one language, from a
-/// descriptions file (such as Data/Strings/en-descriptions.yml): the "goat
+/// descriptions file (such as Assets/Strings/en-descriptions.yml): the "goat
 /// soup" system descriptions, the special descriptions of a few systems, and
 /// the species' names. See the file for how the descriptions are made.
 /// </summary>

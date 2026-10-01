@@ -55,13 +55,13 @@ without rebuilding the game (the build copies them from `src`). To run the tests
 `tests\EliteSharp.Tests` folder.
 
 The game's fixed text (the screen titles, the commodity and equipment names,
-the in-flight messages and so on) is in `src\EliteSharp\Data\Strings\en-strings.yml`,
+the in-flight messages and so on) is in `src\EliteSharp\Assets\Strings\en-strings.yml`,
 and the text it generates for each system (the "goat soup" descriptions and
 the species) is in `en-descriptions.yml` beside it. The build copies them to
-`Data\Strings` next to `EliteSharp.exe`. A translation is another pair of
+`Assets\Strings` next to `EliteSharp.exe`. A translation is another pair of
 files named after its language (such as `fr-strings.yml` and
 `fr-descriptions.yml`), which `--language fr` selects. The goods in the
-markets and the equipment prices are in `src\EliteSharp\Data\trading.yml`.
+markets and the equipment prices are in `src\EliteSharp\Assets\trading.yml`.
 
 ## Starting out
 
@@ -187,7 +187,7 @@ shortcut:
 | `--nosound` | Turn off the sound |
 | `--nopad` | Ignore any game controllers |
 | `--data <folder>` | Where to keep saved commanders |
-| `--language <code>` | The language of the game's text, from `Data\Strings\<code>-strings.yml` and `<code>-descriptions.yml` (default `en`) |
+| `--language <code>` | The language of the game's text, from `Assets\Strings\<code>-strings.yml` and `<code>-descriptions.yml` (default `en`) |
 
 Your saved commanders live in `%APPDATA%\EliteSharp`, in a folder for each of the
 game's "disc drives".

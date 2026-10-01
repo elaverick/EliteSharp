@@ -1,4 +1,5 @@
 using EliteSharp.Data;
+using StbImageSharp;
 
 namespace EliteSharp.Rendering;
 
@@ -9,10 +10,10 @@ namespace EliteSharp.Rendering;
 /// <see cref="QuadInk"/> means "the ink of the quad being drawn" (for the
 /// font, so text can be any colour), and anything else is that ink.
 ///
-/// The images are imported from the original's bitmaps when the game starts:
-/// the font is one bit per pixel, and the dashboard and bulbs are in screen
-/// mode 2, with two pixels (each two of the space view's pixels wide) in each
-/// byte.
+/// The font is imported from the original's bitmap (one bit per pixel), and
+/// the dashboard and bulbs are loaded from PNG images in Assets/Images, one
+/// pixel per texel, in the dashboard's colours (red, green, yellow, blue,
+/// magenta, cyan and white), with transparent pixels where nothing is drawn.
 /// </summary>
 public static class HudAtlas
 {
@@ -58,6 +59,15 @@ public static class HudAtlas
     /// <summary>A single texel of <see cref="QuadInk"/>, for solid rectangles.</summary>
     public static readonly AtlasRegion Solid = new(2 * BulbSize, BulbTop, 1, 1);
 
+    /// <summary>The folder containing the HUD's images.</summary>
+    public static string ImageFolder => Path.Combine(AppContext.BaseDirectory, "Assets", "Images");
+
+    private static readonly Lazy<byte[]> LoadedTexels = new(() => Build(ImageFolder));
+
+    /// <summary>The texture's texels, row by row, built from the images in <see cref="ImageFolder"/> the first time they are needed.</summary>
+    /// <exception cref="InvalidDataException">An image isn't valid (the message says which and why).</exception>
+    public static byte[] Texels => LoadedTexels.Value;
+
     /// <summary>The character's image, or null if it isn't in the font.</summary>
     public static AtlasRegion? Glyph(char character)
     {
@@ -71,8 +81,9 @@ public static class HudAtlas
         return new AtlasRegion(index % perRow * GlyphSize, FontTop + index / perRow * GlyphSize, GlyphSize, GlyphSize);
     }
 
-    /// <summary>Build the texture's texels, row by row.</summary>
-    public static byte[] Build()
+    /// <summary>Build the texture's texels, row by row, with the images in a folder.</summary>
+    /// <exception cref="InvalidDataException">An image isn't valid (the message says which and why).</exception>
+    public static byte[] Build(string imageFolder)
     {
         var texels = new byte[Width * Height];
 
@@ -93,59 +104,71 @@ public static class HudAtlas
             }
         }
 
-        // The dashboard, which is stored in character blocks of eight rows,
-        // each row of the block being one byte
-        var dashboard = GameData.Dashboard;
-        for (int row = 0; row < DashboardHeight / 8; row++)
-        {
-            for (int column = 0; column < Width / 4; column++)
-            {
-                for (int line = 0; line < 8; line++)
-                {
-                    PutMode2Byte(texels, column * 4, Dashboard.Y + row * 8 + line, dashboard[row * 512 + column * 8 + line]);
-                }
-            }
-        }
-
-        // The bulbs, which are two columns of eight bytes
-        foreach (var (bulb, bitmap) in new[] { (EcmBulb, GameData.EcmBulb), (StationBulb, GameData.StationBulb) })
-        {
-            for (int i = 0; i < 16; i++)
-            {
-                PutMode2Byte(texels, bulb.X + (i >> 3) * 4, bulb.Y + (i & 7), bitmap[i]);
-            }
-        }
+        PutImage(texels, Dashboard, Path.Combine(imageFolder, "dashboard.png"));
+        PutImage(texels, EcmBulb, Path.Combine(imageFolder, "ecm-bulb.png"));
+        PutImage(texels, StationBulb, Path.Combine(imageFolder, "station-bulb.png"));
 
         texels[Solid.Y * Width + Solid.X] = QuadInk;
         return texels;
     }
 
-    /// <summary>
-    /// The dashboard's ink for each of the colour numbers in its images (the
-    /// original's mode 2 logical colours, as its dashboard palette shows them).
-    /// </summary>
-    private static readonly Ink[] DashboardInks =
-    [
-        Ink.None, Ink.DashboardRed, Ink.DashboardGreen, Ink.DashboardYellow,
-        Ink.DashboardBlue, Ink.DashboardMagenta, Ink.DashboardCyan, Ink.DashboardWhite,
-        Ink.DashboardRed, Ink.DashboardRed, Ink.DashboardGreen, Ink.DashboardYellow,
-        Ink.DashboardBlue, Ink.DashboardMagenta, Ink.DashboardCyan, Ink.DashboardWhite,
-    ];
-
-    /// <summary>
-    /// Put the two pixels of a mode 2 byte into the texture (each two texels
-    /// wide). The first pixel's colour number is in bits 7, 5, 3 and 1, and
-    /// the second's in bits 6, 4, 2 and 0.
-    /// </summary>
-    private static void PutMode2Byte(byte[] texels, int x, int y, int value)
+    /// <summary>The inks for the colours in the images (as 0xRRGGBB), which are the dashboard's.</summary>
+    private static readonly Dictionary<int, Ink> ImageInks = new()
     {
-        for (int pixel = 0; pixel < 2; pixel++)
+        [0xFF0000] = Ink.DashboardRed,
+        [0x00FF00] = Ink.DashboardGreen,
+        [0xFFFF00] = Ink.DashboardYellow,
+        [0x0000FF] = Ink.DashboardBlue,
+        [0xFF00FF] = Ink.DashboardMagenta,
+        [0x00FFFF] = Ink.DashboardCyan,
+        [0xFFFFFF] = Ink.DashboardWhite,
+    };
+
+    /// <summary>Put an image into its region of the texture, as inks, checking its size and colours.</summary>
+    private static void PutImage(byte[] texels, AtlasRegion region, string path)
+    {
+        string file = Path.GetFileName(path);
+        if (!File.Exists(path))
         {
-            int bits = value << pixel;
-            int colour = ((bits >> 4) & 8) | ((bits >> 3) & 4) | ((bits >> 2) & 2) | ((bits >> 1) & 1);
-            byte ink = (byte)DashboardInks[colour];
-            texels[y * Width + x + pixel * 2] = ink;
-            texels[y * Width + x + pixel * 2 + 1] = ink;
+            throw new FileNotFoundException($"The HUD image '{path}' is missing", path);
+        }
+
+        ImageResult image;
+        try
+        {
+            image = ImageResult.FromMemory(File.ReadAllBytes(path), ColorComponents.RedGreenBlueAlpha);
+        }
+        catch (Exception e) when (e is not IOException)
+        {
+            throw new InvalidDataException($"{file}: the image can't be read ({e.Message})", e);
+        }
+
+        if (image.Width != region.Width || image.Height != region.Height)
+        {
+            throw new InvalidDataException($"{file}: the image must be {region.Width} by {region.Height} pixels, not {image.Width} by {image.Height}");
+        }
+
+        for (int y = 0; y < image.Height; y++)
+        {
+            for (int x = 0; x < image.Width; x++)
+            {
+                int i = (y * image.Width + x) * 4;
+                byte alpha = image.Data[i + 3];
+                int colour = image.Data[i] << 16 | image.Data[i + 1] << 8 | image.Data[i + 2];
+                Ink ink;
+                if (alpha == 0)
+                {
+                    ink = Ink.None;
+                }
+                else if (alpha != 255 || !ImageInks.TryGetValue(colour, out ink))
+                {
+                    throw new InvalidDataException(
+                        $"{file} (pixel {x}, {y}): each pixel must be transparent, or one of the dashboard's colours "
+                        + $"({string.Join(", ", ImageInks.Keys.Select(c => $"#{c:X6}"))}), not #{colour:X6} with alpha {alpha}");
+                }
+
+                texels[(region.Y + y) * Width + region.X + x] = (byte)ink;
+            }
         }
     }
 }

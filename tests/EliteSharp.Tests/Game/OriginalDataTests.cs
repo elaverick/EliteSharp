@@ -1,12 +1,13 @@
 using System.Reflection;
 using EliteSharp.Data;
 using EliteSharp.Game;
+using EliteSharp.Rendering;
 
 namespace EliteSharp.Tests.Game;
 
 /// <summary>
 /// The data that used to be lifted from the original's binaries into
-/// GameData.g.cs, and is now in Data/trading.yml or in the game's code, must be
+/// GameData.g.cs, and is now in Assets/trading.yml or in the game's code, must be
 /// exactly the original's, so each is checked against the original bytes.
 /// </summary>
 public sealed class OriginalDataTests
@@ -55,6 +56,103 @@ public sealed class OriginalDataTests
     }
 
     [Fact]
+    public void TheDashboardAndItsBulbsAreTheOriginals()
+    {
+        // The images, decoded as the original's mode 2 bitmaps: P.DIALS2P (7
+        // rows of character blocks, each 64 columns of 8 bytes), ECBT and SPBT
+        var texels = HudAtlas.Build(HudAtlas.ImageFolder);
+        var dashboard = File.ReadAllBytes(Path.Combine(OriginalSourceFolder(), "1-source-files", "images", "P.DIALS2P.bin"));
+        for (int row = 0; row < 7; row++)
+        {
+            for (int column = 0; column < 64; column++)
+            {
+                for (int line = 0; line < 8; line++)
+                {
+                    AssertMode2Byte(texels, column * 4, HudAtlas.Dashboard.Y + row * 8 + line, dashboard[row * 512 + column * 8 + line]);
+                }
+            }
+        }
+
+        foreach (var (bulb, bitmap) in new[] { (HudAtlas.EcmBulb, OriginalEcmBulb), (HudAtlas.StationBulb, OriginalStationBulb) })
+        {
+            for (int i = 0; i < 16; i++)
+            {
+                AssertMode2Byte(texels, bulb.X + (i >> 3) * 4, bulb.Y + (i & 7), bitmap[i]);
+            }
+        }
+    }
+
+    [Theory]
+    [InlineData(8, 8, "ecm-bulb.png (pixel 0, 0): each pixel must be transparent, or one of the dashboard's colours")]
+    [InlineData(9, 8, "ecm-bulb.png: the image must be 8 by 8 pixels, not 9 by 8")]
+    public void AMistakeInAnImageIsReported(int width, int height, string expected)
+    {
+        // A black bulb (black isn't one of the dashboard's colours), or one
+        // that is the wrong size
+        string folder = Path.Combine(Path.GetTempPath(), $"elite-images-{Guid.NewGuid():N}");
+        Directory.CreateDirectory(folder);
+        try
+        {
+            foreach (string file in Directory.GetFiles(HudAtlas.ImageFolder))
+            {
+                File.Copy(file, Path.Combine(folder, Path.GetFileName(file)));
+            }
+
+            PngWriter.Write(Path.Combine(folder, "ecm-bulb.png"), width, height, new byte[width * height * 3]);
+            var e = Assert.Throws<InvalidDataException>(() => HudAtlas.Build(folder));
+            Assert.StartsWith(expected, e.Message);
+        }
+        finally
+        {
+            Directory.Delete(folder, recursive: true);
+        }
+    }
+
+    /// <summary>
+    /// The dashboard's ink for each mode 2 colour number, as the original's
+    /// dashboard palette shows them (0 is nothing).
+    /// </summary>
+    private static readonly Ink[] Mode2Inks =
+    [
+        Ink.None, Ink.DashboardRed, Ink.DashboardGreen, Ink.DashboardYellow,
+        Ink.DashboardBlue, Ink.DashboardMagenta, Ink.DashboardCyan, Ink.DashboardWhite,
+        Ink.DashboardRed, Ink.DashboardRed, Ink.DashboardGreen, Ink.DashboardYellow,
+        Ink.DashboardBlue, Ink.DashboardMagenta, Ink.DashboardCyan, Ink.DashboardWhite,
+    ];
+
+    /// <summary>
+    /// Check the texels for the two pixels of a mode 2 byte, each two texels
+    /// wide (the first pixel's colour number is in bits 7, 5, 3 and 1, and the
+    /// second's in bits 6, 4, 2 and 0).
+    /// </summary>
+    private static void AssertMode2Byte(byte[] texels, int x, int y, int value)
+    {
+        for (int pixel = 0; pixel < 2; pixel++)
+        {
+            int bits = value << pixel;
+            int colour = ((bits >> 4) & 8) | ((bits >> 3) & 4) | ((bits >> 2) & 2) | ((bits >> 1) & 1);
+            byte ink = (byte)Mode2Inks[colour];
+            Assert.Equal(ink, texels[y * HudAtlas.Width + x + pixel * 2]);
+            Assert.Equal(ink, texels[y * HudAtlas.Width + x + pixel * 2 + 1]);
+        }
+    }
+
+    /// <summary>The folder of the original's source code and binaries, in the repository.</summary>
+    private static string OriginalSourceFolder()
+    {
+        for (var folder = new DirectoryInfo(AppContext.BaseDirectory); folder != null; folder = folder.Parent)
+        {
+            string candidate = Path.Combine(folder.FullName, "elite-source-code-bbc-master");
+            if (Directory.Exists(candidate))
+            {
+                return candidate;
+            }
+        }
+
+        throw new DirectoryNotFoundException("The original's source code (elite-source-code-bbc-master) isn't in the repository");
+    }
+
+    [Fact]
     public void TheEnergyBombsBoltIsTheOriginals() =>
         Assert.Equal(OriginalBombBaseX.Select(b => (int)b), StaticField<int[]>("BombBoltBaseX"));
 
@@ -66,7 +164,17 @@ public sealed class OriginalDataTests
         (T)typeof(EliteGame).GetField(name, BindingFlags.Static | BindingFlags.NonPublic)!.GetValue(null)!;
 
     // The original bytes, as assembled from the BBC Master source (QQ23, PRXS,
-    // NA%, BOMBPOS, TGINT and QQ16)
+    // NA%, BOMBPOS, TGINT, QQ16, ECBT and SPBT)
+
+    private static readonly byte[] OriginalEcmBulb =
+    [
+        0xFF, 0xFF, 0xAA, 0xFF, 0xFF, 0xAA, 0xFF, 0xFF, 0xFF, 0xFF, 0x00, 0xFF, 0xFF, 0x00, 0xFF, 0xFF,
+    ];
+
+    private static readonly byte[] OriginalStationBulb =
+    [
+        0xFF, 0xFF, 0xAA, 0xFF, 0xFF, 0x00, 0xFF, 0xFF, 0xFF, 0xFF, 0x00, 0xFF, 0xFF, 0x55, 0xFF, 0xFF,
+    ];
 
     private static readonly byte[] OriginalTwoLetterTokens =
     [

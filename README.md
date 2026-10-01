@@ -63,6 +63,11 @@ files named after its language (such as `fr-strings.yml` and
 `fr-descriptions.yml`), which `--language fr` selects. The goods in the
 markets and the equipment prices are in `src\EliteSharp\Assets\trading.yml`.
 
+The sound effects are OGG files in `src\EliteSharp\Assets\Sounds`, recorded
+from an emulation of the BBC Master's sound chip playing the original's sound
+data (`python tools/render_sounds.py` makes them again). You can replace any
+of them with your own OGG file, mono or stereo, with the same name.
+
 ## Starting out
 
 When the game starts, it asks if you want to load a saved commander. Press

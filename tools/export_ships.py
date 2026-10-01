@@ -45,9 +45,9 @@ import struct
 import sys
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
-import gen_data  # noqa: E402
+import original  # noqa: E402
 
-ROOT = gen_data.ROOT
+ROOT = original.ROOT
 OUT_DIR = os.path.join(ROOT, "src", "EliteSharp", "Assets", "Ships")
 MODEL_DIR = os.path.join(OUT_DIR, "Models")
 
@@ -139,7 +139,7 @@ SCANNER_COLOURS = {0x00: "none", 0x03: "red", 0x0C: "green", 0x0F: "yellow", 0x3
 
 def mem(addr):
     """Read a byte from the assembled game data at a BBC memory address."""
-    return gen_data.BDATA_BYTES[addr - gen_data.BDATA_BASE]
+    return original.BDATA_BYTES[addr - original.BDATA_BASE]
 
 
 def signed_coord(sign_bit, magnitude):
@@ -153,11 +153,11 @@ def parse_ships():
     reproduces the original's quirks exactly, such as the splinter's face data
     pointing 24 bytes past its own faces, into the Shuttle's blueprint.
     """
-    xx21 = gen_data.LABELS["XX21"]
+    xx21 = original.LABELS["XX21"]
     ships = {}
     for index, (label, _, _) in enumerate(SHIP_ORDER):
         base = mem(xx21 + index * 2) | (mem(xx21 + index * 2 + 1) << 8)
-        assert base == gen_data.LABELS[label], (label, hex(base), hex(gen_data.LABELS[label]))
+        assert base == original.LABELS[label], (label, hex(base), hex(original.LABELS[label]))
         h = [mem(base + i) for i in range(20)]
         edges_off = (h[16] << 8) | h[3]
         faces_off = (h[17] << 8) | h[4]
@@ -192,7 +192,7 @@ def parse_ships():
             for other, _, _ in SHIP_ORDER:
                 for part in ("EDGES", "FACES"):
                     key = f"{other}_{part}"
-                    if gen_data.LABELS.get(key) == target:
+                    if original.LABELS.get(key) == target:
                         return other
             return f"&{target:04X}"
 
@@ -656,11 +656,11 @@ def write_json(path, data):
 
 def main():
     ships = parse_ships()
-    shpcol = gen_data.code_bytes("shpcol", 34)
-    scacol = gen_data.code_bytes("scacol", 34)
-    newb = gen_data.data_bytes("E%", 33)
-    kwl = gen_data.data_bytes("KWL%", 33)
-    kwh = gen_data.data_bytes("KWH%", 33)
+    shpcol = original.code_bytes("shpcol", 34)
+    scacol = original.code_bytes("scacol", 34)
+    newb = original.data_bytes("E%", 33)
+    kwl = original.data_bytes("KWL%", 33)
+    kwh = original.data_bytes("KWH%", 33)
 
     os.makedirs(MODEL_DIR, exist_ok=True)
     for old in os.listdir(OUT_DIR):

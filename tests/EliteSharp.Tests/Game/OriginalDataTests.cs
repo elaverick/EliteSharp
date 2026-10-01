@@ -2,12 +2,13 @@ using System.Reflection;
 using EliteSharp.Data;
 using EliteSharp.Game;
 using EliteSharp.Rendering;
+using EliteSharp.Sound;
 
 namespace EliteSharp.Tests.Game;
 
 /// <summary>
 /// The data that used to be lifted from the original's binaries into
-/// GameData.g.cs, and is now in Assets/trading.yml, Assets/Images or in the game's code, must be
+/// GameData.g.cs, and is now in Assets/trading.yml, Assets/Images, Assets/Sounds or in the game's code, must be
 /// exactly the original's, so each is checked against the original bytes.
 /// </summary>
 public sealed class OriginalDataTests
@@ -210,6 +211,47 @@ public sealed class OriginalDataTests
     }
 
     [Fact]
+    public void TheSoundEffectsPrioritiesAndVoicesAreTheOriginals()
+    {
+        // SFXPR: each effect's priority, and bit 0 of SFXBT: whether it uses
+        // the noise voice (the rest of the original's sound data is in the
+        // recordings, which tools/render_sounds.py makes from it)
+        Assert.Equal(OriginalSoundPriorities.Select(b => (int)b), SoundEffects.All.Select(e => e.Priority));
+        Assert.Equal(OriginalSoundBits.Select(b => (b & 1) != 0), SoundEffects.All.Select(e => e.NoiseVoice));
+    }
+
+    [Fact]
+    public void TheSoundEffectsLoad()
+    {
+        // Each is rendered at 44.1 kHz in mono, and lasts a whole number of
+        // runs of the original's 50 Hz sound interrupt
+        var effects = SoundEffects.Load();
+        Assert.Equal(SoundEffects.All.Length, effects.Length);
+        Assert.All(effects, effect =>
+        {
+            Assert.Equal((1, 44100), (effect.Channels, effect.SampleRate));
+            Assert.NotEmpty(effect.Samples);
+            Assert.Equal(0, effect.Samples.Length % 882);
+        });
+    }
+
+    [Fact]
+    public void ASoundEffectThatCantBeReadIsReported()
+    {
+        string path = Path.Combine(Path.GetTempPath(), $"elite-sound-{Guid.NewGuid():N}.ogg");
+        File.WriteAllBytes(path, [1, 2, 3, 4]);
+        try
+        {
+            var e = Assert.Throws<InvalidDataException>(() => SoundEffects.LoadSamples(path));
+            Assert.StartsWith($"{Path.GetFileName(path)}: the sound can't be read", e.Message);
+        }
+        finally
+        {
+            File.Delete(path);
+        }
+    }
+
+    [Fact]
     public void TheEnergyBombsBoltIsTheOriginals() =>
         Assert.Equal(OriginalBombBaseX.Select(b => (int)b), StaticField<int[]>("BombBoltBaseX"));
 
@@ -221,7 +263,17 @@ public sealed class OriginalDataTests
         (T)typeof(EliteGame).GetField(name, BindingFlags.Static | BindingFlags.NonPublic)!.GetValue(null)!;
 
     // The original bytes, as assembled from the BBC Master source (QQ23, PRXS,
-    // NA%, BOMBPOS, TGINT, QQ16, HATB, ECBT and SPBT)
+    // NA%, BOMBPOS, TGINT, QQ16, HATB, SFXPR, SFXBT, ECBT and SPBT)
+
+    private static readonly byte[] OriginalSoundPriorities =
+    [
+        0x4B, 0x5B, 0x3F, 0xEB, 0xFF, 0x09, 0xFF, 0x8B, 0xCF, 0xE7, 0xFF, 0xEF,
+    ];
+
+    private static readonly byte[] OriginalSoundBits =
+    [
+        0x40, 0x10, 0x01, 0xFC, 0xF3, 0x19, 0xF9, 0x7C, 0xF1, 0xFA, 0xFE, 0xFE,
+    ];
 
     private static readonly byte[] OriginalHangarGroups =
     [

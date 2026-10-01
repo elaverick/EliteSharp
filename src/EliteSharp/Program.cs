@@ -13,12 +13,14 @@ using Silk.NET.Windowing;
 
 var options = GameOptions.Parse(args);
 
-// Load the ship assets, the missions, the game's text and the HUD's images
-// before anything else, so any problems are reported straight away
+// Load the ship assets, the missions, the game's text, the HUD's images and
+// the sound effects before anything else, so any problems are reported
+// straight away
 MissionCatalogue missions;
 GameStrings strings;
 DescriptionGrammar descriptions;
 TradingData trading;
+SoundSamples[]? soundEffects;
 try
 {
     ShipCatalogue.Reload();
@@ -27,6 +29,7 @@ try
     descriptions = DescriptionGrammar.Load(options.Language);
     trading = TradingData.Load();
     _ = HudAtlas.Texels;
+    soundEffects = options.Sound ? SoundEffects.Load() : null;
 }
 catch (Exception e) when (e is InvalidDataException or IOException or MissionLoadException)
 {
@@ -39,7 +42,7 @@ catch (Exception e) when (e is InvalidDataException or IOException or MissionLoa
 var exchange = new FrameExchange();
 var hud = new Hud(exchange);
 var keyboard = new BbcKeyboard();
-using var sound = options.Sound ? SoundEngine.TryCreate() : null;
+using var sound = soundEffects != null ? SoundEngine.TryCreate(soundEffects) : null;
 using var gamepad = options.Gamepad ? Gamepad.TryCreate(keyboard) : null;
 var game = new EliteGame(hud, keyboard, sound, options, gamepad, missions, strings, descriptions, trading);
 

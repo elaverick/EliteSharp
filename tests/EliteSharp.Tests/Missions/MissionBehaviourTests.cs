@@ -202,6 +202,7 @@ public sealed class MissionBehaviourTests
                 // The original only draws a random number while carrying the plans
                 bool carrying = (status & 0b1100) == 0b1000;
                 Assert.Equal(carrying ? [random] : Array.Empty<int>(), host.RandomNumbersDrawn);
+                Assert.Empty(host.TextRandomNumbersDrawn);
                 Assert.Equal(carrying && random >= 220 ? [$"spawnHostile {ShipType.Thargoid}"] : Array.Empty<string>(), host.Calls);
             }
         }
@@ -310,5 +311,6 @@ public sealed class MissionBehaviourTests
         // Only the random numbers for the words that are printed are drawn
         int used = expected == "TRY ERRIUS" ? 1 : randomNumbers.Length;
         Assert.Equal(randomNumbers.Take(used), host.RandomNumbersDrawn);
+        Assert.Equal(host.RandomNumbersDrawn, host.TextRandomNumbersDrawn);
     }
 }

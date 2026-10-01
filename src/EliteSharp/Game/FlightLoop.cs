@@ -397,7 +397,7 @@ public sealed partial class EliteGame
             else
             {
                 _cargo[_itemNumber] = (_cargo[_itemNumber] + 1) & 0xFF;
-                ShowMessage(_itemNumber + 208);
+                ShowMessage(CommodityKeys[_itemNumber]);
                 _currentShip.Behaviour |= 0x80;
             }
 
@@ -551,7 +551,7 @@ public sealed partial class EliteGame
                 if ((bounty & 0xFF) != 0)
                 {
                     AddCash(bounty);
-                    ShowMessage(0);
+                    ShowMessage("messages.bounty");
                 }
             }
 
@@ -649,7 +649,7 @@ public sealed partial class EliteGame
         {
             if (_energy <= 50)
             {
-                ShowMessage(100);
+                ShowMessage("messages.energy_low");
             }
 
             // The altimeter shows our height above the planet's surface, and
@@ -686,7 +686,7 @@ public sealed partial class EliteGame
         {
             if (_autoDocking != 0)
             {
-                ShowMessage(123);
+                ShowMessage("messages.docking_computers_on");
             }
 
             return;
@@ -735,7 +735,7 @@ public sealed partial class EliteGame
         _fuel = fuel;
 
         // MA34
-        ShowMessage(160);
+        ShowMessage("messages.fuel_scoops_on");
     }
 
     /// <summary>SHD: charge a shield by one unless it is already at 255.</summary>

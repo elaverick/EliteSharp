@@ -39,37 +39,37 @@ public sealed partial class EliteGame
         ShowTradingScreen(8);
         SelectNearestSystem();
         _cursorX = 7;
-        PrintTitle(126);
+        PrintTitle("status.title");
 
         if (_docked != 0)
         {
             // wearedocked
-            PrintExtendedToken(205);
+            PrintExtendedText("status.docked");
             PutNewline();
         }
         else
         {
-            int conditionToken = 230;
+            string condition = "status.condition_green";
             if (SlotType(2 + _junkCount) != 0)
             {
-                conditionToken += 1 + (_energy >= 128 ? 1 : 0);
+                condition = _energy >= 128 ? "status.condition_yellow" : "status.condition_red";
             }
 
             // st6
-            PrintTokenLine(conditionToken);
+            PrintTextLine(condition);
         }
 
-        PrintTokenSpace(125);
+        PrintTextSpace("status.legal_status");
 
-        int legal = 19;
+        string legal = "status.clean";
         if (_legalStatus != 0)
         {
-            legal += 1 + (_legalStatus >= 50 ? 1 : 0);
+            legal = _legalStatus >= 50 ? "status.fugitive" : "status.offender";
         }
 
         // st5
-        PrintTokenLine(legal);
-        PrintTokenSpace(16);
+        PrintTextLine(legal);
+        PrintTextSpace("status.rating");
 
         int rating;
         int tallyHi = _killTally >> 8;
@@ -91,31 +91,32 @@ public sealed partial class EliteGame
         }
 
         // st3
-        PrintTokenLine(rating + 21);
-        PrintTokenLineIndented(18);
+        PrintTextLine(RatingKeys[rating - 1]);
+        PrintTextLineIndented("status.equipment");
 
         if (_escapePod != 0)
         {
-            PrintTokenLineIndented(112);
+            PrintTextLineIndented("equipment.escape_pod");
         }
 
         if (_fuelScoops != 0)
         {
-            PrintTokenLineIndented(111);
+            PrintTextLineIndented("equipment.fuel_scoops");
         }
 
         if (_ecm != 0)
         {
-            PrintTokenLineIndented(108);
+            PrintTextLineIndented("equipment.ecm");
         }
 
         // stqv: the energy bomb, energy unit, docking computer and galactic hyperdrive
         int[] equipment = [_energyBomb, _energyUnit, _dockingComputer, _galacticHyperdrive];
+        string[] equipmentKeys = ["equipment.energy_bomb", "equipment.energy_unit", "equipment.docking_computers", "equipment.galactic_hyperspace"];
         for (int i = 0; i < 4; i++)
         {
             if (equipment[i] != 0)
             {
-                PrintTokenLineIndented(113 + i);
+                PrintTextLineIndented(equipmentKeys[i]);
             }
         }
 
@@ -127,26 +128,33 @@ public sealed partial class EliteGame
                 continue;
             }
 
-            PrintTokenSpace(96 + x);
-            int token = 103;
+            PrintTextSpace(ViewKeys[x]);
+            string name = "equipment.pulse_laser";
             if (laser == 128 + PulseLaserPower)
             {
-                token = 104;
+                name = "equipment.beam_laser";
             }
 
             if (laser == MilitaryLaserPower)
             {
-                token = 117;
+                name = "equipment.military_laser";
             }
 
             if (laser == MiningLaserPower)
             {
-                token = 118;
+                name = "equipment.mining_laser";
             }
 
-            PrintTokenLineIndented(token);
+            PrintTextLineIndented(name);
         }
     }
+
+    /// <summary>The combat ratings, from Harmless (1) to Elite (9), which the original prints as tokens 22 onwards.</summary>
+    private static readonly string[] RatingKeys =
+    [
+        "ratings.harmless", "ratings.mostly_harmless", "ratings.poor", "ratings.average", "ratings.above_average",
+        "ratings.competent", "ratings.dangerous", "ratings.deadly", "ratings.elite",
+    ];
 
     // ------------------------------------------------------------------------
     // Galaxy and system seeds
@@ -294,56 +302,59 @@ public sealed partial class EliteGame
     {
         ShowTradingScreen(1);
         _cursorX = 9;
-        PrintTitle(163);
+        PrintTitle("system_data.title");
         PrintParagraphBreak();
         PrintDistance();
 
-        PrintTokenColon(194);
+        PrintTextColon("system_data.economy");
         int economy = _selectedEconomy;
         if (((economy + 1) >> 1) == 2)
         {
             // TT70: economies 3 and 4 are "Mainly"
-            PrintToken(173);
+            PrintText("economy.mainly");
         }
         else
         {
             // TT71: the C flag from the CMP #2 is set for economies 5-7
-            PrintToken((economy >= 5 ? economy - 5 : economy) + 170);
+            PrintText(ProsperityKeys[economy >= 5 ? economy - 5 : economy]);
         }
 
         // TT72
-        PrintTokenParagraph((_selectedEconomy >> 2) + 168);
+        PrintTextParagraph((_selectedEconomy >> 2) == 0 ? "economy.industrial" : "economy.agricultural");
 
-        PrintTokenColon(162);
-        PrintTokenParagraph(_selectedGovernment + 177);
+        PrintTextColon("system_data.government");
+        PrintTextParagraph(GovernmentKeys[_selectedGovernment]);
 
-        PrintTokenColon(196);
+        PrintTextColon("system_data.tech_level");
         PrintNumber3(_selectedTechLevel + 1);
         PrintParagraphBreak();
 
-        PrintTokenColon(192);
+        PrintTextColon("system_data.population");
         PrintNumber3(_selectedPopulation, true);
-        PrintTokenParagraph(198);
+        PrintTextParagraph("system_data.billion");
 
         PrintToken('(');
         if ((_selectedSeeds[4] & 0x80) == 0)
         {
-            PrintToken(188);
+            PrintSpeciesWord(_descriptions.Species.HumanColonials);
         }
         else
         {
             // TT75: the species description
+            var names = _descriptions.Species;
             int b = _selectedSeeds[5] >> 2;
             if ((b & 7) < 3)
             {
-                PrintTokenSpace((b & 7) + 227);
+                PrintSpeciesWord(names.Size[b & 7]);
+                PrintSpace();
             }
 
             // TT205
             b >>= 3;
             if (b < 6)
             {
-                PrintTokenSpace(b + 230);
+                PrintSpeciesWord(names.Colour[b]);
+                PrintSpace();
             }
 
             // TT206
@@ -351,26 +362,27 @@ public sealed partial class EliteGame
             _scratch[0] = c;
             if (c < 6)
             {
-                PrintTokenSpace(c + 236);
+                PrintSpeciesWord(names.Appearance[c]);
+                PrintSpace();
             }
 
             // TT207
             int species = ((_selectedSeeds[5] & 3) + _scratch[0]) & 7;
-            PrintToken(species + 242);
+            PrintSpeciesWord(names.Kind[species]);
         }
 
         // TT76
         PrintToken('S');
         PrintTokenParagraph(')');
 
-        PrintTokenColon(193);
+        PrintTextColon("system_data.gross_productivity");
         PrintNumber5WithoutPoint(_selectedProductivity);
         PrintSpace();
         _textCase = 0;
         PrintToken('M');
-        PrintTokenParagraph(226);
+        PrintTextParagraph("market.credits");
 
-        PrintTokenColon(250);
+        PrintTextColon("system_data.average_radius");
         int radius = (((_selectedSeeds[5] & 15) + 11) << 8) | _selectedSeeds[3];
         PrintNumber5(radius, false);
         PrintSpace();
@@ -380,6 +392,16 @@ public sealed partial class EliteGame
 
         PrintSystemDescription();
     }
+
+    /// <summary>The prosperity part of the economy (rich, average or poor), which the original prints as tokens 170 onwards.</summary>
+    private static readonly string[] ProsperityKeys = ["economy.rich", "economy.average", "economy.poor"];
+
+    /// <summary>The governments, which the original prints as tokens 177 onwards.</summary>
+    private static readonly string[] GovernmentKeys =
+    [
+        "government.anarchy", "government.feudal", "government.multi_government", "government.dictatorship",
+        "government.communist", "government.confederacy", "government.democracy", "government.corporate_state",
+    ];
 
     /// <summary>TT146: print the distance to the selected system, if it isn't the current system.</summary>
     private void PrintDistance()
@@ -391,9 +413,9 @@ public sealed partial class EliteGame
         }
 
         // TT63
-        PrintTokenColon(191);
+        PrintTextColon("system_data.distance");
         PrintNumber5(_selectedDistance, true);
-        PrintTokenParagraph(195);
+        PrintTextParagraph("system_data.light_years");
     }
 
     /// <summary>PDESC: print the system's extended description, or a mission's description (such as a clue in mission 1).</summary>
@@ -407,28 +429,18 @@ public sealed partial class EliteGame
                 return;
             }
 
-            // NRU% is 0 in the original source, which is a bug that makes the
-            // game crash for some systems, so we use the intended table size
-            int count = GameData.ExtendedDescriptionSystems.Length;
-            for (int y = count; y > 0; y--)
+            // PD2: the special descriptions (checked from the last to the
+            // first, as in the original, which keeps them in the RUPLA, RUGAL
+            // and RUTOK tables)
+            for (int y = _descriptions.SpecialDescriptions.Count - 1; y >= 0; y--)
             {
-                if (GameData.ExtendedDescriptionSystems[y - 1] != SystemNumber)
+                var special = _descriptions.SpecialDescriptions[y];
+                if (special.System == SystemNumber && special.Galaxy == _galaxyNumber)
                 {
-                    continue;
+                    // PD3
+                    PrintDescriptionText(special.Text);
+                    return;
                 }
-
-                int galaxy = GameData.ExtendedDescriptionGalaxies[y - 1];
-                if ((galaxy & 0x7F) != _galaxyNumber)
-                {
-                    continue;
-                }
-
-                // PD3 (the original also keeps the mission 1 clues in these
-                // tables, but those are now in the mission files)
-                PrintExtendedCharacter(176);
-                PrintDescriptionToken(y);
-                PrintExtendedToken(177);
-                return;
             }
         }
 
@@ -438,7 +450,7 @@ public sealed partial class EliteGame
             _randomSeeds[x] = _selectedSeeds[2 + x];
         }
 
-        PrintExtendedToken(5);
+        PrintDescriptionText(_descriptions.Description);
     }
 
     // ------------------------------------------------------------------------
@@ -453,7 +465,7 @@ public sealed partial class EliteGame
         _colour = Cyan;
         _cursorX = 7;
         SelectFirstSystem();
-        PrintToken(199);
+        PrintText("charts.galactic");
         DrawTitleLineAndNewline();
         NewlineAndDrawLine(GalacticChartBottom + 1);
         DrawFuelRange();
@@ -645,7 +657,7 @@ public sealed partial class EliteGame
         SetSpacePalette(SpacePalette.Chart);
         _colour = Cyan;
         _cursorX = 7;
-        PrintTitle(190);
+        PrintTitle("charts.short_range");
         DrawFuelRange();
         DrawSmallCrosshairs();
         SelectFirstSystem();
@@ -743,7 +755,7 @@ public sealed partial class EliteGame
     private void FindSystem()
     {
         _colour = Cyan;
-        PrintExtendedToken(14);
+        PrintExtendedText("charts.planet_name");
         DrawSmallCrosshairs();
         SelectFirstSystem();
 
@@ -769,7 +781,7 @@ public sealed partial class EliteGame
         SelectNearestSystem();
         DrawSmallCrosshairs();
         Boop();
-        PrintExtendedToken(215);
+        PrintExtendedText("charts.unknown_planet");
     }
 
     /// <summary>The name of the selected system, in capitals.</summary>
@@ -811,7 +823,7 @@ public sealed partial class EliteGame
             ClearBottomRows();
             _cursorX = 15;
             _colour = Red;
-            PrintExtendedToken(205);
+            PrintExtendedText("status.docked");
             return;
         }
 
@@ -856,11 +868,11 @@ public sealed partial class EliteGame
         _cursorX = 7;
         _cursorY = 22;
         _textCase = 0;
-        PrintToken(189);
+        PrintText("charts.hyperspace");
         if ((_selectedDistance >> 8) != 0 || _fuel < _selectedDistance)
         {
             // TT147
-            PrintTokenQuestion(202);
+            PrintTextQuestion("charts.range");
             return;
         }
 
@@ -910,7 +922,7 @@ public sealed partial class EliteGame
         }
 
         _selectedDistance = 0;
-        ShowMessage(116);
+        ShowMessage("equipment.galactic_hyperspace");
         SetCurrentSystem();
     }
 
@@ -922,7 +934,7 @@ public sealed partial class EliteGame
     private void PrintMarketHeaders()
     {
         _cursorX = 17;
-        PrintToken(255);
+        PrintText("market.headers");
     }
 
     /// <summary>TT167: show the Market Price screen (red key f7).</summary>
@@ -930,7 +942,7 @@ public sealed partial class EliteGame
     {
         ShowTradingScreen(16);
         _cursorX = 5;
-        PrintTitle(167);
+        PrintTitle("market.title");
         _cursorY = 3;
         PrintMarketHeaders();
         _cursorY = 6;
@@ -953,7 +965,7 @@ public sealed partial class EliteGame
         }
 
         _cursorX = 1;
-        PrintToken(item + 208);
+        PrintText(CommodityKeys[item]);
         _cursorX = 14;
 
         int x = _scratch[0];
@@ -1048,8 +1060,8 @@ public sealed partial class EliteGame
         {
             // TT224
             ClearBottomRows();
-            PrintToken(204);
-            PrintToken(_itemNumber + 208);
+            PrintText("market.quantity_of");
+            PrintText(CommodityKeys[_itemNumber]);
             PrintToken('/');
             PrintUnits();
             PrintToken('?');
@@ -1059,19 +1071,19 @@ public sealed partial class EliteGame
             if (error)
             {
                 // TQ4
-                AskQuestion(176);
+                AskQuestion("market.quantity");
                 continue;
             }
 
             if (quantity != 0 && HasRoomInHold(quantity))
             {
-                AskQuestion(206);
+                AskQuestion("market.cargo");
                 continue;
             }
 
             if (!SpendCash(CalculateCost(quantity, _itemPrice)))
             {
-                AskQuestion(197);
+                AskQuestion("market.cash");
                 continue;
             }
 
@@ -1086,11 +1098,11 @@ public sealed partial class EliteGame
         }
     }
 
-    /// <summary>Tc: print a space, a token and a question mark, and beep.</summary>
-    private void AskQuestion(int token)
+    /// <summary>Tc: print a space, a string of fixed text and a question mark, and beep.</summary>
+    private void AskQuestion(string key)
     {
         PrintSpace();
-        PrintTokenQuestion(token);
+        PrintTextQuestion(key);
 
         // TTX224
         BeepAndWait();
@@ -1211,8 +1223,8 @@ public sealed partial class EliteGame
     {
         ShowTradingScreen(4);
         _cursorX = 10;
-        PrintToken(205);
-        PrintTitle(206);
+        PrintText("market.sell");
+        PrintTitle("market.cargo");
         PrintNewline();
         ListCargo();
     }
@@ -1222,12 +1234,12 @@ public sealed partial class EliteGame
     {
         ShowTradingScreen(8);
         _cursorX = 11;
-        PrintTokenParagraph(164);
+        PrintTextParagraph("market.inventory");
         DrawTitleLine();
         PrintFuelAndCash();
         if (_cargoCapacity >= 26)
         {
-            PrintToken(107);
+            PrintText("equipment.large_cargo_bay");
         }
 
         ListCargo();
@@ -1251,7 +1263,7 @@ public sealed partial class EliteGame
 
                 _scratch[1] = GameData.MarketPrices[item * 4 + 1];
                 PrintSentenceNewline();
-                PrintToken(_itemNumber + 208);
+                PrintText(CommodityKeys[_itemNumber]);
                 _cursorX = 14;
                 _itemAvailability = amount;
                 PrintNumber3(amount);
@@ -1263,8 +1275,8 @@ public sealed partial class EliteGame
                 }
 
                 // Sell this item?
-                PrintToken(205);
-                PrintExtendedToken(206);
+                PrintText("market.sell");
+                PrintExtendedText("market.yes_no");
                 var (quantity, error) = ReadNumber();
                 if (quantity == 0)
                 {
@@ -1275,7 +1287,7 @@ public sealed partial class EliteGame
                 {
                     // NWDAV4
                     PrintNewline();
-                    PrintTokenQuestion(176);
+                    PrintTextQuestion("market.quantity");
                     BeepAndWait();
                     continue;
                 }
@@ -1319,8 +1331,8 @@ public sealed partial class EliteGame
         {
             ShowTradingScreen(32);
             _cursorX = 12;
-            PrintTokenSpace(207);
-            PrintTitle(185);
+            PrintTextSpace("market.equip");
+            PrintTitle("market.ship");
             _textCase = 0x80;
             _cursorY++;
 
@@ -1340,14 +1352,14 @@ public sealed partial class EliteGame
                 PrintNewline();
                 PrintNumber3(number);
                 PrintSpace();
-                PrintToken(number + 104);
+                PrintText(EquipmentKeys[number - 1]);
                 int price = EquipmentPrice(number - 1);
                 _cursorX = 25;
                 PrintNumber16(price, 6, true);
             }
 
             ClearBottomRows();
-            PrintTokenQuestion(127);
+            PrintTextQuestion("market.item");
             var (item, error) = ReadNumber();
             if (item == 0 || error)
             {
@@ -1383,7 +1395,7 @@ public sealed partial class EliteGame
             case 1:
                 if (_missiles + 1 >= 5)
                 {
-                    Present(item, 124);
+                    Present(item, "equipment.all");
                 }
 
                 _missiles++;
@@ -1392,7 +1404,7 @@ public sealed partial class EliteGame
             case 2:
                 if (_cargoCapacity == 37)
                 {
-                    Present(item, 107);
+                    Present(item, "equipment.large_cargo_bay");
                 }
 
                 _cargoCapacity = 37;
@@ -1400,7 +1412,7 @@ public sealed partial class EliteGame
             case 3:
                 if (_ecm != 0)
                 {
-                    Present(item, 108);
+                    Present(item, "equipment.ecm");
                 }
 
                 _ecm = 0xFF;
@@ -1414,7 +1426,7 @@ public sealed partial class EliteGame
             case 6:
                 if (_fuelScoops != 0)
                 {
-                    Present(item, 111);
+                    Present(item, "equipment.fuel_scoops");
                 }
 
                 _fuelScoops = 0xFF;
@@ -1422,7 +1434,7 @@ public sealed partial class EliteGame
             case 7:
                 if (_escapePod != 0)
                 {
-                    Present(item, 112);
+                    Present(item, "equipment.escape_pod");
                 }
 
                 _escapePod = 0xFF;
@@ -1430,7 +1442,7 @@ public sealed partial class EliteGame
             case 8:
                 if (_energyBomb != 0)
                 {
-                    Present(item, 113);
+                    Present(item, "equipment.energy_bomb");
                 }
 
                 _energyBomb = 0x7F;
@@ -1438,7 +1450,7 @@ public sealed partial class EliteGame
             case 9:
                 if (_energyUnit != 0)
                 {
-                    Present(item, 114);
+                    Present(item, "equipment.energy_unit");
                 }
 
                 _energyUnit = 1;
@@ -1446,7 +1458,7 @@ public sealed partial class EliteGame
             case 10:
                 if (_dockingComputer != 0)
                 {
-                    Present(item, 115);
+                    Present(item, "equipment.docking_computers");
                 }
 
                 _dockingComputer = 0xFF;
@@ -1454,7 +1466,7 @@ public sealed partial class EliteGame
             case 11:
                 if (_galacticHyperdrive != 0)
                 {
-                    Present(item, 116);
+                    Present(item, "equipment.galactic_hyperspace");
                 }
 
                 _galacticHyperdrive = 0xFF;
@@ -1471,11 +1483,11 @@ public sealed partial class EliteGame
     }
 
     /// <summary>pres: the item is already fitted, so refund the price and say so.</summary>
-    private void Present(int item, int token)
+    private void Present(int item, string key)
     {
         AddCash(EquipmentPrice(item));
-        PrintTokenSpace(token);
-        PrintToken(31);
+        PrintTextSpace(key);
+        PrintText("equipment.present");
 
         // err
         BeepAndWait();
@@ -1490,7 +1502,7 @@ public sealed partial class EliteGame
             return;
         }
 
-        PrintTokenQuestion(197);
+        PrintTextQuestion("market.cash");
         BeepAndWait();
         GoToDockingBay();
     }
@@ -1499,7 +1511,7 @@ public sealed partial class EliteGame
     private void PrintCashLeft()
     {
         PrintSpace();
-        PrintTokenSpace(119);
+        PrintTextSpace("market.cash_balance");
         BeepAndWait();
     }
 
@@ -1525,7 +1537,7 @@ public sealed partial class EliteGame
             // qv1
             _cursorX = 12;
             PrintTokenSpace(y + '0' - 16);
-            PrintToken(_cursorY + 80);
+            PrintText(ViewKeys[_cursorY - 16]);
             _cursorY++;
             y = _cursorY;
         }
@@ -1535,7 +1547,7 @@ public sealed partial class EliteGame
         while (true)
         {
             // qv2
-            PrintTokenQuestion(175);
+            PrintTextQuestion("views.view");
             int view = WaitForKey() - '0';
             if (view >= 0 && view < 4)
             {

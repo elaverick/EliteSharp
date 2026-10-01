@@ -1,10 +1,11 @@
 using EliteSharp.Data;
+using EliteSharp.Game.Missions;
 
 namespace EliteSharp.Game;
 
 /// <summary>
-/// Text: the recursive and extended token systems, printing characters and
-/// numbers, justified text and in-flight messages.
+/// Text: printing characters, the game's text (see Data/Strings), the system
+/// descriptions, numbers, justified text and in-flight messages.
 /// </summary>
 public sealed partial class EliteGame
 {
@@ -26,7 +27,7 @@ public sealed partial class EliteGame
     /// <summary>DTW2: 0 if we are currently printing a word, non-zero if we are between words.</summary>
     private int _notPrintingWord = 0b11111111;
 
-    /// <summary>DTW3: &amp;FF to print standard tokens from <see cref="PrintExtendedToken"/>, or 0 for extended tokens.</summary>
+    /// <summary>DTW3: &amp;FF to print characters as TT27 prints them (in the case in QQ17) in extended text, or 0 to print them as DETOK does.</summary>
     private int _standardTokens;
 
     /// <summary>
@@ -49,13 +50,6 @@ public sealed partial class EliteGame
 
     /// <summary>LL: the line length for justified text.</summary>
     private const int LineLength = 30;
-
-    /// <summary>
-    /// TKN2: the two-letter token table for extended tokens. The QQ16 table
-    /// follows TKN2 in memory, and higher token numbers read into it, so the
-    /// two tables are joined here.
-    /// </summary>
-    private static readonly byte[] TwoLetterTokenTable = [.. GameData.ExtendedTwoLetterTokens, .. GameData.TwoLetterTokens, .. new byte[128]];
 
     /// <summary>BUF: the line buffer for justified text.</summary>
     private readonly int[] _lineBuffer = new int[256];
@@ -322,10 +316,14 @@ public sealed partial class EliteGame
     }
 
     // ------------------------------------------------------------------------
-    // Recursive tokens (TT27)
+    // Printing tokens (TT27)
     // ------------------------------------------------------------------------
 
-    /// <summary>TT27: print a recursive token, a two-letter token, a control code or a character.</summary>
+    /// <summary>
+    /// TT27: print a two-letter token (128-159, as in the system names), a
+    /// control code or a character. The original's recursive tokens are now
+    /// the game's text (see Data/Strings), so there are none to print.
+    /// </summary>
     private void PrintToken(int token)
     {
         token &= 0xFF;
@@ -337,7 +335,7 @@ public sealed partial class EliteGame
 
         if (token >= 128)
         {
-            PrintTwoLetterOrRecursiveToken(token);
+            PrintTwoLetterToken(token);
             return;
         }
 
@@ -372,17 +370,9 @@ public sealed partial class EliteGame
                 return;
         }
 
-        if (token >= 96)
+        if (token >= 96 || (token >= 14 && token < 32))
         {
-            PrintRecursiveToken(token);
-            return;
-        }
-
-        if (token >= 14 && token < 32)
-        {
-            // qw: tokens 14-31 are recursive tokens 128-145
-            PrintRecursiveToken(token + 114);
-            return;
+            throw new ArgumentOutOfRangeException(nameof(token), token, "The original's recursive tokens are now the game's text (see Data/Strings)");
         }
 
         int textCase = _textCase;
@@ -449,14 +439,12 @@ public sealed partial class EliteGame
         PrintCharacter(character);
     }
 
-    /// <summary>TT43: print a two-letter token (128-159) or a recursive token (160-255).</summary>
-    private void PrintTwoLetterOrRecursiveToken(int token)
+    /// <summary>TT43: print a two-letter token (128-159).</summary>
+    private void PrintTwoLetterToken(int token)
     {
         if (token >= 160)
         {
-            // TT47
-            PrintRecursiveToken(token - 160);
-            return;
+            throw new ArgumentOutOfRangeException(nameof(token), token, "The original's recursive tokens are now the game's text (see Data/Strings)");
         }
 
         int index = (token & 127) << 1;
@@ -468,90 +456,16 @@ public sealed partial class EliteGame
         }
     }
 
-    /// <summary>ex: print recursive token A from QQ18.</summary>
-    private void PrintRecursiveToken(int token)
-    {
-        var table = GameData.RecursiveTokens;
-        int position = 0;
-        int tokensToSkip = token & 0xFF;
-        while (tokensToSkip != 0)
-        {
-            while (table[position] != 0)
-            {
-                position++;
-            }
-
-            position++;
-            tokensToSkip--;
-        }
-
-        while (table[position] != 0)
-        {
-            PrintToken(table[position] ^ 0x23);
-            position++;
-        }
-    }
-
     // ------------------------------------------------------------------------
-    // Extended tokens (DETOK)
+    // Extended text (DETOK)
     // ------------------------------------------------------------------------
-
-    /// <summary>DETOK: print extended token A.</summary>
-    private void PrintExtendedToken(int token) => PrintTokenFromTable(GameData.ExtendedTokens, token);
-
-    /// <summary>DETOK3: print extended token A from the RUTOK table.</summary>
-    private void PrintDescriptionToken(int token) => PrintTokenFromTable(GameData.ExtendedDescriptionTokens, token);
 
     /// <summary>
-    /// DETOK: print an extended token from a table of tokens, in which each
-    /// token is terminated by a byte that is zero when EOR'd with VE (&amp;57).
+    /// DETOK2: print a character or control code of extended text (the game's
+    /// text and the system descriptions). The original's extended tokens are
+    /// now the system descriptions (see Data/Strings), so there are none to
+    /// print.
     /// </summary>
-    private void PrintTokenFromTable(byte[] table, int token)
-    {
-        int position = 0;
-        int separatorsToFind = token & 0xFF;
-
-        // Find the start of the token by counting separators (bytes that
-        // decode to zero)
-        while (true)
-        {
-            if (position >= table.Length)
-            {
-                return;
-            }
-
-            if ((table[position] ^ 0x57) == 0)
-            {
-                separatorsToFind = (separatorsToFind - 1) & 0xFF;
-                if (separatorsToFind == 0)
-                {
-                    break;
-                }
-            }
-
-            position++;
-        }
-
-        // DTL2
-        while (true)
-        {
-            position++;
-            if (position >= table.Length)
-            {
-                return;
-            }
-
-            int character = table[position] ^ 0x57;
-            if (character == 0)
-            {
-                return;
-            }
-
-            PrintExtendedCharacter(character);
-        }
-    }
-
-    /// <summary>DETOK2: print an extended text token character or control code.</summary>
     private void PrintExtendedCharacter(int character)
     {
         if (character < 32)
@@ -567,27 +481,12 @@ public sealed partial class EliteGame
         }
 
         // DT8
-        if (character < '[')
+        if (character >= '[')
         {
-            PrintLetter(character);
-            return;
+            throw new ArgumentOutOfRangeException(nameof(character), character, "The original's extended tokens are now the system descriptions (see Data/Strings)");
         }
 
-        if (character < 129)
-        {
-            PrintRandomToken(character);
-            return;
-        }
-
-        if (character < 215)
-        {
-            PrintExtendedToken(character);
-            return;
-        }
-
-        int index = (character - 215) << 1;
-        PrintLetter(TwoLetterTokenTable[index]);
-        PrintLetter(TwoLetterTokenTable[index + 1]);
+        PrintLetter(character);
     }
 
     /// <summary>DTS: print a letter in the correct case.</summary>
@@ -607,14 +506,6 @@ public sealed partial class EliteGame
 
         // DT9
         PrintCharacter(character);
-    }
-
-    /// <summary>DT6: print a random token from the MTIN table.</summary>
-    private void PrintRandomToken(int token)
-    {
-        int random = NextRandom();
-        int index = (random >= 51 ? 1 : 0) + (random >= 102 ? 1 : 0) + (random >= 153 ? 1 : 0) + (random >= 204 ? 1 : 0);
-        PrintExtendedToken(GameData.RandomTokenBases[token - 91] + index);
     }
 
     /// <summary>DT3: process a control code in an extended token (via the JMTB jump table).</summary>
@@ -743,19 +634,27 @@ public sealed partial class EliteGame
         }
 
         // MT171
-        PrintExtendedToken(153);
+        PrintDescriptionText(_descriptions.AdjectiveSuffix);
     }
 
-    /// <summary>MT18: print a random 1-8 letter word.</summary>
+    /// <summary>
+    /// MT18: print a random 1-8 letter word. The C flag is clear when DT3
+    /// calls this, the first letter pair's random number gets the C flag from
+    /// the random number before it, and the other pairs' random numbers get
+    /// it clear, as TT26 clears it after printing each letter.
+    /// </summary>
     private void PrintRandomWord()
     {
         _capitaliseMask = 0b11011111;
-        int pairs = NextRandom() & 3;
+        int pairs = NextRandomRepeatable() & 3;
+        bool first = true;
         do
         {
-            int index = NextRandom() & 62;
-            PrintLetter(TwoLetterTokenTable[index + 2]);
-            PrintLetter(TwoLetterTokenTable[index + 3]);
+            int index = (first ? NextRandom() : NextRandomRepeatable()) & 62;
+            first = false;
+            string pair = _descriptions.RandomWordPairs[index / 2];
+            PrintLetter(pair[0]);
+            PrintLetter(pair[1]);
             pairs--;
         }
         while (pairs >= 0);
@@ -775,6 +674,192 @@ public sealed partial class EliteGame
         _colour = Cyan;
         _lowerCaseEnabled = 0x80;
         _lowerCaseMask = 0b00100000;
+    }
+
+    // ------------------------------------------------------------------------
+    // System descriptions
+    // ------------------------------------------------------------------------
+
+    /// <summary>The text that the game generates for the systems, in the chosen language (see Data/Strings).</summary>
+    private readonly DescriptionGrammar _descriptions;
+
+    /// <summary>Print some description text, as DETOK prints an extended token.</summary>
+    private void PrintDescriptionText(DescriptionText text)
+    {
+        foreach (var part in text.Parts)
+        {
+            switch (part)
+            {
+                case DescriptionCharacter character:
+                    PrintExtendedCharacter(character.Code);
+                    break;
+                case DescriptionReference reference:
+                    PrintDescriptionRule(_descriptions.Rules[reference.Rule]);
+                    break;
+            }
+        }
+    }
+
+    /// <summary>
+    /// DT6: print a description rule: its text, or if it's a random rule, one
+    /// of its choices, chosen as the original chooses a random token (with a
+    /// random number drawn with the C flag clear, as DETOK2 only gets to DT6
+    /// with it clear, so the choice doesn't depend on what used the random
+    /// number generator before).
+    /// </summary>
+    private void PrintDescriptionRule(DescriptionRule rule)
+    {
+        int choice = rule.Random ? MissionRuntime.ChooseRandomly(rule.Choices.Count, NextRandomRepeatable()) : 0;
+        PrintDescriptionText(rule.Choices[choice]);
+    }
+
+    /// <summary>Print a word of a species' name, as TT27 prints a token.</summary>
+    private void PrintSpeciesWord(string word)
+    {
+        foreach (char c in word)
+        {
+            PrintToken(c);
+        }
+    }
+
+    // ------------------------------------------------------------------------
+    // Fixed text
+    // ------------------------------------------------------------------------
+
+    /// <summary>
+    /// The game's fixed text, in the chosen language (see Data/Strings). The
+    /// original keeps this text in its token tables, along with the text that
+    /// it generates (see <see cref="_descriptions"/>).
+    /// </summary>
+    private readonly GameStrings _strings;
+
+    /// <summary>The codes in braces in the fixed text that <see cref="PrintText"/> prints, and the TT27 control codes they stand for.</summary>
+    private static readonly Dictionary<string, int> TextCodes = new()
+    {
+        ["cash"] = 0,
+        ["galaxy"] = 1,
+        ["current_system"] = 2,
+        ["system"] = 3,
+        ["commander"] = 4,
+        ["fuel_and_cash"] = 5,
+        ["sentence_case"] = 6,
+        ["bell"] = 7,
+        ["all_caps"] = 8,
+        ["tab_colon"] = 9,
+        ["line_feed"] = 10,
+    };
+
+    /// <summary>The codes in braces in the fixed text that <see cref="PrintExtendedText"/> prints, and the DETOK control codes they stand for.</summary>
+    private static readonly Dictionary<string, int> ExtendedTextCodes = new()
+    {
+        ["all_caps"] = 1,
+        ["sentence_case"] = 2,
+        ["commander"] = 4,
+        ["tab"] = 8,
+        ["clear_screen"] = 9,
+        ["line_feed"] = 10,
+        ["title_line"] = 11,
+        ["left_align"] = 15,
+        ["drive"] = 16,
+        ["capitalise"] = 19,
+        ["clear_bottom"] = 21,
+        ["input"] = 26,
+    };
+
+    /// <summary>The fixed text that has been printed, as the characters and control codes that TT27 prints.</summary>
+    private readonly Dictionary<string, int[]> _textCodes = [];
+
+    /// <summary>The fixed text that has been printed, as the characters and control codes that DETOK prints.</summary>
+    private readonly Dictionary<string, int[]> _extendedTextCodes = [];
+
+    /// <summary>The market items, in the order of the market table (QQ23), which the original prints as tokens 208 onwards.</summary>
+    private static readonly string[] CommodityKeys =
+    [
+        "commodities.food", "commodities.textiles", "commodities.radioactives", "commodities.slaves",
+        "commodities.liquor_wines", "commodities.luxuries", "commodities.narcotics", "commodities.computers",
+        "commodities.machinery", "commodities.alloys", "commodities.firearms", "commodities.furs",
+        "commodities.minerals", "commodities.gold", "commodities.platinum", "commodities.gem_stones",
+        "commodities.alien_items",
+    ];
+
+    /// <summary>The equipment on the Equip Ship screen, in the order of the price table (PRXS), which the original prints as tokens 105 onwards.</summary>
+    private static readonly string[] EquipmentKeys =
+    [
+        "equipment.fuel", "equipment.missile", "equipment.large_cargo_bay", "equipment.ecm",
+        "equipment.extra_pulse_lasers", "equipment.extra_beam_lasers", "equipment.fuel_scoops", "equipment.escape_pod",
+        "equipment.energy_bomb", "equipment.energy_unit", "equipment.docking_computers", "equipment.galactic_hyperspace",
+        "equipment.military_laser", "equipment.mining_laser",
+    ];
+
+    /// <summary>The space views (front, rear, left and right), which the original prints as tokens 96 onwards.</summary>
+    private static readonly string[] ViewKeys = ["views.front", "views.rear", "views.left", "views.right"];
+
+    /// <summary>Print a string of fixed text as TT27 prints a recursive token, so letters are printed in the current text case (QQ17).</summary>
+    private void PrintText(string key)
+    {
+        foreach (int code in TextToCodes(key, _textCodes, TextCodes, '_'))
+        {
+            PrintToken(code);
+        }
+    }
+
+    /// <summary>Print a string of fixed text as DETOK prints an extended token.</summary>
+    private void PrintExtendedText(string key)
+    {
+        foreach (int code in TextToCodes(key, _extendedTextCodes, ExtendedTextCodes, 'Z'))
+        {
+            PrintExtendedCharacter(code);
+        }
+    }
+
+    /// <summary>
+    /// Convert a string of fixed text into the characters and control codes
+    /// that the original's token prints: a newline is 12, and a code in braces
+    /// is a control code. Only the characters up to the given one can be
+    /// printed, as the higher ones print tokens, so letters must be capitals
+    /// (the case is applied as the text is printed).
+    /// </summary>
+    private int[] TextToCodes(string key, Dictionary<string, int[]> converted, Dictionary<string, int> codes, char highestCharacter)
+    {
+        if (converted.TryGetValue(key, out var result))
+        {
+            return result;
+        }
+
+        string text = _strings.Get(key);
+        var output = new List<int>();
+        for (int i = 0; i < text.Length; i++)
+        {
+            char c = text[i];
+            if (c == '{')
+            {
+                int end = text.IndexOf('}', i);
+                string name = end < 0 ? text[i..] : text[(i + 1)..end];
+                if (end < 0 || !codes.TryGetValue(name, out int code))
+                {
+                    throw new InvalidDataException($"The string '{key}' in {_strings.Source} contains an unknown code '{{{name}}}'");
+                }
+
+                output.Add(code);
+                i = end;
+            }
+            else if (c == '\n')
+            {
+                output.Add(12);
+            }
+            else if (c >= ' ' && c <= highestCharacter)
+            {
+                output.Add(c);
+            }
+            else
+            {
+                throw new InvalidDataException($"The string '{key}' in {_strings.Source} contains '{c}', which the game can't print (letters must be capitals)");
+            }
+        }
+
+        result = [.. output];
+        converted[key] = result;
+        return result;
     }
 
     // ------------------------------------------------------------------------
@@ -836,7 +921,7 @@ public sealed partial class EliteGame
     private void PrintCash()
     {
         PrintNumber(_cash, 9, true);
-        PrintTokenLine(226);
+        PrintTextLine("market.credits");
     }
 
     /// <summary>tal: print the galaxy number.</summary>
@@ -876,12 +961,12 @@ public sealed partial class EliteGame
     /// <summary>fwl: print fuel and cash levels.</summary>
     private void PrintFuelAndCash()
     {
-        PrintTokenColon(105);
+        PrintTextColon("equipment.fuel");
         PrintNumber3(_fuel, true);
-        PrintTokenLine(195);
+        PrintTextLine("system_data.light_years");
 
         // PCASH
-        PrintToken(119);
+        PrintText("market.cash_balance");
     }
 
     /// <summary>crlf: tab to column 21 and print a colon.</summary>
@@ -891,24 +976,24 @@ public sealed partial class EliteGame
         PrintColon();
     }
 
-    /// <summary>plf: print a token followed by a newline.</summary>
-    private void PrintTokenLine(int token)
+    /// <summary>plf: print a string of fixed text followed by a newline.</summary>
+    private void PrintTextLine(string key)
     {
-        PrintToken(token);
+        PrintText(key);
         PrintNewline();
     }
 
-    /// <summary>plf2: print a token followed by a newline, and indent the next line to column 6.</summary>
-    private void PrintTokenLineIndented(int token)
+    /// <summary>plf2: print a string of fixed text followed by a newline, and indent the next line to column 6.</summary>
+    private void PrintTextLineIndented(string key)
     {
-        PrintTokenLine(token);
+        PrintTextLine(key);
         _cursorX = 6;
     }
 
-    /// <summary>TT68: print a token followed by a colon.</summary>
-    private void PrintTokenColon(int token)
+    /// <summary>TT68: print a string of fixed text followed by a colon.</summary>
+    private void PrintTextColon(string key)
     {
-        PrintToken(token);
+        PrintText(key);
         PrintColon();
     }
 
@@ -945,6 +1030,13 @@ public sealed partial class EliteGame
         PrintParagraphBreak();
     }
 
+    /// <summary>TT60: print a string of fixed text and a paragraph break.</summary>
+    private void PrintTextParagraph(string key)
+    {
+        PrintText(key);
+        PrintParagraphBreak();
+    }
+
     /// <summary>spc: print a token followed by a space.</summary>
     private void PrintTokenSpace(int token)
     {
@@ -952,17 +1044,24 @@ public sealed partial class EliteGame
         PrintSpace();
     }
 
-    /// <summary>prq: print a token followed by a question mark.</summary>
-    private void PrintTokenQuestion(int token)
+    /// <summary>spc: print a string of fixed text followed by a space.</summary>
+    private void PrintTextSpace(string key)
     {
-        PrintToken(token);
+        PrintText(key);
+        PrintSpace();
+    }
+
+    /// <summary>prq: print a string of fixed text followed by a question mark.</summary>
+    private void PrintTextQuestion(string key)
+    {
+        PrintText(key);
         PrintToken('?');
     }
 
     /// <summary>NLIN3: print a title and draw a horizontal line at row 19.</summary>
-    private void PrintTitle(int token)
+    private void PrintTitle(string key)
     {
-        PrintToken(token);
+        PrintText(key);
         DrawTitleLine();
     }
 
@@ -1040,9 +1139,9 @@ public sealed partial class EliteGame
         {
             _cursorX = 11;
             _colour = Cyan;
-            PrintToken(_view | 0x60);
+            PrintText(ViewKeys[_view]);
             PrintSpace();
-            PrintToken(175);
+            PrintText("views.view");
         }
 
         // tt66
@@ -1082,7 +1181,7 @@ public sealed partial class EliteGame
     // ------------------------------------------------------------------------
 
     /// <summary>MESS: display an in-flight message in capitals at the bottom of the space view.</summary>
-    private void ShowMessage(int token)
+    private void ShowMessage(string key)
     {
         while (true)
         {
@@ -1102,34 +1201,34 @@ public sealed partial class EliteGame
                 // me1: erase the existing message by printing it again
                 _messageDelay = 0;
                 _colour = Yellow;
-                EraseText(() => PrintMessage(_messageToken));
+                EraseText(() => PrintMessage(_messageKey));
                 continue;
             }
 
             _messageDelay = 20;
-            _messageToken = token;
+            _messageKey = key;
 
             // Work out the length of the message so we can centre it
             _justifyFlags = 0b11000000;
             _lineBufferSize = (_messageDestroyed & 1) != 0 ? 10 : 0;
-            PrintToken(_messageToken);
+            PrintText(_messageKey);
             _messageX = (32 - _lineBufferSize) >> 1;
             _cursorX = _messageX;
             SetLeftAligned();
-            PrintMessage(_messageToken);
+            PrintMessage(_messageKey);
             return;
         }
     }
 
-    /// <summary>mes9: print a message token, followed by " DESTROYED" if bit 0 of de is set.</summary>
-    private void PrintMessage(int token)
+    /// <summary>mes9: print a message, followed by " DESTROYED" if bit 0 of de is set.</summary>
+    private void PrintMessage(string key)
     {
-        PrintToken(token);
+        PrintText(key);
         bool destroyed = (_messageDestroyed & 1) != 0;
         _messageDestroyed >>= 1;
         if (destroyed)
         {
-            PrintToken(253);
+            PrintText("messages.destroyed");
         }
     }
 
@@ -1144,7 +1243,7 @@ public sealed partial class EliteGame
         }
 
         // The message is erased by showing it again
-        EraseText(() => ShowMessage(_messageToken));
+        EraseText(() => ShowMessage(_messageKey));
         _messageDelay = 0;
     }
 
@@ -1167,21 +1266,22 @@ public sealed partial class EliteGame
         SetCargoOrEquipment(item, 0);
         if (item < 17)
         {
-            ShowMessage(item + 208);
+            ShowMessage(CommodityKeys[item]);
         }
         else if (item == 17)
         {
             // ou2
-            ShowMessage(108);
+            ShowMessage("equipment.ecm");
         }
         else if (item == 18)
         {
             // ou3
-            ShowMessage(111);
+            ShowMessage("equipment.fuel_scoops");
         }
         else
         {
-            ShowMessage(item + 113 - 20 + 1);
+            // The energy bomb, energy unit and docking computers (tokens 113-115)
+            ShowMessage(EquipmentKeys[item - 11]);
         }
     }
 

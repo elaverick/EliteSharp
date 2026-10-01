@@ -31,6 +31,9 @@ internal sealed class FakeMissionHost : IMissionHost
     /// <summary>The random numbers drawn, in order.</summary>
     public List<int> RandomNumbersDrawn { get; } = [];
 
+    /// <summary>The random numbers drawn for random words in text, in order (these are also in <see cref="RandomNumbersDrawn"/>).</summary>
+    public List<int> TextRandomNumbersDrawn { get; } = [];
+
     /// <summary>Put us in a system, given its galaxy (from 1) and name.</summary>
     public FakeMissionHost At(int galaxy, string system)
     {
@@ -57,6 +60,13 @@ internal sealed class FakeMissionHost : IMissionHost
     {
         int number = _randomNumbers.Count > 0 ? _randomNumbers.Dequeue() : 0;
         RandomNumbersDrawn.Add(number);
+        return number;
+    }
+
+    public int NextRandomForText()
+    {
+        int number = NextRandom();
+        TextRandomNumbersDrawn.Add(number);
         return number;
     }
 

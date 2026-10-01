@@ -68,12 +68,23 @@ public sealed partial class EliteGame
     private volatile bool _quit;
 
     /// <summary>
-    /// Create the game. The missions are loaded from Assets/Missions unless
-    /// they are given.
+    /// Create the game. The missions are loaded from Assets/Missions, and the
+    /// game's text and system descriptions from Data/Strings (in the language
+    /// in the options), unless they are given.
     /// </summary>
-    public EliteGame(Hud hud, BbcKeyboard keyboard, SoundEngine? sound, GameOptions options, Gamepad? gamepad = null, MissionCatalogue? missions = null)
+    public EliteGame(
+        Hud hud,
+        BbcKeyboard keyboard,
+        SoundEngine? sound,
+        GameOptions options,
+        Gamepad? gamepad = null,
+        MissionCatalogue? missions = null,
+        GameStrings? strings = null,
+        DescriptionGrammar? descriptions = null)
     {
         _missions = new MissionRuntime(missions ?? MissionLoader.Load(MissionLoader.DefaultFolder));
+        _strings = strings ?? GameStrings.Load(options.Language);
+        _descriptions = descriptions ?? DescriptionGrammar.Load(options.Language);
         _gamepad = gamepad;
         _hud = hud;
         _keyboard = keyboard;
@@ -387,8 +398,11 @@ public sealed partial class EliteGame
     /// <summary>de: bit 1 set means append " DESTROYED" to the in-flight message.</summary>
     private int _messageDestroyed;
 
-    /// <summary>MCH: the token number of the current in-flight message.</summary>
-    private int _messageToken;
+    /// <summary>
+    /// MCH: the current in-flight message (the original stores its token
+    /// number, which starts at 0, the token that prints our cash).
+    /// </summary>
+    private string _messageKey = "messages.bounty";
 
     /// <summary>messXC: the x-coordinate of the current in-flight message.</summary>
     private int _messageX;

@@ -240,7 +240,7 @@ public sealed class MissionRuntime(MissionCatalogue catalogue)
             GalaxyValue galaxyValue => galaxyValue.ByGalaxy.TryGetValue(host.Galaxy, out var text)
                 ? text
                 : throw new InvalidOperationException($"Mission '{mission.Id}': '{name}' has no value for galaxy {host.Galaxy + 1}"),
-            RandomValue randomValue => randomValue.Choices[ChooseRandomly(randomValue.Choices.Count, host.NextRandom())],
+            RandomValue randomValue => randomValue.Choices[ChooseRandomly(randomValue.Choices.Count, host.NextRandomForText())],
             _ => throw new InvalidOperationException($"Mission '{mission.Id}': '{name}' has an unknown kind of value"),
         };
 

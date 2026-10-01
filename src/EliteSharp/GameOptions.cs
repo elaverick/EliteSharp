@@ -1,3 +1,5 @@
+using EliteSharp.Data;
+
 namespace EliteSharp;
 
 /// <summary>Command-line options.</summary>
@@ -30,6 +32,9 @@ public sealed class GameOptions
     /// <summary>The folder containing the disc drive folders for saved commanders.</summary>
     public string DataFolder { get; set; } =
         Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData), "EliteSharp");
+
+    /// <summary>The language of the game's text (the strings file is Data/Strings/&lt;language&gt;-strings.yml).</summary>
+    public string Language { get; set; } = GameStrings.DefaultLanguage;
 
     public static GameOptions Parse(string[] args)
     {
@@ -68,6 +73,10 @@ public sealed class GameOptions
                     break;
                 case "--fullscreen":
                     options.FullScreen = true;
+                    break;
+                case "--language" when next != null:
+                    options.Language = next.ToLowerInvariant();
+                    i++;
                     break;
             }
         }

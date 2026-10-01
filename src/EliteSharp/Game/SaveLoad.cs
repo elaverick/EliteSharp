@@ -191,7 +191,7 @@ public sealed partial class EliteGame
         while (true)
         {
             SetTradingPalette();
-            PrintExtendedToken(1);
+            PrintExtendedText("disk.menu");
             int key = WaitForKey();
             switch (key)
             {
@@ -220,7 +220,8 @@ public sealed partial class EliteGame
                     AskForCommanderName();
                     StoreCommanderName();
                     _saveCount >>= 1;
-                    PrintExtendedToken(4);
+
+                    // The original prints extended token 4 here, which is empty
                     CopyCommanderToSaveBlock();
                     int check = CalculateChecksum();
                     _savedCommander[8 + 75] = (byte)check;
@@ -250,7 +251,7 @@ public sealed partial class EliteGame
 
                 case '5':
                     // jan18: restore the default commander
-                    PrintExtendedToken(224);
+                    PrintExtendedText("disk.are_you_sure");
                     if (WaitForYesNo())
                     {
                         RestoreDefaultCommander();
@@ -289,7 +290,7 @@ public sealed partial class EliteGame
     private void AskForCommanderName()
     {
         _inputLimit = 7;
-        PrintExtendedToken(8);
+        PrintExtendedText("disk.commander_name");
         ReadLine();
         _inputLimit = 9;
         if (_lastInput.Length == 0)
@@ -386,7 +387,7 @@ public sealed partial class EliteGame
     /// <summary>GTDRV: ask for a drive number, returning -1 (C set) if the key wasn't a drive.</summary>
     private int AskForDrive()
     {
-        PrintExtendedToken(2);
+        PrintExtendedText("disk.which_drive");
         int key = WaitForKey() | 0b00010000;
         PutCharacter(key);
         PrintCharacter(12);
@@ -436,7 +437,7 @@ public sealed partial class EliteGame
         if (data == null || data.Length < CommanderDataSize + 1 || (data[0] & 0x80) != 0)
         {
             // ELT2F: not a valid file
-            PrintExtendedToken(9);
+            PrintExtendedText("disk.illegal_file");
             WaitForKey();
             return false;
         }
@@ -455,7 +456,7 @@ public sealed partial class EliteGame
         }
 
         _catalogueDriveCharacter = '0' + drive;
-        PrintExtendedToken(3);
+        PrintExtendedText("disk.catalogue_header");
         _printingCatalogue = 1;
         _cursorX = 1;
 
@@ -514,7 +515,7 @@ public sealed partial class EliteGame
         }
 
         int drive = _catalogueDriveCharacter - '0';
-        PrintExtendedToken(8);
+        PrintExtendedText("disk.commander_name");
         ReadLine();
         if (_lastInput.Length == 0)
         {
@@ -534,9 +535,24 @@ public sealed partial class EliteGame
         }
     }
 
-    /// <summary>FILEPR: print the name of the current filing system.</summary>
-    private void PrintFilingSystem() => PrintExtendedToken(3 + FilingSystemToggle);
+    /// <summary>
+    /// FILEPR: print the name of the current filing system. The original
+    /// prints extended token 3 + DISK, which in this version is the catalogue
+    /// heading or nothing (token 4 is empty), and only the disc error message
+    /// uses this, which this game doesn't show.
+    /// </summary>
+    private void PrintFilingSystem()
+    {
+        if (FilingSystemToggle == 0)
+        {
+            PrintExtendedText("disk.catalogue_header");
+        }
+    }
 
-    /// <summary>OTHERFILEPR: print the name of the other filing system.</summary>
-    private void PrintOtherFilingSystem() => PrintExtendedToken(2 - FilingSystemToggle);
+    /// <summary>
+    /// OTHERFILEPR: print the name of the other filing system. The original
+    /// prints extended token 2 - DISK, which in this version is the drive
+    /// prompt or the disc access menu (and nothing uses this).
+    /// </summary>
+    private void PrintOtherFilingSystem() => PrintExtendedText(FilingSystemToggle == 0 ? "disk.which_drive" : "disk.menu");
 }

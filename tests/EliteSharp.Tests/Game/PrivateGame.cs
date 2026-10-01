@@ -1,4 +1,5 @@
 using System.Reflection;
+using EliteSharp.Data;
 using EliteSharp.Game;
 using EliteSharp.Game.Ships;
 using EliteSharp.Input;
@@ -15,9 +16,9 @@ internal sealed class PrivateGame
 {
     private const BindingFlags Private = BindingFlags.Instance | BindingFlags.NonPublic;
 
-    public PrivateGame()
+    public PrivateGame(GameStrings? strings = null)
     {
-        Game = new EliteGame(new Hud(new FrameExchange()), new BbcKeyboard(), null, new GameOptions { Sound = false, Gamepad = false, MainLoopRate = 50 });
+        Game = new EliteGame(new Hud(new FrameExchange()), new BbcKeyboard(), null, new GameOptions { Sound = false, Gamepad = false, MainLoopRate = 50 }, strings: strings);
     }
 
     public EliteGame Game { get; }
@@ -64,6 +65,29 @@ internal sealed class PrivateGame
         Set("_shipType", type);
         Set("_blueprint", Call("BlueprintFor", type));
         return CurrentShip;
+    }
+
+    /// <summary>The text on the screen, one string for each text row (1-24), with the trailing spaces removed.</summary>
+    public string[] ScreenText()
+    {
+        var hud = Get<Hud>("_hud");
+        var text = (System.Collections.IDictionary)typeof(Hud).GetField("_text", Private)!.GetValue(hud)!;
+        var rows = Enumerable.Range(0, 25).Select(_ => new char[33]).ToArray();
+        foreach (var row in rows)
+        {
+            Array.Fill(row, ' ');
+        }
+
+        foreach (System.Collections.DictionaryEntry entry in text)
+        {
+            var (column, row) = ((int, int))entry.Key;
+            if (row is >= 1 and <= 24 && column is >= 0 and <= 32)
+            {
+                rows[row][column] = (((char, Ink))entry.Value!).Item1;
+            }
+        }
+
+        return rows.Skip(1).Select(row => new string(row, 1, 32).TrimEnd()).ToArray();
     }
 
     /// <summary>

@@ -37,6 +37,8 @@ public sealed partial class EliteGame : IMissionHost
 
     int IMissionHost.NextRandom() => NextRandom();
 
+    int IMissionHost.NextRandomForText() => NextRandomRepeatable();
+
     void IMissionHost.AddCash(int tenths) => AddCash(tenths);
 
     void IMissionHost.FitEquipment(MissionEquipment equipment)

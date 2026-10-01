@@ -42,7 +42,7 @@ public sealed partial class EliteGame
     {
         ClearKeyLogger();
         _cursorX = 3;
-        int key = ShowTitleScreen(6, ShipType.CobraMkIII, 200);
+        int key = ShowTitleScreen("title.load_new_commander", ShipType.CobraMkIII, 200);
         if (key == 'Y')
         {
             ApplySavedCommander();
@@ -57,7 +57,7 @@ public sealed partial class EliteGame
     {
         ApplySavedCommander();
         ResetMissileIndicators();
-        ShowTitleScreen(7, ShipType.Cougar, 100);
+        ShowTitleScreen("title.press_space", ShipType.Cougar, 100);
         MoveCrosshairsHome();
         SelectNearestSystem();
         SetCurrentSystem();
@@ -594,7 +594,7 @@ public sealed partial class EliteGame
         _colour = Cyan;
         _cursorX = 12;
         _cursorY = 12;
-        PrintRecursiveToken(146);
+        PrintText("messages.game_over");
 
         do
         {

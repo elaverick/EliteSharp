@@ -676,7 +676,7 @@ public sealed partial class EliteGame
         if (!LaunchFromUs(ShipType.Missile))
         {
             // FR1: display "Missile Jammed"
-            ShowMessage(201);
+            ShowMessage("messages.missile_jammed");
             return;
         }
 
@@ -747,7 +747,7 @@ public sealed partial class EliteGame
             return;
         }
 
-        ShowMessage(120);
+        ShowMessage("messages.incoming_missile");
         MakeSound(SoundLaunch);
     }
 
@@ -803,7 +803,7 @@ public sealed partial class EliteGame
         if (talliedLow > 0xFF)
         {
             _killTally = (_killTally + 0x100) & 0xFFFF;
-            ShowMessage(101);
+            ShowMessage("messages.right_on_commander");
         }
 
         // davidscockup: fall through into EXNO3

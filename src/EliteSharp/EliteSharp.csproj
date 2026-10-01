@@ -11,6 +11,8 @@
   <ItemGroup>
     <!-- The ship attributes (JSON) and models (glTF) are loaded at run time -->
     <None Include="Assets\**\*" CopyToOutputDirectory="PreserveNewest" />
+    <!-- The game's fixed text is loaded at run time, in the language chosen on the command line -->
+    <None Include="Data\Strings\*.yml" CopyToOutputDirectory="PreserveNewest" />
   </ItemGroup>
 
   <ItemGroup>

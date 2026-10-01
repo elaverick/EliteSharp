@@ -1,0 +1,189 @@
+# The game's fixed text in English: the screen titles and labels, the
+# commodity, equipment and rating names, the in-flight messages, and so on.
+#
+# The game asks for each string by its key (such as "equipment.fuel"), so a
+# translation is another file with the same keys, named after its language
+# (such as fr-strings.yml), and chosen with --language.
+#
+# The text is printed as the original prints it:
+#
+#   - Letters are written in capitals, as the game applies the case (such as
+#     Sentence Case) as it prints them, and the font only has ASCII characters.
+#   - \n is a newline.
+#   - The words in braces print something, or change how the text is printed:
+#
+#       {cash}            our cash, then " CR" and a newline
+#       {galaxy}          the galaxy number
+#       {current_system}  the name of the system we are in
+#       {system}          the name of the selected system
+#       {commander}       the commander's name
+#       {fuel_and_cash}   our fuel and cash, as on the Status screen
+#       {sentence_case}   switch to Sentence Case
+#       {all_caps}        switch to capitals
+#       {lower_case}      switch to lower case
+#       {capitalise}      print the next letter in capitals
+#       {tab_colon}       move to column 21 and print a colon
+#       {tab}             move to column 6
+#       {line_feed}       move down a line without returning to the left
+#       {bell}            beep
+#       {left_align}      stop justifying text
+#       {clear_screen}    clear the screen
+#       {clear_bottom}    clear the bottom three rows of the screen
+#       {title_line}      draw the line under the screen title
+#       {drive}           the drive number, in the disc catalogue
+#       {input}           read a line from the keyboard
+#
+# The text that the game generates (the "goat soup" system descriptions and
+# the species names) is not here, but in en-descriptions.yml, and the
+# missions' text is in Assets/Missions.
+
+title:
+  banner: "---- E L I T E ----"
+  load_new_commander: "  LOAD NEW {capitalise}COMMANDER {all_caps}(Y/N)?{sentence_case}\n\n"
+  press_space: "PRESS SPACE OR FIRE,{capitalise}COMMANDER.\n\n"
+  copyright: "({capitalise}C) ACORNSOFT 1986"
+  authors: "BY D.BRABEN & I.BELL"
+
+status:
+  title: "COMMANDER {commander}\n\n\n{sentence_case}PRESENT SYSTEM{tab_colon}{current_system}\nHYPERSPACE SYSTEM{tab_colon}{system}\nCONDITION{tab_colon}"
+  docked: "DOCKED"
+  condition_green: "GREEN"
+  condition_yellow: "YELLOW"
+  condition_red: "RED"
+  legal_status: "{fuel_and_cash}LEGAL STATUS:"
+  clean: "CLEAN"
+  offender: "OFFENDER"
+  fugitive: "FUGITIVE"
+  rating: "RATING:"
+  equipment: "\n{all_caps}EQUIPMENT:{sentence_case}"
+
+ratings:
+  harmless: "HARMLESS"
+  mostly_harmless: "MOSTLY HARMLESS"
+  poor: "POOR "
+  average: "AVERAGE "
+  above_average: "ABOVE AVERAGE "
+  competent: "COMPETENT"
+  dangerous: "DANGEROUS"
+  deadly: "DEADLY"
+  elite: "---- E L I T E ----"
+
+equipment:
+  fuel: "FUEL"
+  missile: "MISSILE"
+  large_cargo_bay: "LARGE CARGO{sentence_case} BAY"
+  ecm: "E.C.M.SYSTEM"
+  extra_pulse_lasers: "EXTRA PULSE LASERS"
+  extra_beam_lasers: "EXTRA BEAM LASERS"
+  fuel_scoops: "FUEL SCOOPS"
+  escape_pod: "ESCAPE POD"
+  energy_bomb: "ENERGY BOMB"
+  energy_unit: "ENERGY UNIT"
+  docking_computers: "DOCKING COMPUTERS"
+  galactic_hyperspace: "GALACTIC HYPERSPACE "
+  military_laser: "MILITARY  LASER"
+  mining_laser: "MINING  LASER"
+  pulse_laser: "PULSE LASER"
+  beam_laser: "BEAM LASER"
+  all: "ALL"
+  present: "PRESENT"
+
+views:
+  front: "FRONT"
+  rear: "REAR"
+  left: "LEFT"
+  right: "RIGHT"
+  view: "VIEW "
+
+commodities:
+  food: "FOOD"
+  textiles: "TEXTILES"
+  radioactives: "RADIOACTIVES"
+  slaves: "SLAVES"
+  liquor_wines: "LIQUOR/WINES"
+  luxuries: "LUXURIES"
+  narcotics: "NARCOTICS"
+  computers: "COMPUTERS"
+  machinery: "MACHINERY"
+  alloys: "ALLOYS"
+  firearms: "FIREARMS"
+  furs: "FURS"
+  minerals: "MINERALS"
+  gold: "GOLD"
+  platinum: "PLATINUM"
+  gem_stones: "GEM-STONES"
+  alien_items: "ALIEN ITEMS"
+
+market:
+  title: "{current_system} MARKET PRICES"
+  headers: "UNIT  QUANTITY\n PRODUCT   UNIT PRICE FOR SALE\n{line_feed}"
+  quantity_of: "QUANTITY OF "
+  quantity: "QUANTITY"
+  sell: "SELL"
+  cargo: " CARGO{sentence_case}"
+  yes_no: "{all_caps}(Y/N)?"
+  inventory: "INVENTORY\n"
+  cash: "CASH"
+  cash_balance: "CASH:{cash}"
+  credits: " CR"
+  equip: "EQUIP"
+  ship: "SHIP"
+  item: "ITEM"
+
+system_data:
+  title: "DATA ON {system}"
+  distance: "DISTANCE"
+  light_years: " LIGHT YEARS"
+  economy: "ECONOMY"
+  government: "GOVERNMENT"
+  tech_level: "TECH.LEVEL"
+  population: "POPULATION"
+  billion: " BILLION"
+  gross_productivity: "GROSS PRODUCTIVITY"
+  average_radius: "AVERAGE RADIUS"
+
+economy:
+  rich: "RICH "
+  average: "AVERAGE "
+  poor: "POOR "
+  mainly: "MAINLY "
+  industrial: "INDUSTRIAL"
+  agricultural: "AGRICULTURAL"
+
+government:
+  anarchy: "ANARCHY"
+  feudal: "FEUDAL"
+  multi_government: "MULTI-GOVERNMENT"
+  dictatorship: "DICTATORSHIP"
+  communist: "COMMUNIST"
+  confederacy: "CONFEDERACY"
+  democracy: "DEMOCRACY"
+  corporate_state: "CORPORATE STATE"
+
+charts:
+  short_range: "SHORT RANGE CHART"
+  galactic: "GALACTIC CHART{galaxy}"
+  hyperspace: "HYPERSPACE "
+  range: "RANGE"
+  planet_name: "{clear_bottom}PLANET NAME? {input}"
+  unknown_planet: "{left_align} UNKNOWN PLANET"
+
+messages:
+  bounty: "{cash}"
+  energy_low: "ENERGY LOW{bell}"
+  right_on_commander: "RIGHT ON COMMANDER!"
+  incoming_missile: "INCOMING MISSILE"
+  docking_computers_on: "DOCKING COMPUTERS ON"
+  fuel_scoops_on: "FUEL SCOOPS ON {bell}"
+  target_lost: "TARGET LOST"
+  missile_jammed: "MISSILE JAMMED"
+  destroyed: " DESTROYED"
+  game_over: "{all_caps}GAME OVER"
+
+disk:
+  menu: "{clear_screen}{title_line}{all_caps}{tab} DISK ACCESS MENU\n{line_feed}{line_feed}{sentence_case}1. LOAD NEW {capitalise}COMMANDER\n{line_feed}2. SAVE {capitalise}COMMANDER {commander}\n{line_feed}3. CATALOGUE DISK\n{line_feed}4. DELETE FILE\n{line_feed}5. DEFAULT {all_caps}JAMESON{sentence_case}\n{line_feed}6. EXIT\n{line_feed}"
+  which_drive: "\nWHICH DRIVE?"
+  catalogue_header: "{clear_screen}{title_line}{all_caps}{tab}DRIVE {drive} CATALOGUE\n{line_feed}"
+  commander_name: "{capitalise}COMMANDER'S NAME? "
+  illegal_file: "\n{all_caps}ILLEGAL ELITE II FILE"
+  are_you_sure: "ARE YOU SURE?"

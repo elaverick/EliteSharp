@@ -1,0 +1,323 @@
+# The text that the game generates for the systems: the "goat soup" system
+# descriptions on the Data on System screen, the special descriptions of a
+# few systems, and the species that live in each system. This is the
+# original's decision tree, which was in its text token tables.
+#
+# A description is made by printing "description". Text is printed as it is
+# (in capitals, as the game applies the case as it prints it, and with its
+# spaces exactly as they are, as some words rely on them, such as " A" and
+# "N UNREMARKABLE" making "AN UNREMARKABLE"), and:
+#
+#   {{name}}             prints the rule with that name, from "rules"
+#   oneOf: [...]         (a rule) prints one of the choices at random
+#   {system}             the system's name
+#   {system_adjective}   the system's name, without a final vowel, followed by
+#                        "adjective_suffix" (such as "Lavian")
+#   {random_word}        a random word, made from one to four of the
+#                        "random_word_pairs"
+#   {capitalise}         print the next letter in capitals
+#   {sentence_case}      switch to Sentence Case
+#   {lower_case}         switch to lower case
+#   {all_caps}           switch to capitals
+#   {justify}            justify the text that follows
+#   {left_align}         stop justifying text
+#   \n                   a newline
+#
+# The random choices use the game's random number generator, which is seeded
+# from the system's seeds before a description is printed, so each system
+# always has the same description. The choices are made from left to right
+# as the text is printed, each using one random number from 0 to 255, split
+# into equal parts (with five choices, 0-50 picks the first, 51-101 the
+# second, and so on), as is each random word (one random number for its
+# length and one for each pair of letters). So to keep the original's
+# descriptions, the rules, their choices and their order must stay as they
+# are.
+
+description: "{lower_case}{justify}{capitalise}{{subject}} IS {{summary}}.\n{left_align}"
+
+adjective_suffix: "IAN"
+
+# The pairs of letters in the random words (the original's two-letter tokens,
+# including "A?", which really does print a question mark)
+random_word_pairs: [AB, OU, SE, IT, IL, ET, ST, ON, LO, NU, TH, NO, AL, LE, XE, GE, ZA, CE, BI, SO, US, ES, AR, MA, IN, DI, RE, "A?", ER, AT, EN, BE]
+
+# The descriptions that replace the "goat soup" for a few systems, when we
+# are docked there (the last is for a galaxy that doesn't exist)
+special_descriptions:
+  - galaxy: 1
+    system: 211    # Teorge
+    text: "{lower_case}{justify}{capitalise}THE COLONISTS HERE HAVE VIOLATED{sentence_case} INTERGALACTIC CLONING PROTOCOL{lower_case} AND SHOULD BE AVOIDED.\n{left_align}"
+  - galaxy: 3
+    system: 100    # Arredi
+    text: "{lower_case}{justify}{capitalise}{all_caps}COMING SOON: ELITE II.\n{left_align}"
+  - galaxy: 3
+    system: 41    # Anreer
+    text: "{lower_case}{justify}{capitalise}THE INHABITANTS OF {{subject}} ARE SO AMAZINGLY PRIMITIVE THAT THEY STILL THINK {capitalise}***** ****** IS  3D.\n{left_align}"
+  - galaxy: 17
+    system: 1
+    text: "{lower_case}{justify}{capitalise}{all_caps}WELCOME TO  THE SEVENTEENTH GALAXY!.\n{left_align}"
+
+# The species in each system, which the system's seeds choose from these
+# (TT75 to TT207), so the number of words in each list must stay the same
+species:
+  human_colonials: "HUMAN COLONIAL"
+  size: [LARGE, FIERCE, SMALL]
+  colour: [GREEN, RED, YELLOW, BLUE, BLACK, HARMLESS]
+  appearance: [SLIMY, "BUG-EYED", HORNED, BONY, FAT, FURRY]
+  kind: [RODENT, FROG, LIZARD, LOBSTER, BIRD, HUMANOID, FELINE, INSECT]
+
+rules:
+  subject:
+    oneOf:
+      - "{system}"
+      - "THE PLANET {system}"
+      - "THE WORLD {system}"
+      - "THIS PLANET"
+      - "THIS WORLD"
+  summary:
+    oneOf:
+      - "{{renown}}"
+      - "{{renown}} AND {{feature}}"
+      - "{{misfortune}}"
+      - "{{renown}} BUT {{misfortune}}"
+      - " A{{dull}} {{place}}"
+  renown: "{{degree}} {{fame}} FOR {{feature}}"
+  misfortune: "{{afflicted}} BY {{affliction}}"
+  degree:
+    oneOf:
+      - "VERY"
+      - "MILDLY"
+      - "MOST"
+      - "REASONABLY"
+      - ""
+  fame:
+    oneOf:
+      - "FABLED"
+      - "NOTABLE"
+      - "WELL KNOWN"
+      - "FAMOUS"
+      - "NOTED"
+  feature:
+    oneOf:
+      - "ITS {{scenery_adjective}} {{scenery}}"
+      - "THE {system_adjective} {{creature_adjective}} {{creature}}"
+      - "ITS INHABITANTS' {{custom_adjective}} {{custom}}"
+      - "{sentence_case}{{local_speciality}}{lower_case}"
+      - "ITS {{fabulous}} {{attraction}}"
+  scenery_adjective:
+    oneOf:
+      - "ANCIENT"
+      - "{{strange}}"
+      - "GREAT"
+      - "VAST"
+      - "PINK"
+  scenery:
+    oneOf:
+      - "{sentence_case}{{crop_prefix}} {{plant}}{lower_case} PLANTATIONS"
+      - "MOUNTAINS"
+      - "{{landscape}}"
+      - "{{forest_kind}} FORESTS"
+      - "OCEANS"
+  crop_prefix:
+    oneOf:
+      - "{random_word}"
+      - "{system_adjective} {random_word}"
+      - "{system_adjective} {{killer}}"
+      - "INHABITANT"
+      - "{system_adjective} {random_word}"
+  plant:
+    oneOf:
+      - "PLANT"
+      - "TULIP"
+      - "BANANA"
+      - "CORN"
+      - "{random_word}WEED"
+  landscape:
+    oneOf:
+      - "PARKING METERS"
+      - "DUST CLOUDS"
+      - "ICE BERGS"
+      - "ROCK FORMATIONS"
+      - "VOLCANOES"
+  forest_kind:
+    oneOf:
+      - "TROPICAL"
+      - "DENSE"
+      - "RAIN"
+      - "IMPENETRABLE"
+      - "EXUBERANT"
+  creature_adjective:
+    oneOf:
+      - "{{killer}}"
+      - "MOUNTAIN"
+      - "EDIBLE"
+      - "TREE"
+      - "SPOTTED"
+  creature:
+    oneOf:
+      - "{{beast}}"
+      - "{{beast_2}}"
+      - "{{creature_stem}}OID"
+      - "{{oddity}}"
+      - "{{insect}}"
+  beast:
+    oneOf:
+      - "SHREW"
+      - "BEAST"
+      - "BISON"
+      - "SNAKE"
+      - "WOLF"
+  beast_2:
+    oneOf:
+      - "LEOPARD"
+      - "CAT"
+      - "MONKEY"
+      - "GOAT"
+      - "FISH"
+  creature_stem:
+    oneOf:
+      - "WALKING TREE"
+      - "CRAB"
+      - "BAT"
+      - "LOBST"
+      - "{random_word}"
+  oddity:
+    oneOf:
+      - "POET"
+      - "ARTS GRADUATE"
+      - "YAK"
+      - "SNAIL"
+      - "SLUG"
+  insect:
+    oneOf:
+      - "WASP"
+      - "MOTH"
+      - "GRUB"
+      - "ANT"
+      - "{random_word}"
+  custom_adjective:
+    oneOf:
+      - "ANCIENT"
+      - "EXCEPTIONAL"
+      - "ECCENTRIC"
+      - "INGRAINED"
+      - "{{strange}}"
+  custom:
+    oneOf:
+      - "SHYNESS"
+      - "SILLINESS"
+      - "MATING TRADITIONS"
+      - "LOATHING OF {{interest}}"
+      - "LOVE FOR {{interest}}"
+  interest:
+    oneOf:
+      - "FOOD BLENDERS"
+      - "TOURISTS"
+      - "POETRY"
+      - "DISCOS"
+      - "{{attraction}}"
+  fabulous:
+    oneOf:
+      - "FABULOUS"
+      - "EXOTIC"
+      - "HOOPY"
+      - "UNUSUAL"
+      - "EXCITING"
+  attraction:
+    oneOf:
+      - "CUISINE"
+      - "NIGHT LIFE"
+      - "CASINOS"
+      - "SIT COMS"
+      - "{sentence_case}{{local_speciality}}{lower_case}"
+  local_speciality:
+    oneOf:
+      - "{{drink_maker}} {{drink}}"
+      - "{system_adjective} {{beast}} {{food}}"
+      - "ITS {{fabulous}} {{beast_2}} {{food}}"
+      - "{{sport_setting}} {{sport}}"
+      - "{{drink_maker}} {{drink}}"
+  drink_maker:
+    oneOf:
+      - "{random_word}"
+      - "{system_adjective} {{creature}}"
+      - "{system_adjective} {random_word}"
+      - "{system_adjective} {{killer}}"
+      - "{{killer}} {random_word}"
+  drink:
+    oneOf:
+      - "JUICE"
+      - "BRANDY"
+      - "WATER"
+      - "BREW"
+      - "GARGLE BLASTERS"
+  food:
+    oneOf:
+      - "MEAT"
+      - "CUTLET"
+      - "STEAK"
+      - "BURGERS"
+      - "SOUP"
+  sport_setting:
+    oneOf:
+      - "ICE"
+      - "MUD"
+      - "ZERO-{capitalise}G"
+      - "VACUUM"
+      - "{system_adjective} ULTRA"
+  sport:
+    oneOf:
+      - "HOCKEY"
+      - "CRICKET"
+      - "KARATE"
+      - "POLO"
+      - "TENNIS"
+  afflicted:
+    oneOf:
+      - "BESET"
+      - "PLAGUED"
+      - "RAVAGED"
+      - "CURSED"
+      - "SCOURGED"
+  affliction:
+    oneOf:
+      - "{{frequency}} CIVIL WAR"
+      - "{{killer}} {{creature_adjective}} {{creature}}S"
+      - "A {{killer}} DISEASE"
+      - "{{frequency}} EARTHQUAKES"
+      - "{{frequency}} SOLAR ACTIVITY"
+  frequency:
+    oneOf:
+      - "FREQUENT"
+      - "OCCASIONAL"
+      - "UNPREDICTABLE"
+      - "DREADFUL"
+      - "DEADLY"
+  killer:
+    oneOf:
+      - "KILLER"
+      - "DEADLY"
+      - "EVIL"
+      - "LETHAL"
+      - "VICIOUS"
+  strange:
+    oneOf:
+      - "FUNNY"
+      - "WEIRD"
+      - "UNUSUAL"
+      - "STRANGE"
+      - "PECULIAR"
+  dull:
+    oneOf:
+      - "N UNREMARKABLE"
+      - " BORING"
+      - " DULL"
+      - " TEDIOUS"
+      - " REVOLTING"
+  place:
+    oneOf:
+      - "PLANET"
+      - "WORLD"
+      - "PLACE"
+      - "LITTLE PLANET"
+      - "DUMP"

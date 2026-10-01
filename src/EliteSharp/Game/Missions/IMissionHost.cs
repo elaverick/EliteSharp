@@ -29,6 +29,13 @@ public interface IMissionHost
     /// <summary>The next of the game's random numbers (0-255), from the same generator that the rest of the game uses.</summary>
     int NextRandom();
 
+    /// <summary>
+    /// The next of the game's random numbers (0-255) for a random word in some
+    /// text, which the original only draws with the C flag clear (DT6), so it
+    /// doesn't depend on what used the random number generator before.
+    /// </summary>
+    int NextRandomForText();
+
     /// <summary>Add cash to our account, in tenths of a credit.</summary>
     void AddCash(int tenths);
 

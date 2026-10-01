@@ -2,16 +2,15 @@
 """
 Generates the C# data files for EliteSharp from the BBC Master Elite source.
 
-The data tables (text token tables, font, dashboard bitmap, market data and
-so on) are lifted byte-for-byte from the assembled binaries, using the label
-addresses in the assembler listing, so the port uses exactly the same data as
-the game. The ships are exported separately, as assets, by
-tools/export_ships.py.
+The data tables (font, dashboard bitmap, market data and so on) are lifted
+byte-for-byte from the assembled binaries, using the label addresses in the
+assembler listing, so the port uses exactly the same data as the game. The
+ships are exported separately, as assets, by tools/export_ships.py.
 
-The one exception is the mission text: the missions are defined in
-src/EliteSharp/Assets/Missions, so the text that only the missions use (the
-briefings and debriefings, and the Constrictor's trail of clues in the system
-descriptions) is left out of the token tables (see strip_mission_text).
+The original's text token tables aren't needed: the game's fixed text and the
+system descriptions are in src/EliteSharp/Data/Strings, and the missions'
+text is in src/EliteSharp/Assets/Missions. Only the two-letter tokens (QQ16)
+are kept, as the game uses them to make the systems' names.
 
 Usage: python tools/gen_data.py   (run from the repository root)
 """
@@ -76,86 +75,6 @@ def data_bytes(label, count=None, end_label=None):
 
 
 # ---------------------------------------------------------------------------
-# Mission text
-# ---------------------------------------------------------------------------
-
-VE = 0x57
-
-# The extended tokens that only the missions use: the briefings and
-# debriefings (10, 11, 15, 222 and 223), "Incoming Message" (216), the
-# captains' names (217-219), where the Constrictor was last seen (220-221), the
-# phrases that only those use (196, 203, 204, 207, 208, 209, 211, 212 and 213)
-# and the random words in the Constrictor's clues (91-95 and 106-110). Their
-# places in the table are kept, empty, so the other tokens keep their numbers.
-MISSION_TOKENS = sorted({10, 11, 15, 91, 92, 93, 94, 95, 106, 107, 108, 109, 110, 196, 203, 204, 207, 208,
-                         209, 211, 212, 213, 216, 217, 218, 219, 220, 221, 222, 223})
-
-# The control codes that only the mission text uses: show the ship and wait
-# (22), wait for a key (24), incoming message (25), the captain's name (27) and
-# where the Constrictor was last seen (28)
-MISSION_CODES = {22, 24, 25, 27, 28}
-
-
-def split_tokens(data):
-    """Split a VE-delimited token table into its tokens (token n is item n)."""
-    parts = [[]]
-    for byte in data:
-        if byte == VE:
-            parts.append([])
-        else:
-            parts[-1].append(byte)
-    return parts
-
-
-def join_tokens(parts):
-    out = list(parts[0])
-    for part in parts[1:]:
-        out.append(VE)
-        out.extend(part)
-    return out
-
-
-def token_references(part, random_bases):
-    """The extended tokens and control codes that a token uses."""
-    tokens, codes = set(), set()
-    for byte in part:
-        c = byte ^ VE
-        if c < 32:
-            codes.add(c)
-        elif 91 <= c < 129:
-            tokens.update(random_bases[c - 91] + i for i in range(5))
-        elif 129 <= c < 215:
-            tokens.add(c)
-    return tokens, codes
-
-
-def strip_mission_text(extended, systems, galaxies, descriptions, random_bases):
-    """
-    Remove the mission-only text: empty the mission tokens, and remove the
-    system descriptions that are mission 1 clues (the ones with bit 7 of the
-    galaxy clear, which the original only shows during mission 1). Check that
-    nothing left refers to anything removed.
-    """
-    parts = split_tokens(extended)
-    for token in MISSION_TOKENS:
-        parts[token] = []
-
-    count = len(systems)
-    descriptions_parts = split_tokens(descriptions)
-    kept = [i for i in range(count) if galaxies[i] & 0x80]
-    new_systems = [systems[i] for i in kept]
-    new_galaxies = [galaxies[i] for i in kept]
-    new_descriptions = [descriptions_parts[0]] + [descriptions_parts[i + 1] for i in kept] + descriptions_parts[count + 1:]
-
-    for number, part in list(enumerate(parts)) + [(f"description {i + 1}", p) for i, p in enumerate(new_descriptions[1:])]:
-        tokens, codes = token_references(part, random_bases)
-        if tokens & set(MISSION_TOKENS) or codes & MISSION_CODES:
-            raise SystemExit(f"Token {number} still uses mission text: {sorted(tokens & set(MISSION_TOKENS))} {sorted(codes & MISSION_CODES)}")
-
-    return join_tokens(parts), new_systems, new_galaxies, join_tokens(new_descriptions)
-
-
-# ---------------------------------------------------------------------------
 # Byte tables
 # ---------------------------------------------------------------------------
 
@@ -174,32 +93,10 @@ def fmt_bytes(name, data, comment):
 def gen_tables():
     tables = []
 
-    # Text token tables (still obfuscated with RE / VE, exactly as in memory)
-    tables.append(("RecursiveTokens", data_bytes("QQ18", end_label="SNE"),
-                   "QQ18: recursive text tokens 0-148, each byte EOR'd with RE (&23), null-terminated."))
-    extended, systems, galaxies, descriptions = strip_mission_text(
-        data_bytes("TKN1", end_label="RUPLA"),
-        data_bytes("RUPLA", end_label="RUGAL"),
-        data_bytes("RUGAL", end_label="RUTOK"),
-        data_bytes("RUTOK"),
-        code_bytes("MTIN", 38))
-    tables.append(("ExtendedTokens", extended,
-                   "TKN1: extended text tokens, each byte EOR'd with VE (&57), tokens delimited by VE (without the mission text, which is in Assets/Missions)."))
-    tables.append(("ExtendedDescriptionSystems", systems,
-                   "RUPLA: system numbers that have extended description overrides (without the mission 1 clues, which are in Assets/Missions)."))
-    tables.append(("ExtendedDescriptionGalaxies", galaxies,
-                   "RUGAL: galaxy numbers (bit 7 set) for the RUPLA overrides."))
-    tables.append(("ExtendedDescriptionTokens", descriptions,
-                   "RUTOK: extended description override tokens, EOR'd with VE (&57)."))
-
     # Tables in the main code block (the maths tables, such as the sine,
     # arctan and logarithm tables, are left out, as the game uses real maths)
-    tables.append(("ExtendedTwoLetterTokens", code_bytes("TKN2", 26),
-                   "TKN2: two-letter tokens 215-227 for extended text."))
     tables.append(("TwoLetterTokens", code_bytes("QQ16", 64),
                    "QQ16: two-letter tokens 128-159."))
-    tables.append(("RandomTokenBases", code_bytes("MTIN", 38),
-                   "MTIN: base token numbers for the random extended tokens [91-128]."))
     tables.append(("MarketPrices", code_bytes("QQ23", 17 * 4),
                    "QQ23: market table (base price, factor/units, base quantity, mask) for 17 items."))
     tables.append(("EquipmentPrices", code_bytes("PRXS", 28),

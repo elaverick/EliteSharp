@@ -86,7 +86,7 @@ public sealed partial class EliteGame
         if (_missileTarget == slot)
         {
             DisarmMissile(DashboardGreen);
-            ShowMessage(200);
+            ShowMessage("messages.target_lost");
         }
 
         // KS5

@@ -126,7 +126,9 @@ Values can use other values. Random choices use the game's random number
 generator (so they are part of the game's random sequence, as in the
 original): the choices are made from left to right as the text is printed,
 each using one random number from 0 to 255, split into equal parts (with five
-choices, 0-50 picks the first, 51-101 the second, and so on).
+choices, 0-50 picks the first, 51-101 the second, and so on). As in the
+original, each of these random numbers is drawn with the 6502's C flag clear,
+so the choice doesn't depend on what used the random number generator before.
 
 The loader checks that every `byGalaxy` value has text for each galaxy where
 it can be shown (for example, the galaxies in a docking event's `when`).

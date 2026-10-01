@@ -54,6 +54,14 @@ README there). The game reads them from the `Assets\Missions` folder next to
 without rebuilding the game (the build copies them from `src`). To run the tests, run `dotnet test` in the
 `tests\EliteSharp.Tests` folder.
 
+The game's fixed text (the screen titles, the commodity and equipment names,
+the in-flight messages and so on) is in `src\EliteSharp\Data\Strings\en-strings.yml`,
+and the text it generates for each system (the "goat soup" descriptions and
+the species) is in `en-descriptions.yml` beside it. The build copies them to
+`Data\Strings` next to `EliteSharp.exe`. A translation is another pair of
+files named after its language (such as `fr-strings.yml` and
+`fr-descriptions.yml`), which `--language fr` selects.
+
 ## Starting out
 
 When the game starts, it asks if you want to load a saved commander. Press
@@ -178,6 +186,7 @@ shortcut:
 | `--nosound` | Turn off the sound |
 | `--nopad` | Ignore any game controllers |
 | `--data <folder>` | Where to keep saved commanders |
+| `--language <code>` | The language of the game's text, from `Data\Strings\<code>-strings.yml` and `<code>-descriptions.yml` (default `en`) |
 
 Your saved commanders live in `%APPDATA%\EliteSharp`, in a folder for each of the
 game's "disc drives".

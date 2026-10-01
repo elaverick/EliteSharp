@@ -16,15 +16,16 @@ public sealed partial class EliteGame
     private int _titleShipDistance;
 
     /// <summary>
-    /// TITLE: display a title screen with a rotating ship and a recursive
-    /// token, and wait for a key press, returning its ASCII code.
+    /// TITLE: display a title screen with a rotating ship and a prompt (a
+    /// string of fixed text), and wait for a key press, returning its ASCII
+    /// code.
     /// </summary>
-    private int ShowTitleScreen(int token, int type, int distance)
+    private int ShowTitleScreen(string prompt, int type, int distance)
     {
         _padContextOverride = PadContext.Screen;
         try
         {
-            return RunTitleScreen(token, type, distance);
+            return RunTitleScreen(prompt, type, distance);
         }
         finally
         {
@@ -33,7 +34,7 @@ public sealed partial class EliteGame
     }
 
     /// <summary>The body of <see cref="ShowTitleScreen"/>.</summary>
-    private int RunTitleScreen(int token, int type, int distance)
+    private int RunTitleScreen(string prompt, int type, int distance)
     {
         _titleShipDistance = distance;
         _shipType = type;
@@ -53,12 +54,12 @@ public sealed partial class EliteGame
         AddShip(_shipType);
 
         _cursorX = 6;
-        PrintTokenLine(30);
+        PrintTextLine("title.banner");
         PrintCharacter(10);
         _cursorX = 6;
         if (AuthorNamesShown != 0)
         {
-            PrintExtendedToken(13);
+            PrintExtendedText("title.authors");
         }
 
         // awe
@@ -66,9 +67,9 @@ public sealed partial class EliteGame
         JoystickEnabled = 0;
         _cursorY = 20;
         _cursorX = 1;
-        PrintExtendedToken(token);
+        PrintExtendedText(prompt);
         _cursorX = 7;
-        PrintExtendedToken(12);
+        PrintExtendedText("title.copyright");
         _turnAngleLimit = 12 / 36f;
         _mainLoopCounter = 5;
         JoystickEnabled = 0;

@@ -27,9 +27,6 @@ public sealed partial class EliteGame
     /// <summary>DTW2: 0 if we are currently printing a word, non-zero if we are between words.</summary>
     private int _notPrintingWord = 0b11111111;
 
-    /// <summary>DTW3: &amp;FF to print characters as TT27 prints them (in the case in QQ17) in extended text, or 0 to print them as DETOK does.</summary>
-    private int _standardTokens;
-
     /// <summary>
     /// DTW4: the justification flags (bit 7 set to justify text, and bit 6 set
     /// to buffer the text without printing it, as used to measure messages).
@@ -474,12 +471,6 @@ public sealed partial class EliteGame
             return;
         }
 
-        if ((_standardTokens & 0x80) != 0)
-        {
-            PrintToken(character);
-            return;
-        }
-
         // DT8
         if (character >= '[')
         {
@@ -508,7 +499,12 @@ public sealed partial class EliteGame
         PrintCharacter(character);
     }
 
-    /// <summary>DT3: process a control code in an extended token (via the JMTB jump table).</summary>
+    /// <summary>
+    /// DT3: process a control code in the system descriptions (from the
+    /// original's JMTB jump table). The original's other control codes
+    /// position the text, clear the screen and so on in its fixed text, which
+    /// the code that prints the game's text does itself.
+    /// </summary>
     private void ProcessControlCode(int code)
     {
         switch (code)
@@ -520,38 +516,16 @@ public sealed partial class EliteGame
                 SetSentenceCase();
                 break;
             case 3:
-            case 4:
-                PrintToken(code);
-                break;
-            case 5:
-                _standardTokens = 0;
-                break;
-            case 6:
-                _textCase = 0x80;
-                _standardTokens = 0xFF;
-                break;
-            case 8:
-                MoveToColumn6();
-                break;
-            case 9:
-                _cursorX = 1;
-                ClearScreen(1);
-                break;
-            case 11:
-                DrawTitleLine();
+                PrintSystemName();
                 break;
             case 13:
-                _lowerCaseEnabled = 0x80;
-                _lowerCaseMask = 0b00100000;
+                SetLowerCase();
                 break;
             case 14:
                 SetJustified();
                 break;
             case 15:
                 SetLeftAligned();
-                break;
-            case 16:
-                PrintCharacter(_catalogueDriveCharacter);
                 break;
             case 17:
                 PrintSystemAdjective();
@@ -560,34 +534,11 @@ public sealed partial class EliteGame
                 PrintRandomWord();
                 break;
             case 19:
+                // MT19: a capital
                 _capitaliseMask = 0b11011111;
                 break;
-            case 21:
-                ClearBottomRows();
-                break;
-            case 23:
-                MoveToRowInCyan(10);
-                break;
-            case 26:
-                ReadLine();
-                break;
-
-            // Codes 22 (show the ship and wait), 24 (wait for a key), 25
-            // (incoming message), 27 (the captain's name) and 28 (where the
-            // Constrictor was last seen) were only used by the mission text,
-            // which is now in Assets/Missions
-            case 29:
-                MoveToRowInCyan(6);
-                break;
-            case 30:
-                PrintFilingSystem();
-                break;
-            case 31:
-                PrintOtherFilingSystem();
-                break;
             default:
-                // 7, 10, 12, 20 and 32 print the character (and so would the
-                // unused codes)
+                // 7, 10 and 12 print the character
                 PrintCharacter(code);
                 break;
         }
@@ -612,6 +563,13 @@ public sealed partial class EliteGame
     {
         _cursorX = 6;
         _notPrintingWord = 0xFF;
+    }
+
+    /// <summary>MT13: switch to lower case.</summary>
+    private void SetLowerCase()
+    {
+        _lowerCaseEnabled = 0x80;
+        _lowerCaseMask = 0b00100000;
     }
 
     /// <summary>MT14: switch to justified text.</summary>
@@ -739,38 +697,6 @@ public sealed partial class EliteGame
     /// </summary>
     private readonly GameStrings _strings;
 
-    /// <summary>The codes in braces in the fixed text that <see cref="PrintText"/> prints, and the TT27 control codes they stand for.</summary>
-    private static readonly Dictionary<string, int> TextCodes = new()
-    {
-        ["cash"] = 0,
-        ["galaxy"] = 1,
-        ["current_system"] = 2,
-        ["system"] = 3,
-        ["commander"] = 4,
-    };
-
-    /// <summary>
-    /// The code that {default_commander} stands for in the fixed text that
-    /// <see cref="PrintExtendedText"/> prints, which prints the default
-    /// commander's name as it is (as the original prints it in capitals).
-    /// </summary>
-    private const int DefaultCommanderCode = 256;
-
-    /// <summary>The codes in braces in the fixed text that <see cref="PrintExtendedText"/> prints, and the DETOK control codes they stand for.</summary>
-    private static readonly Dictionary<string, int> ExtendedTextCodes = new()
-    {
-        ["commander"] = 4,
-        ["drive"] = 16,
-        ["capitalise"] = 19,
-        ["default_commander"] = DefaultCommanderCode,
-    };
-
-    /// <summary>The fixed text that has been printed, as the characters and control codes that TT27 prints.</summary>
-    private readonly Dictionary<string, int[]> _textCodes = [];
-
-    /// <summary>The fixed text that has been printed, as the characters and control codes that DETOK prints.</summary>
-    private readonly Dictionary<string, int[]> _extendedTextCodes = [];
-
     /// <summary>The market items, in the order of the market table (QQ23), which the original prints as tokens 208 onwards.</summary>
     private static readonly string[] CommodityKeys =
     [
@@ -793,86 +719,199 @@ public sealed partial class EliteGame
     /// <summary>The space views (front, rear, left and right), which the original prints as tokens 96 onwards.</summary>
     private static readonly string[] ViewKeys = ["views.front", "views.rear", "views.left", "views.right"];
 
-    /// <summary>Print a string of fixed text as TT27 prints a recursive token, so letters are printed in the current text case (QQ17).</summary>
+    /// <summary>
+    /// Print a string of fixed text, as it is written, in the text case that
+    /// the screen's text (TT27) is in: capitals if QQ17 is 0, and otherwise
+    /// as written (see <see cref="PrintWrittenText"/>).
+    /// </summary>
     private void PrintText(string key)
     {
-        foreach (int code in TextToCodes(key, _textCodes, TextCodes, '_'))
+        foreach (var part in _strings.GetParts(key))
         {
-            PrintToken(code);
-        }
-    }
-
-    /// <summary>Print a string of fixed text as DETOK prints an extended token.</summary>
-    private void PrintExtendedText(string key)
-    {
-        foreach (int code in TextToCodes(key, _extendedTextCodes, ExtendedTextCodes, 'Z'))
-        {
-            if (code == DefaultCommanderCode)
+            switch (part)
             {
-                foreach (char c in DefaultCommander.Name)
-                {
-                    PrintCharacter(c);
-                }
-            }
-            else
-            {
-                PrintExtendedCharacter(code);
+                case LiteralText literal:
+                    PrintWrittenText(literal.Text);
+                    break;
+                case Placeholder placeholder:
+                    PrintPlaceholder(placeholder.Name);
+                    break;
             }
         }
     }
 
     /// <summary>
-    /// Convert a string of fixed text into the characters and control codes
-    /// that the original's token prints: a newline is 12, \a is a beep (7),
-    /// and a code in braces is a control code. Only the characters up to the given one can be
-    /// printed, as the higher ones print tokens, so letters must be capitals
-    /// (the case is applied as the text is printed).
+    /// Print a string of fixed text, as it is written, in the text case that
+    /// the menus and prompts (DETOK) are in: capitals if DTW1 is 0, and
+    /// otherwise as written (see <see cref="PrintWrittenExtendedText"/>).
     /// </summary>
-    private int[] TextToCodes(string key, Dictionary<string, int[]> converted, Dictionary<string, int> codes, char highestCharacter)
+    private void PrintExtendedText(string key)
     {
-        if (converted.TryGetValue(key, out var result))
+        foreach (var part in _strings.GetParts(key))
         {
-            return result;
-        }
-
-        string text = _strings.Get(key);
-        var output = new List<int>();
-        for (int i = 0; i < text.Length; i++)
-        {
-            char c = text[i];
-            if (c == '{')
+            switch (part)
             {
-                int end = text.IndexOf('}', i);
-                string name = end < 0 ? text[i..] : text[(i + 1)..end];
-                if (end < 0 || !codes.TryGetValue(name, out int code))
+                case LiteralText literal:
+                    PrintWrittenExtendedText(literal.Text);
+                    break;
+                case Placeholder placeholder:
+                    PrintPlaceholder(placeholder.Name);
+                    break;
+            }
+        }
+    }
+
+    /// <summary>Print the value of a placeholder in the fixed text, such as {cash}.</summary>
+    private void PrintPlaceholder(string name)
+    {
+        switch (name)
+        {
+            case "cash":
+                PrintCash();
+                break;
+            case "galaxy":
+                PrintGalaxyNumber();
+                break;
+            case "current_system":
+                PrintCurrentSystemName();
+                break;
+            case "system":
+                PrintSystemName();
+                break;
+            case "commander":
+                PrintCommanderName();
+                break;
+            case "default_commander":
+                // As it is, as the original prints it in capitals
+                foreach (char c in DefaultCommander.Name)
                 {
-                    throw new InvalidDataException($"The string '{key}' in {_strings.Source} contains an unknown code '{{{name}}}'");
+                    PrintCharacter(c);
                 }
 
-                output.Add(code);
-                i = end;
-            }
-            else if (c == '\n')
-            {
-                output.Add(12);
-            }
-            else if (c == '\a')
-            {
-                output.Add(7);
-            }
-            else if (c >= ' ' && c <= highestCharacter)
-            {
-                output.Add(c);
-            }
-            else
-            {
-                throw new InvalidDataException($"The string '{key}' in {_strings.Source} contains '{c}', which the game can't print (letters must be capitals)");
-            }
+                break;
+            case "drive":
+                // MT16
+                PrintCharacter(_catalogueDriveCharacter);
+                break;
+            default:
+                throw new InvalidOperationException($"Unknown placeholder '{{{name}}}'");
         }
+    }
 
-        result = [.. output];
-        converted[key] = result;
-        return result;
+    /// <summary>
+    /// Print some text as it is written, following the text case in QQ17 as
+    /// TT27 does: in capitals if QQ17 is 0 (or when it's printing the one
+    /// letter that bit 6 on its own asks for), not at all if it's &amp;FF, in
+    /// lower case for the other values without bit 7, and otherwise (in
+    /// Sentence Case) as written. QQ17 changes just as it does when TT27
+    /// prints the original's capitals, so the generated text that follows
+    /// (such as a system name) is printed in the same case as before. If the
+    /// text before ended in the middle of a word (bit 6 of QQ17), the text
+    /// carries on that word, as it does in the original, so its first letter
+    /// is in lower case.
+    /// </summary>
+    private void PrintWrittenText(string text)
+    {
+        bool carryingOnWord = _textCase != 0xFF && (_textCase & 0xC0) == 0xC0;
+        foreach (char c in text)
+        {
+            int character = c == '\n' ? 12 : c;
+            int upper = char.ToUpperInvariant(c);
+            bool letter = upper >= 'A';
+            int textCase = _textCase;
+            if (textCase == 0)
+            {
+                // TT74: capitals
+                PrintCharacter(c == '\n' ? 12 : upper);
+                continue;
+            }
+
+            if ((textCase & 0x80) != 0)
+            {
+                // TT41: Sentence Case
+                if ((textCase & 0x40) != 0)
+                {
+                    // TT45: in a word
+                    if (textCase == 0xFF)
+                    {
+                        continue;
+                    }
+
+                    if (letter)
+                    {
+                        PrintCharacter(carryingOnWord ? char.ToLowerInvariant(c) : character);
+                        carryingOnWord = false;
+                        continue;
+                    }
+
+                    // TT46: the end of a word
+                    _textCase = textCase & 0b10111111;
+                    carryingOnWord = false;
+                    PrintCharacter(character);
+                    continue;
+                }
+
+                if (letter)
+                {
+                    _textCase = textCase | 0b01000000;
+                }
+
+                carryingOnWord = false;
+                PrintCharacter(character);
+                continue;
+            }
+
+            if ((textCase & 0x40) != 0)
+            {
+                // TT46: one letter as it is, and then capitals
+                _textCase = textCase & 0b10111111;
+                PrintCharacter(c == '\n' ? 12 : upper);
+                continue;
+            }
+
+            // TT42: lower case
+            PrintCharacter(c == '\n' ? 12 : char.ToLowerInvariant(c));
+        }
+    }
+
+    /// <summary>
+    /// Print some text as it is written, following the text case that DTS
+    /// applies to the original's capitals: in capitals if DTW1 is 0, and
+    /// otherwise as written, except for a letter that starts one of the text's
+    /// words, which is in lower case if DTW6 has turned lower case on, or if
+    /// the text before ended in the middle of a word (DTW2), so the text
+    /// carries on that word, as it does in the original. A capital in the
+    /// middle of a word (such as the C in "(C)", where only spaces, full stops,
+    /// colons and newlines end words) is always a capital, as it is where the
+    /// original asks for one (MT19), and so is a letter that DTW8 asks for.
+    /// </summary>
+    private void PrintWrittenExtendedText(string text)
+    {
+        bool startOfWord = true;
+        foreach (char c in text)
+        {
+            int character = c == '\n' ? 12 : c;
+            if (char.ToUpperInvariant(c) >= 'A')
+            {
+                if (_lowerCaseMask == 0)
+                {
+                    character = char.ToUpperInvariant(c);
+                }
+                else if (startOfWord && ((_lowerCaseEnabled & 0x80) != 0 || (_notPrintingWord & 0x80) == 0))
+                {
+                    character = char.ToLowerInvariant(c);
+                }
+
+                if (_capitaliseMask != 0xFF)
+                {
+                    // DT5: a capital
+                    character = char.ToUpperInvariant((char)character);
+                }
+            }
+
+            PrintCharacter(character);
+            startOfWord = c is ' ' or '.' or ':' or '\n';
+        }
     }
 
     // ------------------------------------------------------------------------

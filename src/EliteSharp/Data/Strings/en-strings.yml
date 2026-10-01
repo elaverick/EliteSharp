@@ -5,25 +5,29 @@
 # translation is another file with the same keys, named after its language
 # (such as fr-strings.yml), and chosen with --language.
 #
-# The text is printed as the original prints it:
+# The text is written as it appears on the screen, and printed as it is
+# written, apart from where the screen is in capitals (such as the screen
+# titles and the in-flight messages), where it is printed in capitals. Some
+# strings are only ever shown in capitals, so they are written that way.
 #
-#   - Letters are written in capitals, as the game applies the case (such as
-#     Sentence Case) as it prints them, and the font only has ASCII characters.
+# The spelling, spacing and capitals are the original's, including its
+# quirks (such as "E.C.M.System", "Tech.Level" and the two spaces in
+# "Military  Laser"), so the game looks as it did.
+#
+#   - The font has the printable ASCII characters (so no accents).
 #   - \n is a newline, and \a is a beep.
-#   - The words in braces print something:
+#   - These placeholders print a value:
 #
-#       {cash}               our cash, then " CR" and a newline
+#       {cash}               our cash, then " Cr" and a newline
 #       {galaxy}             the galaxy number
 #       {current_system}     the name of the system we are in
 #       {system}             the name of the selected system
 #       {commander}          the commander's name
 #       {default_commander}  the default commander's name (JAMESON)
 #       {drive}              the drive number, in the disc catalogue
-#       {capitalise}         print the next letter in capitals, where the game
-#                            would otherwise print it in lower case
 #
-# Where the text goes on the screen and its case are up to the game, so a
-# translation only needs to translate the words.
+# Where the text goes on the screen is up to the game, so a translation only
+# needs to translate the words.
 
 # The text that the game generates (the "goat soup" system descriptions and
 # the species names) is not here, but in en-descriptions.yml, and the
@@ -31,136 +35,136 @@
 
 title:
   banner: "---- E L I T E ----"
-  load_new_commander: "  LOAD NEW COMMANDER "
-  press_space: "PRESS SPACE OR FIRE,{capitalise}COMMANDER."
-  copyright: "({capitalise}C) ACORNSOFT 1986"
-  authors: "BY D.BRABEN & I.BELL"
+  load_new_commander: "  Load New Commander "
+  press_space: "Press Space Or Fire,Commander."
+  copyright: "(C) Acornsoft 1986"
+  authors: "By D.Braben & I.Bell"
 
 status:
   commander: "COMMANDER {commander}"
-  present_system: "PRESENT SYSTEM"
-  hyperspace_system: "HYPERSPACE SYSTEM"
-  condition: "CONDITION"
-  docked: "DOCKED"
-  condition_green: "GREEN"
-  condition_yellow: "YELLOW"
-  condition_red: "RED"
-  legal_status: "LEGAL STATUS:"
-  clean: "CLEAN"
-  offender: "OFFENDER"
-  fugitive: "FUGITIVE"
-  rating: "RATING:"
+  present_system: "Present System"
+  hyperspace_system: "Hyperspace System"
+  condition: "Condition"
+  docked: "Docked"
+  condition_green: "Green"
+  condition_yellow: "Yellow"
+  condition_red: "Red"
+  legal_status: "Legal Status:"
+  clean: "Clean"
+  offender: "Offender"
+  fugitive: "Fugitive"
+  rating: "Rating:"
   equipment: "EQUIPMENT:"
 
 ratings:
-  harmless: "HARMLESS"
-  mostly_harmless: "MOSTLY HARMLESS"
-  poor: "POOR "
-  average: "AVERAGE "
-  above_average: "ABOVE AVERAGE "
-  competent: "COMPETENT"
-  dangerous: "DANGEROUS"
-  deadly: "DEADLY"
+  harmless: "Harmless"
+  mostly_harmless: "Mostly Harmless"
+  poor: "Poor "
+  average: "Average "
+  above_average: "Above Average "
+  competent: "Competent"
+  dangerous: "Dangerous"
+  deadly: "Deadly"
   elite: "---- E L I T E ----"
 
 equipment:
-  fuel: "FUEL"
-  missile: "MISSILE"
-  large_cargo_bay: "LARGE CARGO BAY"
-  ecm: "E.C.M.SYSTEM"
-  extra_pulse_lasers: "EXTRA PULSE LASERS"
-  extra_beam_lasers: "EXTRA BEAM LASERS"
-  fuel_scoops: "FUEL SCOOPS"
-  escape_pod: "ESCAPE POD"
-  energy_bomb: "ENERGY BOMB"
-  energy_unit: "ENERGY UNIT"
-  docking_computers: "DOCKING COMPUTERS"
-  galactic_hyperspace: "GALACTIC HYPERSPACE "
-  military_laser: "MILITARY  LASER"
-  mining_laser: "MINING  LASER"
-  pulse_laser: "PULSE LASER"
-  beam_laser: "BEAM LASER"
-  all: "ALL"
-  present: "PRESENT"
+  fuel: "Fuel"
+  missile: "Missile"
+  large_cargo_bay: "Large Cargo Bay"
+  ecm: "E.C.M.System"
+  extra_pulse_lasers: "Extra Pulse Lasers"
+  extra_beam_lasers: "Extra Beam Lasers"
+  fuel_scoops: "Fuel Scoops"
+  escape_pod: "Escape Pod"
+  energy_bomb: "Energy Bomb"
+  energy_unit: "Energy Unit"
+  docking_computers: "Docking Computers"
+  galactic_hyperspace: "Galactic Hyperspace "
+  military_laser: "Military  Laser"
+  mining_laser: "Mining  Laser"
+  pulse_laser: "Pulse Laser"
+  beam_laser: "Beam Laser"
+  all: "All"
+  present: "Present"
 
 views:
-  front: "FRONT"
-  rear: "REAR"
-  left: "LEFT"
-  right: "RIGHT"
-  view: "VIEW "
+  front: "Front"
+  rear: "Rear"
+  left: "Left"
+  right: "Right"
+  view: "View "
 
 commodities:
-  food: "FOOD"
-  textiles: "TEXTILES"
-  radioactives: "RADIOACTIVES"
-  slaves: "SLAVES"
-  liquor_wines: "LIQUOR/WINES"
-  luxuries: "LUXURIES"
-  narcotics: "NARCOTICS"
-  computers: "COMPUTERS"
-  machinery: "MACHINERY"
-  alloys: "ALLOYS"
-  firearms: "FIREARMS"
-  furs: "FURS"
-  minerals: "MINERALS"
-  gold: "GOLD"
-  platinum: "PLATINUM"
-  gem_stones: "GEM-STONES"
-  alien_items: "ALIEN ITEMS"
+  food: "Food"
+  textiles: "Textiles"
+  radioactives: "Radioactives"
+  slaves: "Slaves"
+  liquor_wines: "Liquor/Wines"
+  luxuries: "Luxuries"
+  narcotics: "Narcotics"
+  computers: "Computers"
+  machinery: "Machinery"
+  alloys: "Alloys"
+  firearms: "Firearms"
+  furs: "Furs"
+  minerals: "Minerals"
+  gold: "Gold"
+  platinum: "Platinum"
+  gem_stones: "Gem-Stones"
+  alien_items: "Alien Items"
 
 market:
   title: "{current_system} MARKET PRICES"
   headers: "UNIT  QUANTITY\n PRODUCT   UNIT PRICE FOR SALE\n"
-  quantity_of: "QUANTITY OF "
-  quantity: "QUANTITY"
-  sell: "SELL"
-  cargo: " CARGO"
+  quantity_of: "Quantity Of "
+  quantity: "Quantity"
+  sell: "Sell"
+  cargo: " Cargo"
   inventory: "INVENTORY\n"
-  cash: "CASH"
-  cash_balance: "CASH:{cash}"
-  credits: " CR"
+  cash: "Cash"
+  cash_balance: "Cash:{cash}"
+  credits: " Cr"
   equip: "EQUIP"
   ship: "SHIP"
-  item: "ITEM"
+  item: "Item"
 
 system_data:
   title: "DATA ON {system}"
-  distance: "DISTANCE"
-  light_years: " LIGHT YEARS"
-  economy: "ECONOMY"
-  government: "GOVERNMENT"
-  tech_level: "TECH.LEVEL"
-  population: "POPULATION"
-  billion: " BILLION"
-  gross_productivity: "GROSS PRODUCTIVITY"
-  average_radius: "AVERAGE RADIUS"
+  distance: "Distance"
+  light_years: " Light Years"
+  economy: "Economy"
+  government: "Government"
+  tech_level: "Tech.Level"
+  population: "Population"
+  billion: " Billion"
+  gross_productivity: "Gross Productivity"
+  average_radius: "Average Radius"
 
 economy:
-  rich: "RICH "
-  average: "AVERAGE "
-  poor: "POOR "
-  mainly: "MAINLY "
-  industrial: "INDUSTRIAL"
-  agricultural: "AGRICULTURAL"
+  rich: "Rich "
+  average: "Average "
+  poor: "Poor "
+  mainly: "Mainly "
+  industrial: "Industrial"
+  agricultural: "Agricultural"
 
 government:
-  anarchy: "ANARCHY"
-  feudal: "FEUDAL"
-  multi_government: "MULTI-GOVERNMENT"
-  dictatorship: "DICTATORSHIP"
-  communist: "COMMUNIST"
-  confederacy: "CONFEDERACY"
-  democracy: "DEMOCRACY"
-  corporate_state: "CORPORATE STATE"
+  anarchy: "Anarchy"
+  feudal: "Feudal"
+  multi_government: "Multi-Government"
+  dictatorship: "Dictatorship"
+  communist: "Communist"
+  confederacy: "Confederacy"
+  democracy: "Democracy"
+  corporate_state: "Corporate State"
 
 charts:
   short_range: "SHORT RANGE CHART"
   galactic: "GALACTIC CHART{galaxy}"
   hyperspace: "HYPERSPACE "
   range: "RANGE"
-  planet_name: "PLANET NAME? "
-  unknown_planet: " UNKNOWN PLANET"
+  planet_name: "Planet Name? "
+  unknown_planet: " Unknown Planet"
 
 messages:
   bounty: "{cash}"
@@ -179,16 +183,16 @@ prompts:
 
 disk_menu:
   title: " DISK ACCESS MENU"
-  load: "1. LOAD NEW COMMANDER"
-  save: "2. SAVE COMMANDER {commander}"
-  catalogue: "3. CATALOGUE DISK"
-  delete: "4. DELETE FILE"
-  default: "5. DEFAULT {default_commander}"
-  exit: "6. EXIT"
+  load: "1. Load New Commander"
+  save: "2. Save Commander {commander}"
+  catalogue: "3. Catalogue Disk"
+  delete: "4. Delete File"
+  default: "5. Default {default_commander}"
+  exit: "6. Exit"
 
 disk:
-  which_drive: "\nWHICH DRIVE?"
+  which_drive: "\nWhich Drive?"
   catalogue_header: "DRIVE {drive} CATALOGUE"
-  commander_name: "COMMANDER'S NAME? "
+  commander_name: "Commander's Name? "
   illegal_file: "ILLEGAL ELITE II FILE"
-  are_you_sure: "ARE YOU SURE?"
+  are_you_sure: "Are You Sure?"

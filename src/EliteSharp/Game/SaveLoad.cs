@@ -556,37 +556,6 @@ public sealed partial class EliteGame
         }
     }
 
-    /// <summary>
-    /// FILEPR: print the name of the current filing system. The original
-    /// prints extended token 3 + DISK, which in this version is the catalogue
-    /// heading or nothing (token 4 is empty), and only the disc error message
-    /// uses this, which this game doesn't show.
-    /// </summary>
-    private void PrintFilingSystem()
-    {
-        if (FilingSystemToggle == 0)
-        {
-            PrintCatalogueHeader();
-        }
-    }
-
-    /// <summary>
-    /// OTHERFILEPR: print the name of the other filing system. The original
-    /// prints extended token 2 - DISK, which in this version is the drive
-    /// prompt or the disc access menu (and nothing uses this).
-    /// </summary>
-    private void PrintOtherFilingSystem()
-    {
-        if (FilingSystemToggle == 0)
-        {
-            PrintExtendedText("disk.which_drive");
-        }
-        else
-        {
-            PrintDiscAccessMenu();
-        }
-    }
-
     /// <summary>Clear the screen for a disc screen, and start its title in capitals in column 6.</summary>
     private void StartDiscScreen()
     {

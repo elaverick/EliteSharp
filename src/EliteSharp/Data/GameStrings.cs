@@ -13,9 +13,15 @@ public sealed class GameStrings
     /// <summary>The language the game uses unless told otherwise.</summary>
     public const string DefaultLanguage = "en";
 
-    private readonly Dictionary<string, string> _strings;
+    /// <summary>The placeholders that the strings can use, such as {cash}, each of which prints a value.</summary>
+    public static readonly IReadOnlySet<string> Placeholders = new HashSet<string>(StringComparer.Ordinal)
+    {
+        "cash", "galaxy", "current_system", "system", "commander", "default_commander", "drive",
+    };
 
-    private GameStrings(string language, string source, Dictionary<string, string> strings)
+    private readonly Dictionary<string, (string Text, IReadOnlyList<TextPart> Parts)> _strings;
+
+    private GameStrings(string language, string source, Dictionary<string, (string, IReadOnlyList<TextPart>)> strings)
     {
         Language = language;
         Source = source;
@@ -50,6 +56,7 @@ public sealed class GameStrings
     }
 
     /// <summary>Read the strings for a language from the contents of a strings file.</summary>
+    /// <exception cref="InvalidDataException">The file isn't valid (the message says where and why).</exception>
     public static GameStrings Parse(string language, string yaml, string source)
     {
         var stream = new YamlStream();
@@ -67,7 +74,7 @@ public sealed class GameStrings
             throw new InvalidDataException($"{source}: the file must contain a single mapping of sections and strings");
         }
 
-        var strings = new Dictionary<string, string>(StringComparer.Ordinal);
+        var strings = new Dictionary<string, (string, IReadOnlyList<TextPart>)>(StringComparer.Ordinal);
         Add(root, "");
         return new GameStrings(language, source, strings);
 
@@ -82,7 +89,7 @@ public sealed class GameStrings
                         Add(section, key + ".");
                         break;
                     case YamlScalarNode { Value: { } text }:
-                        strings[key] = text;
+                        strings[key] = (text, SplitText(text, $"{source} (line {value.Start.Line}): '{key}'"));
                         break;
                     default:
                         throw new InvalidDataException($"{source} (line {value.Start.Line}): '{key}' must be a string or a section of strings");
@@ -93,8 +100,67 @@ public sealed class GameStrings
 
     /// <summary>The string with the given key, such as "equipment.fuel".</summary>
     /// <exception cref="KeyNotFoundException">There is no string with that key.</exception>
-    public string Get(string key) =>
-        _strings.TryGetValue(key, out var text)
-            ? text
+    public string Get(string key) => Find(key).Text;
+
+    /// <summary>The string with the given key, split into text and placeholders.</summary>
+    /// <exception cref="KeyNotFoundException">There is no string with that key.</exception>
+    public IReadOnlyList<TextPart> GetParts(string key) => Find(key).Parts;
+
+    private (string Text, IReadOnlyList<TextPart> Parts) Find(string key) =>
+        _strings.TryGetValue(key, out var found)
+            ? found
             : throw new KeyNotFoundException($"There is no string '{key}' in {Source} (language '{Language}')");
+
+    /// <summary>
+    /// Split a string into its text and placeholders, checking that the game
+    /// can print it (the font has the printable ASCII characters, and \n is a
+    /// newline and \a is a beep).
+    /// </summary>
+    private static List<TextPart> SplitText(string text, string where)
+    {
+        var parts = new List<TextPart>();
+        int start = 0;
+        for (int i = 0; i < text.Length; i++)
+        {
+            char c = text[i];
+            if (c == '{')
+            {
+                int end = text.IndexOf('}', i);
+                string name = end < 0 ? text[i..] : text[(i + 1)..end];
+                if (end < 0 || !Placeholders.Contains(name))
+                {
+                    throw new InvalidDataException($"{where} contains an unknown placeholder '{{{name}}}' (expected one of {string.Join(", ", Placeholders.Select(p => $"{{{p}}}"))})");
+                }
+
+                if (i > start)
+                {
+                    parts.Add(new LiteralText(text[start..i]));
+                }
+
+                parts.Add(new Placeholder(name));
+                i = end;
+                start = end + 1;
+            }
+            else if (c is not ('\n' or '\a') && (c < ' ' || c > '~' || c == '}'))
+            {
+                throw new InvalidDataException($"{where} contains '{c}', which the game can't print (its font only has the printable ASCII characters)");
+            }
+        }
+
+        if (text.Length > start)
+        {
+            parts.Add(new LiteralText(text[start..]));
+        }
+
+        return parts;
+    }
 }
+
+/// <summary>Part of a string of the game's fixed text.</summary>
+public abstract record TextPart;
+
+/// <summary>Text, which the game prints as it is written (in capitals where the screen is in capitals).</summary>
+public sealed record LiteralText(string Text) : TextPart;
+
+/// <summary>A placeholder, such as {cash}, which the game prints a value in place of.</summary>
+public sealed record Placeholder(string Name) : TextPart;

@@ -16,9 +16,12 @@ public sealed class SystemDescriptionTests
     /// galaxies (see <see cref="DataOnSystemScreens"/>). The descriptions were
     /// checked against a model of the original's 6502 routines (DETOK, DT6,
     /// MT17, MT18 and DORND, with the C flag as the 6502 leaves it), which
-    /// gives the well-known descriptions of Lave and Tibedied below.
+    /// gives the well-known descriptions of Lave and Tibedied below. The one
+    /// difference is that the random words don't have the question mark that
+    /// the original prints in a few of them (see
+    /// <see cref="ARandomWordDoesntHaveAQuestionMark"/>).
     /// </summary>
-    private const string OriginalChecksum = "a8080f127675d71c53c6b265ccb62e40181cc55502b8bf71437f0efd3c77eac8";
+    private const string OriginalChecksum = "0d35e1992c8384c8be99146499bfe401ba5adceea7e0a5cd07082e2a21d8480b";
 
     [Fact]
     public void EverySystemIsDescribedAsInTheOriginal()
@@ -117,15 +120,18 @@ public sealed class SystemDescriptionTests
     }
 
     [Fact]
-    public void ARandomWordCanContainAQuestionMark()
+    public void ARandomWordDoesntHaveAQuestionMark()
     {
         // The random words (MT18) are made from the two-letter tokens, one of
-        // which is "A?", and the "?" is printed (galaxy 1, system 223)
+        // which is the single A, which the original stores as "A?" and prints
+        // with its "?" in the random words (as "Esseina?oid" here, in galaxy
+        // 1, system 223). The words are the same without it, as the random
+        // numbers don't depend on the letters.
         Assert.EndsWith(
             """
             This planet  is  mildly  noted
             for  the   Beenrian   mountain
-            Esseina?oid  but  scourged  by
+            Esseinaoid  but  scourged   by
             frequent civil war.
             """.ReplaceLineEndings("\n"),
             DataOnSystemScreens().ElementAt(223 * 2 + 1).TrimEnd());

@@ -26,7 +26,7 @@ public sealed class DescriptionGrammar
         ["capitalise"] = 19,
     };
 
-    /// <summary>The number of pairs of letters that random words are made from (MT18 picks one with a random number AND 62).</summary>
+    /// <summary>The number of pairs of letters (or single letters) that random words are made from (MT18 picks one with a random number AND 62).</summary>
     public const int RandomWordPairCount = 32;
 
     private DescriptionGrammar(
@@ -54,7 +54,7 @@ public sealed class DescriptionGrammar
     /// <summary>What {system_adjective} adds to the system's name (such as "IAN", for "Lavian").</summary>
     public DescriptionText AdjectiveSuffix { get; }
 
-    /// <summary>The pairs of letters that random words are made from.</summary>
+    /// <summary>The pairs of letters (or single letters) that random words are made from.</summary>
     public IReadOnlyList<string> RandomWordPairs { get; }
 
     /// <summary>The descriptions that replace the generated ones for a few systems.</summary>
@@ -123,9 +123,9 @@ public sealed class DescriptionGrammar
             var pairs = Sequence(Required(root, "random_word_pairs"), "random_word_pairs")
                 .Select(node => Scalar(node, "random_word_pairs"))
                 .ToList();
-            if (pairs.Count != RandomWordPairCount || pairs.Any(pair => pair.Length != 2 || pair.Any(c => c < ' ' || c > '_')))
+            if (pairs.Count != RandomWordPairCount || pairs.Any(pair => pair.Length is < 1 or > 2 || pair.Any(c => c < 'A' || c > 'Z')))
             {
-                throw Error(root["random_word_pairs"], $"'random_word_pairs' must be {RandomWordPairCount} pairs of capital letters");
+                throw Error(root["random_word_pairs"], $"'random_word_pairs' must be {RandomWordPairCount} pairs of capital letters (or single capital letters)");
             }
 
             var specials = new List<SpecialDescription>();

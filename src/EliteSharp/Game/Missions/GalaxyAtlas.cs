@@ -1,5 +1,4 @@
 using System.Text;
-using EliteSharp.Data;
 
 namespace EliteSharp.Game.Missions;
 
@@ -72,12 +71,7 @@ public static class GalaxyAtlas
             int token = seeds[5] & 31;
             if (token != 0)
             {
-                int index = token << 1;
-                name.Append((char)GameData.TwoLetterTokens[index]);
-                if (GameData.TwoLetterTokens[index + 1] != '?')
-                {
-                    name.Append((char)GameData.TwoLetterTokens[index + 1]);
-                }
+                name.Append(SystemNames.LetterPairs[token]);
             }
 
             Twist(seeds);

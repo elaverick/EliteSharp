@@ -38,8 +38,10 @@ description: "{lower_case}{justify}{capitalise}{{subject}} IS {{summary}}.\n{lef
 adjective_suffix: "IAN"
 
 # The pairs of letters in the random words (the original's two-letter tokens,
-# including "A?", which really does print a question mark)
-random_word_pairs: [AB, OU, SE, IT, IL, ET, ST, ON, LO, NU, TH, NO, AL, LE, XE, GE, ZA, CE, BI, SO, US, ES, AR, MA, IN, DI, RE, "A?", ER, AT, EN, BE]
+# where the single A is "A?", whose "?" the original prints in the random
+# words, which is a mistake that this game doesn't copy, so a few
+# descriptions don't have a question mark in the middle of a word)
+random_word_pairs: [AB, OU, SE, IT, IL, ET, ST, ON, LO, NU, TH, NO, AL, LE, XE, GE, ZA, CE, BI, SO, US, ES, AR, MA, IN, DI, RE, A, ER, AT, EN, BE]
 
 # The descriptions that replace the "goat soup" for a few systems, when we
 # are docked there (the last is for a galaxy that doesn't exist)

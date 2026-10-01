@@ -436,7 +436,7 @@ public sealed partial class EliteGame
         PrintCharacter(character);
     }
 
-    /// <summary>TT43: print a two-letter token (128-159).</summary>
+    /// <summary>TT43: print a two-letter token (128-159), the letters of part of a system's name (see <see cref="SystemNames"/>).</summary>
     private void PrintTwoLetterToken(int token)
     {
         if (token >= 160)
@@ -444,12 +444,9 @@ public sealed partial class EliteGame
             throw new ArgumentOutOfRangeException(nameof(token), token, "The original's recursive tokens are now the game's text (see Data/Strings)");
         }
 
-        int index = (token & 127) << 1;
-        PrintToken(GameData.TwoLetterTokens[index]);
-        int second = GameData.TwoLetterTokens[index + 1];
-        if (second != '?')
+        foreach (char letter in SystemNames.LetterPairs[token & 31])
         {
-            PrintToken(second);
+            PrintToken(letter);
         }
     }
 
@@ -616,9 +613,10 @@ public sealed partial class EliteGame
         {
             int index = (first ? NextRandom() : NextRandomRepeatable()) & 62;
             first = false;
-            string pair = _descriptions.RandomWordPairs[index / 2];
-            PrintLetter(pair[0]);
-            PrintLetter(pair[1]);
+            foreach (char letter in _descriptions.RandomWordPairs[index / 2])
+            {
+                PrintLetter(letter);
+            }
             pairs--;
         }
         while (pairs >= 0);

@@ -45,6 +45,16 @@ public sealed class OriginalDataTests
     }
 
     [Fact]
+    public void TheLettersOfTheSystemsNamesAreTheOriginals()
+    {
+        // QQ16: each pair of letters, where the single "A" is "A?"
+        var pairs = (string[])typeof(EliteGame).Assembly.GetType("EliteSharp.Game.SystemNames")!
+            .GetField("LetterPairs", BindingFlags.Static | BindingFlags.Public)!.GetValue(null)!;
+        var bytes = pairs.SelectMany(pair => pair.PadRight(2, '?')).Select(c => (byte)c).ToArray();
+        Assert.Equal(OriginalTwoLetterTokens, bytes);
+    }
+
+    [Fact]
     public void TheEnergyBombsBoltIsTheOriginals() =>
         Assert.Equal(OriginalBombBaseX.Select(b => (int)b), StaticField<int[]>("BombBoltBaseX"));
 
@@ -56,7 +66,15 @@ public sealed class OriginalDataTests
         (T)typeof(EliteGame).GetField(name, BindingFlags.Static | BindingFlags.NonPublic)!.GetValue(null)!;
 
     // The original bytes, as assembled from the BBC Master source (QQ23, PRXS,
-    // NA%, BOMBPOS and TGINT)
+    // NA%, BOMBPOS, TGINT and QQ16)
+
+    private static readonly byte[] OriginalTwoLetterTokens =
+    [
+        0x41, 0x4C, 0x4C, 0x45, 0x58, 0x45, 0x47, 0x45, 0x5A, 0x41, 0x43, 0x45, 0x42, 0x49, 0x53, 0x4F,
+        0x55, 0x53, 0x45, 0x53, 0x41, 0x52, 0x4D, 0x41, 0x49, 0x4E, 0x44, 0x49, 0x52, 0x45, 0x41, 0x3F,
+        0x45, 0x52, 0x41, 0x54, 0x45, 0x4E, 0x42, 0x45, 0x52, 0x41, 0x4C, 0x41, 0x56, 0x45, 0x54, 0x49,
+        0x45, 0x44, 0x4F, 0x52, 0x51, 0x55, 0x41, 0x4E, 0x54, 0x45, 0x49, 0x53, 0x52, 0x49, 0x4F, 0x4E,
+    ];
 
     private static readonly byte[] OriginalMarketPrices =
     [

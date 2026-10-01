@@ -14,9 +14,9 @@ bomb's bolt (BOMBPOS) and the pause keys (TGINT) are in the game's code; the
 tests check them against the original bytes.
 
 The original's text token tables aren't needed: the game's fixed text and the
-system descriptions are in src/EliteSharp/Data/Strings, and the missions'
-text is in src/EliteSharp/Assets/Missions. Only the two-letter tokens (QQ16)
-are kept, as the game uses them to make the systems' names.
+system descriptions are in src/EliteSharp/Data/Strings, the missions' text is
+in src/EliteSharp/Assets/Missions, and the letters of the systems' names
+(QQ16) are in the game's code (Game/SystemNames.cs).
 
 Usage: python tools/gen_data.py   (run from the repository root)
 """
@@ -101,8 +101,6 @@ def gen_tables():
 
     # Tables in the main code block (the maths tables, such as the sine,
     # arctan and logarithm tables, are left out, as the game uses real maths)
-    tables.append(("TwoLetterTokens", code_bytes("QQ16", 64),
-                   "QQ16: two-letter tokens 128-159."))
     tables.append(("HangarGroups", code_bytes("HATB", 36),
                    "HATB: ship hangar groups (type, x_hi/z_hi, z_lo/x_sign) * 3 * 4."))
     tables.append(("SoundPriority", code_bytes("SFXPR", 12), "SFXPR: sound data block 1."))

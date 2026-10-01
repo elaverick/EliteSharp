@@ -37,7 +37,8 @@ public sealed class DescriptionGrammarTests
     [InlineData("      - \"HOOPY\"", "      - \"Hoopy\"", "rule 'fabulous' contains 'o', which the game can't print in a description (letters must be capitals)")]
     [InlineData("      - \"HOOPY\"", "      - \"{{attraction}}\"", "rule 'attraction' refers to itself")]
     [InlineData("      - \"ICE\"\n      - \"MUD\"\n      - \"ZERO-{capitalise}G\"\n      - \"VACUUM\"\n      - \"{system_adjective} ULTRA\"", "      - \"ICE\"", "rule 'sport_setting' must have at least two choices")]
-    [InlineData("\"A?\", ", "", "'random_word_pairs' must be 32 pairs of capital letters")]
+    [InlineData("RE, A, ER", "RE, ER", "'random_word_pairs' must be 32 pairs of capital letters")]
+    [InlineData("RE, A, ER", "RE, ABC, ER", "'random_word_pairs' must be 32 pairs of capital letters")]
     [InlineData("FELINE, INSECT]", "FELINE]", "species 'kind' must have 8 words")]
     [InlineData("rules:\n", "rules:\n  unused: \"NOTHING\"\n", "rule 'unused' is never used")]
     public void MistakesAreReported(string find, string replace, string expected)

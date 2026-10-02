@@ -25,6 +25,47 @@ public sealed class DescriptionGrammarTests
     }
 
     [Fact]
+    public void DescriptionTextIsReadAsTextOperationsAndRules()
+    {
+        var descriptions = DescriptionGrammar.Load("en");
+
+        Assert.Equal<DescriptionPart>(
+        [
+            new DescriptionCommand(DescriptionOperation.LowerCase),
+            new DescriptionCommand(DescriptionOperation.JustifyOn),
+            new DescriptionCommand(DescriptionOperation.CapitaliseNextLetter),
+            new DescriptionReference("subject"),
+            new DescriptionLiteral(" IS "),
+            new DescriptionReference("summary"),
+            new DescriptionLiteral("."),
+            new DescriptionCommand(DescriptionOperation.Newline),
+            new DescriptionCommand(DescriptionOperation.LeftAlign),
+        ], descriptions.Description.Parts);
+    }
+
+    [Fact]
+    public void TextBetweenOperationsIsReadAsOnePart()
+    {
+        var descriptions = DescriptionGrammar.Load("en");
+
+        // Teorge, in galaxy 1
+        var teorge = descriptions.SpecialDescriptions.Single(special => special.Galaxy == 0 && special.System == 211);
+        Assert.Equal<DescriptionPart>(
+        [
+            new DescriptionCommand(DescriptionOperation.LowerCase),
+            new DescriptionCommand(DescriptionOperation.JustifyOn),
+            new DescriptionCommand(DescriptionOperation.CapitaliseNextLetter),
+            new DescriptionLiteral("THE COLONISTS HERE HAVE VIOLATED"),
+            new DescriptionCommand(DescriptionOperation.SentenceCase),
+            new DescriptionLiteral(" INTERGALACTIC CLONING PROTOCOL"),
+            new DescriptionCommand(DescriptionOperation.LowerCase),
+            new DescriptionLiteral(" AND SHOULD BE AVOIDED."),
+            new DescriptionCommand(DescriptionOperation.Newline),
+            new DescriptionCommand(DescriptionOperation.LeftAlign),
+        ], teorge.Text.Parts);
+    }
+
+    [Fact]
     public void AMissingLanguageIsReported()
     {
         var e = Assert.Throws<FileNotFoundException>(() => DescriptionGrammar.Load("xx"));

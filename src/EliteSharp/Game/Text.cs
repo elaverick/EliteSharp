@@ -454,29 +454,6 @@ public sealed partial class EliteGame
     // Extended text (DETOK)
     // ------------------------------------------------------------------------
 
-    /// <summary>
-    /// DETOK2: print a character or control code of extended text (the game's
-    /// text and the system descriptions). The original's extended tokens are
-    /// now the system descriptions (see Assets/Strings), so there are none to
-    /// print.
-    /// </summary>
-    private void PrintExtendedCharacter(int character)
-    {
-        if (character < 32)
-        {
-            ProcessControlCode(character);
-            return;
-        }
-
-        // DT8
-        if (character >= '[')
-        {
-            throw new ArgumentOutOfRangeException(nameof(character), character, "The original's extended tokens are now the system descriptions (see Assets/Strings)");
-        }
-
-        PrintLetter(character);
-    }
-
     /// <summary>DTS: print a letter in the correct case.</summary>
     private void PrintLetter(int character)
     {
@@ -494,51 +471,6 @@ public sealed partial class EliteGame
 
         // DT9
         PrintCharacter(character);
-    }
-
-    /// <summary>
-    /// DT3: process a control code in the system descriptions (from the
-    /// original's JMTB jump table). The original's other control codes
-    /// position the text, clear the screen and so on in its fixed text, which
-    /// the code that prints the game's text does itself.
-    /// </summary>
-    private void ProcessControlCode(int code)
-    {
-        switch (code)
-        {
-            case 1:
-                SetAllCaps();
-                break;
-            case 2:
-                SetSentenceCase();
-                break;
-            case 3:
-                PrintSystemName();
-                break;
-            case 13:
-                SetLowerCase();
-                break;
-            case 14:
-                SetJustified();
-                break;
-            case 15:
-                SetLeftAligned();
-                break;
-            case 17:
-                PrintSystemAdjective();
-                break;
-            case 18:
-                PrintRandomWord();
-                break;
-            case 19:
-                // MT19: a capital
-                _capitaliseMask = 0b11011111;
-                break;
-            default:
-                // 7, 10 and 12 print the character
-                PrintCharacter(code);
-                break;
-        }
     }
 
     /// <summary>MT1: switch to ALL CAPS.</summary>
@@ -652,13 +584,68 @@ public sealed partial class EliteGame
         {
             switch (part)
             {
-                case DescriptionCharacter character:
-                    PrintExtendedCharacter(character.Code);
+                case DescriptionLiteral literal:
+                    foreach (char c in literal.Text)
+                    {
+                        PrintLetter(c);
+                    }
+
+                    break;
+                case DescriptionCommand command:
+                    PerformDescriptionOperation(command.Operation);
                     break;
                 case DescriptionReference reference:
                     PrintDescriptionRule(_descriptions.Rules[reference.Rule]);
                     break;
             }
+        }
+    }
+
+    /// <summary>
+    /// DT3: perform an operation in the system descriptions (one of the
+    /// original's extended text control codes, from its JMTB jump table). The
+    /// original's other control codes position the text, clear the screen and
+    /// so on in its fixed text, which the code that prints the game's text
+    /// does itself.
+    /// </summary>
+    private void PerformDescriptionOperation(DescriptionOperation operation)
+    {
+        switch (operation)
+        {
+            case DescriptionOperation.AllCaps:
+                SetAllCaps();
+                break;
+            case DescriptionOperation.SentenceCase:
+                SetSentenceCase();
+                break;
+            case DescriptionOperation.LowerCase:
+                SetLowerCase();
+                break;
+            case DescriptionOperation.SystemName:
+                PrintSystemName();
+                break;
+            case DescriptionOperation.SystemAdjective:
+                PrintSystemAdjective();
+                break;
+            case DescriptionOperation.RandomWord:
+                PrintRandomWord();
+                break;
+            case DescriptionOperation.CapitaliseNextLetter:
+                // MT19: a capital
+                _capitaliseMask = 0b11011111;
+                break;
+            case DescriptionOperation.JustifyOn:
+                SetJustified();
+                break;
+            case DescriptionOperation.LeftAlign:
+                SetLeftAligned();
+                break;
+            case DescriptionOperation.Newline:
+                // As the original prints control code 12
+                PrintCharacter(12);
+                break;
+            default:
+                throw new ArgumentOutOfRangeException(nameof(operation), operation, null);
         }
     }
 

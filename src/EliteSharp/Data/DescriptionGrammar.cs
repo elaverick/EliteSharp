@@ -11,19 +11,18 @@ namespace EliteSharp.Data;
 /// </summary>
 public sealed class DescriptionGrammar
 {
-    /// <summary>The operations in braces that descriptions can use, and the extended text control codes (DETOK) they stand for.</summary>
-    public static readonly IReadOnlyDictionary<string, int> Codes = new Dictionary<string, int>
+    /// <summary>The operations in braces that descriptions can use, by name.</summary>
+    private static readonly IReadOnlyDictionary<string, DescriptionOperation> Operations = new Dictionary<string, DescriptionOperation>(StringComparer.Ordinal)
     {
-        ["all_caps"] = 1,
-        ["sentence_case"] = 2,
-        ["system"] = 3,
-        ["line_feed"] = 10,
-        ["lower_case"] = 13,
-        ["justify"] = 14,
-        ["left_align"] = 15,
-        ["system_adjective"] = 17,
-        ["random_word"] = 18,
-        ["capitalise"] = 19,
+        ["all_caps"] = DescriptionOperation.AllCaps,
+        ["sentence_case"] = DescriptionOperation.SentenceCase,
+        ["lower_case"] = DescriptionOperation.LowerCase,
+        ["system"] = DescriptionOperation.SystemName,
+        ["system_adjective"] = DescriptionOperation.SystemAdjective,
+        ["random_word"] = DescriptionOperation.RandomWord,
+        ["capitalise"] = DescriptionOperation.CapitaliseNextLetter,
+        ["justify"] = DescriptionOperation.JustifyOn,
+        ["left_align"] = DescriptionOperation.LeftAlign,
     };
 
     /// <summary>The number of pairs of letters (or single letters) that random words are made from (MT18 picks one with a random number AND 62).</summary>
@@ -176,9 +175,25 @@ public sealed class DescriptionGrammar
         {
             string text = Scalar(node, what);
             var parts = new List<DescriptionPart>();
+            int literalStart = 0;
             for (int i = 0; i < text.Length; i++)
             {
                 char c = text[i];
+                if (c is not ('{' or '\n'))
+                {
+                    if (c < ' ' || c > 'Z')
+                    {
+                        throw Error(node, $"{what} contains '{c}', which the game can't print in a description (letters must be capitals)");
+                    }
+
+                    continue;
+                }
+
+                if (i > literalStart)
+                {
+                    parts.Add(new DescriptionLiteral(text[literalStart..i]));
+                }
+
                 if (c == '{' && i + 1 < text.Length && text[i + 1] == '{')
                 {
                     int end = text.IndexOf("}}", i, StringComparison.Ordinal);
@@ -195,26 +210,25 @@ public sealed class DescriptionGrammar
                 {
                     int end = text.IndexOf('}', i);
                     string name = end < 0 ? text[i..] : text[(i + 1)..end];
-                    if (end < 0 || !Codes.TryGetValue(name, out int code))
+                    if (end < 0 || !Operations.TryGetValue(name, out var operation))
                     {
                         throw Error(node, $"{what} contains an unknown operation '{{{name}}}'");
                     }
 
-                    parts.Add(new DescriptionCharacter(code));
+                    parts.Add(new DescriptionCommand(operation));
                     i = end;
-                }
-                else if (c == '\n')
-                {
-                    parts.Add(new DescriptionCharacter(12));
-                }
-                else if (c >= ' ' && c <= 'Z')
-                {
-                    parts.Add(new DescriptionCharacter(c));
                 }
                 else
                 {
-                    throw Error(node, $"{what} contains '{c}', which the game can't print in a description (letters must be capitals)");
+                    parts.Add(new DescriptionCommand(DescriptionOperation.Newline));
                 }
+
+                literalStart = i + 1;
+            }
+
+            if (text.Length > literalStart)
+            {
+                parts.Add(new DescriptionLiteral(text[literalStart..]));
             }
 
             return new DescriptionText(parts);
@@ -324,11 +338,51 @@ public sealed class DescriptionGrammar
     }
 }
 
-/// <summary>Part of some description text: a character or control code, or a reference to a rule.</summary>
+/// <summary>Part of some description text: some text to print, an operation, or a reference to a rule.</summary>
 public abstract record DescriptionPart;
 
-/// <summary>A character to print, or an extended text control code (below 32).</summary>
-public sealed record DescriptionCharacter(int Code) : DescriptionPart;
+/// <summary>Some text to print (spaces, punctuation and capital letters), in the text case that the description is in.</summary>
+public sealed record DescriptionLiteral(string Text) : DescriptionPart;
+
+/// <summary>An operation, such as {system_adjective}, which prints something or changes how the text that follows is printed.</summary>
+public sealed record DescriptionCommand(DescriptionOperation Operation) : DescriptionPart;
+
+/// <summary>
+/// The operations that description text can use (the original's extended
+/// text control codes, whose numbers are in brackets).
+/// </summary>
+public enum DescriptionOperation
+{
+    /// <summary>{all_caps}: switch to ALL CAPS (MT1, code 1).</summary>
+    AllCaps,
+
+    /// <summary>{sentence_case}: switch to Sentence Case (MT2, code 2).</summary>
+    SentenceCase,
+
+    /// <summary>{lower_case}: switch to lower case (MT13, code 13).</summary>
+    LowerCase,
+
+    /// <summary>{system}: print the system's name (code 3).</summary>
+    SystemName,
+
+    /// <summary>{system_adjective}: print the system's adjective, such as "Lavian" (MT17, code 17).</summary>
+    SystemAdjective,
+
+    /// <summary>{random_word}: print a random word (MT18, code 18).</summary>
+    RandomWord,
+
+    /// <summary>{capitalise}: print the next letter as a capital (MT19, code 19).</summary>
+    CapitaliseNextLetter,
+
+    /// <summary>{justify}: justify the text that follows (MT14, code 14).</summary>
+    JustifyOn,
+
+    /// <summary>{left_align}: left-align the text that follows (MT15, code 15).</summary>
+    LeftAlign,
+
+    /// <summary>\n: a newline (code 12).</summary>
+    Newline,
+}
 
 /// <summary>A reference to a rule, which prints the rule.</summary>
 public sealed record DescriptionReference(string Rule) : DescriptionPart;

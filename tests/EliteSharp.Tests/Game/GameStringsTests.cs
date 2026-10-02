@@ -1,5 +1,6 @@
 using EliteSharp.Data;
 using EliteSharp.Game;
+using EliteSharp.Rendering;
 
 namespace EliteSharp.Tests.Game;
 
@@ -13,7 +14,7 @@ public sealed class GameStringsTests
     [Fact]
     public void TheEnglishStringsLoad()
     {
-        var strings = GameStrings.Load("en");
+        var strings = GameStrings.Load("en", HudAtlas.InFont);
 
         Assert.Equal("en", strings.Language);
         Assert.Equal("en-strings.yml", strings.Source);
@@ -23,7 +24,7 @@ public sealed class GameStringsTests
     [Fact]
     public void AStringIsLookedUpByItsKey()
     {
-        var strings = GameStrings.Load("en");
+        var strings = GameStrings.Load("en", HudAtlas.InFont);
 
         Assert.Equal("DOCKING COMPUTERS ON", strings.Get("messages.docking_computers_on"));
         Assert.Equal("Galactic Hyperspace ", strings.Get("equipment.galactic_hyperspace"));
@@ -33,7 +34,7 @@ public sealed class GameStringsTests
     [Fact]
     public void AMissingKeyIsReported()
     {
-        var strings = GameStrings.Load("en");
+        var strings = GameStrings.Load("en", HudAtlas.InFont);
 
         var e = Assert.Throws<KeyNotFoundException>(() => strings.Get("messages.no_such_message"));
         Assert.Equal("There is no string 'messages.no_such_message' in en-strings.yml (language 'en')", e.Message);
@@ -42,21 +43,21 @@ public sealed class GameStringsTests
     [Fact]
     public void AMissingLanguageIsReported()
     {
-        var e = Assert.Throws<FileNotFoundException>(() => GameStrings.Load("xx"));
+        var e = Assert.Throws<FileNotFoundException>(() => GameStrings.Load("xx", HudAtlas.InFont));
         Assert.StartsWith("There are no strings for the language 'xx'", e.Message);
     }
 
     [Fact]
     public void AStringsFileMustContainOnlySectionsAndStrings()
     {
-        var e = Assert.Throws<InvalidDataException>(() => GameStrings.Parse("xx", "hud:\n  cash: [1, 2]\n", "xx-strings.yml"));
+        var e = Assert.Throws<InvalidDataException>(() => GameStrings.Parse("xx", "hud:\n  cash: [1, 2]\n", "xx-strings.yml", HudAtlas.InFont));
         Assert.Equal("xx-strings.yml (line 2): 'hud.cash' must be a string or a section of strings", e.Message);
     }
 
     [Fact]
     public void AStringIsSplitIntoTextAndPlaceholders()
     {
-        var strings = GameStrings.Load("en");
+        var strings = GameStrings.Load("en", HudAtlas.InFont);
 
         Assert.Equal<TextPart>([new LiteralText("Cash:"), new Placeholder("cash")], strings.GetParts("market.cash_balance"));
         Assert.Equal<TextPart>([new Placeholder("current_system"), new LiteralText(" MARKET PRICES")], strings.GetParts("market.title"));
@@ -64,11 +65,21 @@ public sealed class GameStringsTests
 
     [Theory]
     [InlineData("{money}", "xx-strings.yml (line 2): 'market.cash' contains an unknown placeholder '{money}'")]
-    [InlineData("Café", "xx-strings.yml (line 2): 'market.cash' contains 'é', which the game can't print")]
+    [InlineData("Café", "xx-strings.yml (line 2): 'market.cash' contains 'é' (U+00E9), which the game can't print")]
     public void AStringThatTheGameCantPrintIsReported(string text, string expected)
     {
-        var e = Assert.Throws<InvalidDataException>(() => GameStrings.Parse("xx", $"market:\n  cash: \"{text}\"\n", "xx-strings.yml"));
+        var e = Assert.Throws<InvalidDataException>(() => GameStrings.Parse("xx", $"market:\n  cash: \"{text}\"\n", "xx-strings.yml", HudAtlas.InFont));
         Assert.StartsWith(expected, e.Message);
+    }
+
+    [Fact]
+    public void WhatTheGameCanPrintIsDecidedByTheCaller()
+    {
+        var strings = GameStrings.Parse("xx", "market:\n  cash: \"Café\"\n", "xx-strings.yml", c => c != '!');
+        Assert.Equal("Café", strings.Get("market.cash"));
+
+        var e = Assert.Throws<InvalidDataException>(() => GameStrings.Parse("xx", "market:\n  cash: \"Cash!\"\n", "xx-strings.yml", c => c != '!'));
+        Assert.Equal("xx-strings.yml (line 2): 'market.cash' contains '!' (U+0021), which the game can't print", e.Message);
     }
 
     [Fact]
@@ -144,7 +155,7 @@ public sealed class GameStringsTests
         string yaml = File.ReadAllText(Path.Combine(GameStrings.DefaultFolder, "en-strings.yml"))
             .Replace("fuel: \"Fuel\"", "fuel: \"Carburant\"")
             .Replace("inventory: \"INVENTORY\\n\"", "inventory: \"INVENTAIRE\\n\"");
-        var game = NewGame(GameStrings.Parse("fr", yaml, "fr-strings.yml"));
+        var game = NewGame(GameStrings.Parse("fr", yaml, "fr-strings.yml", HudAtlas.InFont));
 
         game.Call("ShowInventory");
 

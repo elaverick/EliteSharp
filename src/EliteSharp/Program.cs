@@ -25,7 +25,7 @@ try
 {
     ShipCatalogue.Reload();
     missions = MissionLoader.Load(MissionLoader.DefaultFolder);
-    strings = GameStrings.Load(options.Language);
+    strings = GameStrings.Load(options.Language, HudAtlas.InFont);
     descriptions = DescriptionGrammar.Load(options.Language);
     trading = TradingData.Load();
     _ = HudAtlas.Texels;

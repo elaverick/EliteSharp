@@ -85,7 +85,7 @@ public sealed partial class EliteGame
         TradingData? trading = null)
     {
         _missions = new MissionRuntime(missions ?? MissionLoader.Load(MissionLoader.DefaultFolder));
-        _strings = strings ?? GameStrings.Load(options.Language);
+        _strings = strings ?? GameStrings.Load(options.Language, HudAtlas.InFont);
         _descriptions = descriptions ?? DescriptionGrammar.Load(options.Language);
         _trading = trading ?? TradingData.Load();
         CheckTradingNames(_trading);

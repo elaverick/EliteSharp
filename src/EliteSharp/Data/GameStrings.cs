@@ -1,4 +1,3 @@
-using EliteSharp.Rendering;
 using YamlDotNet.Core;
 using YamlDotNet.RepresentationModel;
 
@@ -45,7 +44,8 @@ public sealed class GameStrings
     public static string FileName(string language) => $"{language}-strings.yml";
 
     /// <summary>Load the strings for a language from its file in a folder.</summary>
-    public static GameStrings Load(string language, string? folder = null)
+    /// <param name="canPrint">Whether the game can print a character (such as whether it is in the font).</param>
+    public static GameStrings Load(string language, Func<char, bool> canPrint, string? folder = null)
     {
         string path = Path.Combine(folder ?? DefaultFolder, FileName(language));
         if (!File.Exists(path))
@@ -53,12 +53,13 @@ public sealed class GameStrings
             throw new FileNotFoundException($"There are no strings for the language '{language}' (the file '{path}' is missing)", path);
         }
 
-        return Parse(language, File.ReadAllText(path), Path.GetFileName(path));
+        return Parse(language, File.ReadAllText(path), Path.GetFileName(path), canPrint);
     }
 
     /// <summary>Read the strings for a language from the contents of a strings file.</summary>
+    /// <param name="canPrint">Whether the game can print a character (such as whether it is in the font).</param>
     /// <exception cref="InvalidDataException">The file isn't valid (the message says where and why).</exception>
-    public static GameStrings Parse(string language, string yaml, string source)
+    public static GameStrings Parse(string language, string yaml, string source, Func<char, bool> canPrint)
     {
         var stream = new YamlStream();
         try
@@ -90,7 +91,7 @@ public sealed class GameStrings
                         Add(section, key + ".");
                         break;
                     case YamlScalarNode { Value: { } text }:
-                        strings[key] = (text, SplitText(text, $"{source} (line {value.Start.Line}): '{key}'"));
+                        strings[key] = (text, SplitText(text, $"{source} (line {value.Start.Line}): '{key}'", canPrint));
                         break;
                     default:
                         throw new InvalidDataException($"{source} (line {value.Start.Line}): '{key}' must be a string or a section of strings");
@@ -114,10 +115,10 @@ public sealed class GameStrings
 
     /// <summary>
     /// Split a string into its text and placeholders, checking that the game
-    /// can print it (each character must be in the font, apart from \n, which
-    /// is a newline, and \a, which is a beep).
+    /// can print it (each character must be one it can print, apart from \n,
+    /// which is a newline, and \a, which is a beep).
     /// </summary>
-    private static List<TextPart> SplitText(string text, string where)
+    private static List<TextPart> SplitText(string text, string where, Func<char, bool> canPrint)
     {
         var parts = new List<TextPart>();
         int start = 0;
@@ -142,9 +143,9 @@ public sealed class GameStrings
                 i = end;
                 start = end + 1;
             }
-            else if (c is not ('\n' or '\a') && (c == '}' || !HudAtlas.InFont(c)))
+            else if (c is not ('\n' or '\a') && (c == '}' || !canPrint(c)))
             {
-                throw new InvalidDataException($"{where} contains '{c}', which the game can't print (it isn't in the font, Assets/Images/font.png)");
+                throw new InvalidDataException($"{where} contains '{c}' (U+{(int)c:X4}), which the game can't print");
             }
         }
 

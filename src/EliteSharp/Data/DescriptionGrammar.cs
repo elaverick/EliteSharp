@@ -25,6 +25,13 @@ public sealed class DescriptionGrammar
         ["left_align"] = DescriptionOperation.LeftAlign,
     };
 
+    /// <summary>
+    /// The number of choices in a random rule (the original's random tokens
+    /// each choose one of five, in order, from a random number split into five
+    /// equal parts).
+    /// </summary>
+    public const int RandomChoiceCount = 5;
+
     /// <summary>The number of pairs of letters (or single letters) that random words are made from (MT18 picks one with a random number AND 62).</summary>
     public const int RandomWordPairCount = 32;
 
@@ -159,9 +166,9 @@ public sealed class DescriptionGrammar
                 var choices = Sequence(Required(mapping, "oneOf"), $"rule '{name}'")
                     .Select(choice => Text(choice, $"rule '{name}'", names))
                     .ToList();
-                if (choices.Count < 2)
+                if (choices.Count != RandomChoiceCount)
                 {
-                    throw Error(node, $"rule '{name}' must have at least two choices");
+                    throw Error(node, $"rule '{name}' must have exactly {RandomChoiceCount} choices (it has {choices.Count})");
                 }
 
                 return new DescriptionRule(choices, Random: true);

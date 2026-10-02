@@ -77,7 +77,6 @@ public sealed class DescriptionGrammarTests
     [InlineData("      - \"HOOPY\"", "      - \"{hoopy}\"", "rule 'fabulous' contains an unknown operation '{hoopy}'")]
     [InlineData("      - \"HOOPY\"", "      - \"Hoopy\"", "rule 'fabulous' contains 'o', which the game can't print in a description (letters must be capitals)")]
     [InlineData("      - \"HOOPY\"", "      - \"{{attraction}}\"", "rule 'attraction' refers to itself")]
-    [InlineData("      - \"ICE\"\n      - \"MUD\"\n      - \"ZERO-{capitalise}G\"\n      - \"VACUUM\"\n      - \"{system_adjective} ULTRA\"", "      - \"ICE\"", "rule 'sport_setting' must have at least two choices")]
     [InlineData("RE, A, ER", "RE, ER", "'random_word_pairs' must be 32 pairs of capital letters")]
     [InlineData("RE, A, ER", "RE, ABC, ER", "'random_word_pairs' must be 32 pairs of capital letters")]
     [InlineData("FELINE, INSECT]", "FELINE]", "species 'kind' must have 8 words")]
@@ -89,5 +88,39 @@ public sealed class DescriptionGrammarTests
         var e = Assert.Throws<InvalidDataException>(() => DescriptionGrammar.Parse(yaml.Replace(find, replace), "xx-descriptions.yml"));
         Assert.Contains(expected, e.Message);
         Assert.StartsWith("xx-descriptions.yml", e.Message);
+    }
+
+    /// <summary>The choices of the "sport_setting" rule in the English descriptions.</summary>
+    private const string SportSettingChoices = "      - \"ICE\"\n      - \"MUD\"\n      - \"ZERO-{capitalise}G\"\n      - \"VACUUM\"\n      - \"{system_adjective} ULTRA\"\n";
+
+    /// <summary>The English descriptions, with the "sport_setting" rule's choices replaced by the given ones.</summary>
+    private static string WithSportSettingChoices(params string[] choices)
+    {
+        string yaml = English.ReplaceLineEndings("\n");
+        Assert.Contains(SportSettingChoices, yaml);
+        return yaml.Replace(SportSettingChoices, string.Concat(choices.Select(choice => $"      - \"{choice}\"\n")));
+    }
+
+    [Theory]
+    [InlineData(1)]
+    [InlineData(4)]
+    [InlineData(6)]
+    public void ARandomRuleMustHaveFiveChoices(int count)
+    {
+        string[] choices = Enumerable.Range(0, count).Select(i => $"CHOICE {(char)('A' + i)}").ToArray();
+
+        var e = Assert.Throws<InvalidDataException>(() => DescriptionGrammar.Parse(WithSportSettingChoices(choices), "xx-descriptions.yml"));
+        Assert.Matches(@"^xx-descriptions\.yml \(line \d+\): ", e.Message);
+        Assert.EndsWith($"rule 'sport_setting' must have exactly 5 choices (it has {count})", e.Message);
+    }
+
+    [Fact]
+    public void ARandomRuleWithFiveChoicesKeepsThemInOrder()
+    {
+        var descriptions = DescriptionGrammar.Parse(WithSportSettingChoices("E", "D", "C", "B", "A"), "xx-descriptions.yml");
+
+        var rule = descriptions.Rules["sport_setting"];
+        Assert.True(rule.Random);
+        Assert.Equal(["E", "D", "C", "B", "A"], rule.Choices.Select(choice => Assert.IsType<DescriptionLiteral>(Assert.Single(choice.Parts)).Text));
     }
 }

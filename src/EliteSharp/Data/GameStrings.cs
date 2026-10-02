@@ -75,6 +75,11 @@ public sealed class GameStrings
         {
             throw new InvalidDataException($"{source} (line {e.Start.Line}): {e.Message}", e);
         }
+        catch (InvalidOperationException e)
+        {
+            // YamlDotNet reports some malformed files this way
+            throw new InvalidDataException($"{source}: the file isn't valid YAML ({e.Message})", e);
+        }
 
         if (stream.Documents.Count != 1 || stream.Documents[0].RootNode is not YamlMappingNode root)
         {
@@ -89,7 +94,12 @@ public sealed class GameStrings
         {
             foreach (var (keyNode, value) in mapping.Children)
             {
-                string key = prefix + ((YamlScalarNode)keyNode).Value;
+                if (keyNode is not YamlScalarNode { Value: { } name })
+                {
+                    throw new InvalidDataException($"{source} (line {keyNode.Start.Line}): a key must be a name (some text), not a list or a mapping");
+                }
+
+                string key = prefix + name;
                 switch (value)
                 {
                     case YamlMappingNode section:

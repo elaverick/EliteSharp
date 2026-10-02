@@ -54,6 +54,17 @@ public sealed class GameStringsTests
         Assert.Equal("xx-strings.yml (line 2): 'hud.cash' must be a string or a section of strings", e.Message);
     }
 
+    [Theory]
+    [InlineData("[hud]:\n  cash: \"Cash\"\n", "xx-strings.yml (line 1): a key must be a name (some text), not a list or a mapping")]
+    [InlineData("hud:\n  [cash]: \"Cash\"\n", "xx-strings.yml (line 2): a key must be a name (some text), not a list or a mapping")]
+    [InlineData("hud:\n  {cash: 1}: \"Cash\"\n", "xx-strings.yml (line 2): a key must be a name (some text), not a list or a mapping")]
+    [InlineData("- \"Cash\"\n", "xx-strings.yml: the file must contain a single mapping of sections and strings")]
+    public void AMalformedStringsFileIsReported(string yaml, string expected)
+    {
+        var e = Assert.Throws<InvalidDataException>(() => GameStrings.Parse("xx", yaml, "xx-strings.yml", HudAtlas.InFont));
+        Assert.Equal(expected, e.Message);
+    }
+
     [Fact]
     public void AStringIsSplitIntoTextAndPlaceholders()
     {

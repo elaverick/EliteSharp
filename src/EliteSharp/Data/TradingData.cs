@@ -73,6 +73,11 @@ public sealed class TradingData
         {
             throw new InvalidDataException($"{source} (line {e.Start.Line}): {e.Message}", e);
         }
+        catch (InvalidOperationException e)
+        {
+            // YamlDotNet reports some malformed files this way
+            throw new InvalidDataException($"{source}: the file isn't valid YAML ({e.Message})", e);
+        }
 
         if (stream.Documents.Count != 1 || stream.Documents[0].RootNode is not YamlMappingNode root)
         {
@@ -120,7 +125,11 @@ public sealed class TradingData
         var equipment = new List<(string, int)>();
         foreach (var (key, value) in equipmentList.Children)
         {
-            string name = ((YamlScalarNode)key).Value!;
+            if (key is not YamlScalarNode { Value: { } name })
+            {
+                throw Error(key, "a key must be a name (some text), not a list or a mapping");
+            }
+
             if (value is not YamlScalarNode { Value: { } price }
                 || !decimal.TryParse(price, NumberStyles.AllowDecimalPoint, CultureInfo.InvariantCulture, out decimal credits)
                 || credits * 10 != decimal.Truncate(credits * 10)

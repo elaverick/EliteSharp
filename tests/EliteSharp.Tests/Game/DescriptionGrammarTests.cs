@@ -161,4 +161,54 @@ public sealed class DescriptionGrammarTests
         Assert.Equal("0", Assert.IsType<DescriptionLiteral>(Assert.Single(rule.Choices[0].Parts)).Text);
         Assert.False(rule.Choices is DescriptionText[]);
     }
+
+    /// <summary>
+    /// A file whose structure is wrong (such as a list or a mapping where a
+    /// name or some text should be) is reported, with where it is, rather than
+    /// failing in some other way.
+    /// </summary>
+    [Theory]
+    [InlineData("rules:\n", "[a, b]: \"X\"\nrules:\n", "line 71): a key must be a name (some text), not a list or a mapping")]
+    [InlineData("rules:\n", "rules:\n  [a, b]: \"X\"\n", "line 72): a key must be a name (some text), not a list or a mapping")]
+    [InlineData("rules:\n", "rules:\n  {a: 1}: \"X\"\n", "line 72): a key must be a name (some text), not a list or a mapping")]
+    [InlineData("species:\n", "species:\n  [size]: [LARGE]\n", "line 65): a key must be a name (some text), not a list or a mapping")]
+    [InlineData("    oneOf:\n      - \"FABULOUS\"", "    [oneOf]:\n      - \"FABULOUS\"", "line 222): a key must be a name (some text), not a list or a mapping")]
+    [InlineData("  - galaxy: 1\n", "  - [galaxy]: 1\n", "line 49): a key must be a name (some text), not a list or a mapping")]
+    [InlineData("  renown: \"{{degree}} {{fame}} FOR {{feature}}\"", "  renown: [\"{{degree}}\"]", "line 86): rule 'renown' must be some text")]
+    [InlineData("    oneOf:\n      - \"FABULOUS\"", "    oneOf:\n      - [\"FABULOUS\"]", "line 223): rule 'fabulous' must be some text")]
+    [InlineData("    oneOf:\n      - \"FABULOUS\"\n      - \"EXOTIC\"\n      - \"HOOPY\"\n      - \"UNUSUAL\"\n      - \"EXCITING\"", "    oneOf: \"FABULOUS\"", "line 222): rule 'fabulous' must be a list")]
+    [InlineData("description: \"{lower_case}{justify}{capitalise}{{subject}} IS {{summary}}.\\n{left_align}\"", "description: {text: \"X\"}", "line 36): description must be some text")]
+    [InlineData("special_descriptions:\n  - galaxy: 1", "special_descriptions:\n  - [1]\n  - galaxy: 1", "line 49): special_descriptions must be a mapping")]
+    [InlineData("  size: [LARGE, FIERCE, SMALL]", "  size: [[LARGE], FIERCE, SMALL]", "line 66): species 'size' must be some text")]
+    [InlineData("  human_colonials: \"HUMAN COLONIAL\"", "  human_colonials: {name: \"HUMAN COLONIAL\"}", "line 65): species 'human_colonials' must be some text")]
+    public void AMalformedFileIsReported(string find, string replace, string expected)
+    {
+        string yaml = English.ReplaceLineEndings("\n");
+        Assert.Contains(find, yaml);
+
+        var e = Assert.Throws<InvalidDataException>(() => DescriptionGrammar.Parse(yaml.Replace(find, replace), "xx-descriptions.yml"));
+        Assert.Equal($"xx-descriptions.yml ({expected}", e.Message);
+    }
+
+    [Fact]
+    public void AFileThatIsntValidYamlIsReported()
+    {
+        // An unclosed {, which YamlDotNet reports with an InvalidOperationException, not a YamlException
+        string yaml = English.ReplaceLineEndings("\n").Replace("description: \"", "description: {text: \"");
+
+        var e = Assert.Throws<InvalidDataException>(() => DescriptionGrammar.Parse(yaml, "xx-descriptions.yml"));
+        Assert.StartsWith("xx-descriptions.yml: the file isn't valid YAML (", e.Message);
+        Assert.IsType<InvalidOperationException>(e.InnerException);
+    }
+
+    [Fact]
+    public void RulesThatArentAMappingAreReported()
+    {
+        // The rules are the last thing in the file
+        string yaml = English.ReplaceLineEndings("\n");
+        yaml = yaml[..yaml.IndexOf("\nrules:\n", StringComparison.Ordinal)] + "\nrules: [subject]\n";
+
+        var e = Assert.Throws<InvalidDataException>(() => DescriptionGrammar.Parse(yaml, "xx-descriptions.yml"));
+        Assert.Equal("xx-descriptions.yml (line 71): rules must be a mapping", e.Message);
+    }
 }

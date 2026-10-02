@@ -103,6 +103,11 @@ public sealed class DescriptionGrammar
             {
                 throw new InvalidDataException($"{source} (line {e.Start.Line}): {e.Message}", e);
             }
+            catch (InvalidOperationException e)
+            {
+                // YamlDotNet reports some malformed files this way
+                throw new InvalidDataException($"{source}: the file isn't valid YAML ({e.Message})", e);
+            }
 
             if (stream.Documents.Count != 1 || stream.Documents[0].RootNode is not YamlMappingNode root)
             {
@@ -114,10 +119,10 @@ public sealed class DescriptionGrammar
             // The rules first, so the text can refer to them
             var ruleNodes = Mapping(Required(root, "rules"), "rules");
             var rules = new Dictionary<string, DescriptionRule>(StringComparer.Ordinal);
-            var names = ruleNodes.Children.Keys.Select(key => ((YamlScalarNode)key).Value!).ToHashSet(StringComparer.Ordinal);
+            var names = ruleNodes.Children.Keys.Select(Key).ToHashSet(StringComparer.Ordinal);
             foreach (var (key, value) in ruleNodes.Children)
             {
-                string name = ((YamlScalarNode)key).Value!;
+                string name = Key(key);
                 rules[name] = ReadRule(name, value, names);
             }
 
@@ -276,9 +281,10 @@ public sealed class DescriptionGrammar
 
             foreach (var (key, value) in ruleNodes.Children)
             {
-                if (!used.Contains(((YamlScalarNode)key).Value!))
+                string name = Key(key);
+                if (!used.Contains(name))
                 {
-                    throw Error(value, $"rule '{((YamlScalarNode)key).Value}' is never used");
+                    throw Error(value, $"rule '{name}' is never used");
                 }
             }
 
@@ -322,13 +328,17 @@ public sealed class DescriptionGrammar
         {
             foreach (var key in mapping.Children.Keys)
             {
-                string name = ((YamlScalarNode)key).Value!;
+                string name = Key(key);
                 if (!allowed.Contains(name))
                 {
                     throw Error(key, $"unknown key '{name}' (expected {string.Join(", ", allowed)})");
                 }
             }
         }
+
+        /// <summary>A mapping's key, which must be a name (not a list or a mapping).</summary>
+        private string Key(YamlNode key) =>
+            key is YamlScalarNode { Value: { } name } ? name : throw Error(key, "a key must be a name (some text), not a list or a mapping");
 
         private YamlNode Required(YamlMappingNode mapping, string key) =>
             mapping.Children.TryGetValue(new YamlScalarNode(key), out var node) ? node : throw Error(mapping, $"'{key}' is missing");

@@ -25,13 +25,6 @@ public sealed class DescriptionGrammar
         ["left_align"] = DescriptionOperation.LeftAlign,
     };
 
-    /// <summary>
-    /// The number of choices in a random rule (the original's random tokens
-    /// each choose one of five, in order, from a random number split into five
-    /// equal parts).
-    /// </summary>
-    public const int RandomChoiceCount = 5;
-
     /// <summary>The number of pairs of letters (or single letters) that random words are made from (MT18 picks one with a random number AND 62).</summary>
     public const int RandomWordPairCount = 32;
 
@@ -171,15 +164,15 @@ public sealed class DescriptionGrammar
                 var choices = Sequence(Required(mapping, "oneOf"), $"rule '{name}'")
                     .Select(choice => Text(choice, $"rule '{name}'", names))
                     .ToList();
-                if (choices.Count != RandomChoiceCount)
+                if (choices.Count != RandomDescriptionRule.ChoiceCount)
                 {
-                    throw Error(node, $"rule '{name}' must have exactly {RandomChoiceCount} choices (it has {choices.Count})");
+                    throw Error(node, $"rule '{name}' must have exactly {RandomDescriptionRule.ChoiceCount} choices (it has {choices.Count})");
                 }
 
-                return new DescriptionRule(choices, Random: true);
+                return new RandomDescriptionRule(choices);
             }
 
-            return new DescriptionRule([Text(node, $"rule '{name}'", names)], Random: false);
+            return new FixedDescriptionRule(Text(node, $"rule '{name}'", names));
         }
 
         /// <summary>Read some description text, checking its operations, rules and characters.</summary>
@@ -305,9 +298,18 @@ public sealed class DescriptionGrammar
 
                     if (used.Add(reference.Rule))
                     {
-                        foreach (var choice in descriptions.Rules[reference.Rule].Choices)
+                        switch (descriptions.Rules[reference.Rule])
                         {
-                            Visit(choice);
+                            case FixedDescriptionRule rule:
+                                Visit(rule.Text);
+                                break;
+                            case RandomDescriptionRule rule:
+                                foreach (var choice in rule.Choices)
+                                {
+                                    Visit(choice);
+                                }
+
+                                break;
                         }
                     }
 
@@ -402,8 +404,43 @@ public sealed record DescriptionReference(string Rule) : DescriptionPart;
 /// <summary>Some description text.</summary>
 public sealed record DescriptionText(IReadOnlyList<DescriptionPart> Parts);
 
-/// <summary>A rule: some text, or (if it is random) a choice of text.</summary>
-public sealed record DescriptionRule(IReadOnlyList<DescriptionText> Choices, bool Random);
+/// <summary>A rule: either <see cref="FixedDescriptionRule"/> or <see cref="RandomDescriptionRule"/>.</summary>
+public abstract record DescriptionRule
+{
+    // Only the rules below
+    private protected DescriptionRule()
+    {
+    }
+}
+
+/// <summary>A rule that always prints the same text.</summary>
+public sealed record FixedDescriptionRule(DescriptionText Text) : DescriptionRule;
+
+/// <summary>
+/// A rule that prints one of five choices at random, which the original
+/// chooses, as it chooses one of its random tokens, from a random number
+/// split into five equal parts (so the order of the choices matters).
+/// </summary>
+public sealed record RandomDescriptionRule : DescriptionRule
+{
+    /// <summary>The number of choices in a random rule.</summary>
+    public const int ChoiceCount = 5;
+
+    /// <exception cref="ArgumentException">There aren't exactly <see cref="ChoiceCount"/> choices.</exception>
+    public RandomDescriptionRule(IEnumerable<DescriptionText> choices)
+    {
+        var list = choices.ToArray();
+        if (list.Length != ChoiceCount)
+        {
+            throw new ArgumentException($"A random rule must have exactly {ChoiceCount} choices (it has {list.Length})", nameof(choices));
+        }
+
+        Choices = Array.AsReadOnly(list);
+    }
+
+    /// <summary>The five choices, in order.</summary>
+    public IReadOnlyList<DescriptionText> Choices { get; }
+}
 
 /// <summary>A description that replaces the generated one for a system (galaxy numbered from 0).</summary>
 public sealed record SpecialDescription(int Galaxy, int System, DescriptionText Text);

@@ -17,8 +17,9 @@ public sealed class DescriptionGrammarTests
 
         // The original's 36 random tokens, plus two rules for text that is used twice
         Assert.Equal(38, descriptions.Rules.Count);
-        Assert.Equal(36, descriptions.Rules.Values.Count(rule => rule.Random));
-        Assert.All(descriptions.Rules.Values.Where(rule => rule.Random), rule => Assert.Equal(5, rule.Choices.Count));
+        Assert.Equal(36, descriptions.Rules.Values.OfType<RandomDescriptionRule>().Count());
+        Assert.Equal(["misfortune", "renown"], descriptions.Rules.Where(rule => rule.Value is FixedDescriptionRule).Select(rule => rule.Key).Order());
+        Assert.All(descriptions.Rules.Values.OfType<RandomDescriptionRule>(), rule => Assert.Equal(5, rule.Choices.Count));
         Assert.Equal(32, descriptions.RandomWordPairs.Count);
         Assert.Equal(4, descriptions.SpecialDescriptions.Count);
         Assert.Equal("HUMAN COLONIAL", descriptions.Species.HumanColonials);
@@ -119,8 +120,45 @@ public sealed class DescriptionGrammarTests
     {
         var descriptions = DescriptionGrammar.Parse(WithSportSettingChoices("E", "D", "C", "B", "A"), "xx-descriptions.yml");
 
-        var rule = descriptions.Rules["sport_setting"];
-        Assert.True(rule.Random);
+        var rule = Assert.IsType<RandomDescriptionRule>(descriptions.Rules["sport_setting"]);
         Assert.Equal(["E", "D", "C", "B", "A"], rule.Choices.Select(choice => Assert.IsType<DescriptionLiteral>(Assert.Single(choice.Parts)).Text));
+    }
+
+    [Fact]
+    public void AFixedRuleHasOneText()
+    {
+        var descriptions = DescriptionGrammar.Load("en");
+
+        var rule = Assert.IsType<FixedDescriptionRule>(descriptions.Rules["renown"]);
+        Assert.Equal<DescriptionPart>(
+        [
+            new DescriptionReference("degree"),
+            new DescriptionLiteral(" "),
+            new DescriptionReference("fame"),
+            new DescriptionLiteral(" FOR "),
+            new DescriptionReference("feature"),
+        ], rule.Text.Parts);
+    }
+
+    [Theory]
+    [InlineData(4)]
+    [InlineData(6)]
+    public void ARandomRuleCantBeMadeWithoutFiveChoices(int count)
+    {
+        var choices = Enumerable.Repeat(new DescriptionText([new DescriptionLiteral("X")]), count);
+
+        Assert.Throws<ArgumentException>(() => new RandomDescriptionRule(choices));
+    }
+
+    [Fact]
+    public void ARandomRulesChoicesCantBeChangedAfterwards()
+    {
+        var choices = Enumerable.Range(0, 5).Select(i => new DescriptionText([new DescriptionLiteral($"{i}")])).ToArray();
+        var rule = new RandomDescriptionRule(choices);
+
+        choices[0] = new DescriptionText([new DescriptionLiteral("CHANGED")]);
+
+        Assert.Equal("0", Assert.IsType<DescriptionLiteral>(Assert.Single(rule.Choices[0].Parts)).Text);
+        Assert.False(rule.Choices is DescriptionText[]);
     }
 }

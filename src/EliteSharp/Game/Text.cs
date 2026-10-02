@@ -658,8 +658,18 @@ public sealed partial class EliteGame
     /// </summary>
     private void PrintDescriptionRule(DescriptionRule rule)
     {
-        int choice = rule.Random ? MissionRuntime.ChooseRandomly(rule.Choices.Count, NextRandomRepeatable()) : 0;
-        PrintDescriptionText(rule.Choices[choice]);
+        switch (rule)
+        {
+            case FixedDescriptionRule fixedRule:
+                PrintDescriptionText(fixedRule.Text);
+                break;
+            case RandomDescriptionRule randomRule:
+                int choice = MissionRuntime.ChooseRandomly(randomRule.Choices.Count, NextRandomRepeatable());
+                PrintDescriptionText(randomRule.Choices[choice]);
+                break;
+            default:
+                throw new ArgumentOutOfRangeException(nameof(rule), rule, null);
+        }
     }
 
     /// <summary>Print a word of a species' name, as TT27 prints a token.</summary>

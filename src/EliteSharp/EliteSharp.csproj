@@ -11,7 +11,7 @@
   <ItemGroup>
     <!-- Everything the game loads at run time: the ships, missions, images,
          markets and text (in each language) -->
-    <None Include="Assets\**\*" CopyToOutputDirectory="PreserveNewest" />
+    <None Update="Assets\**\*" CopyToOutputDirectory="PreserveNewest" />
   </ItemGroup>
 
   <ItemGroup>

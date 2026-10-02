@@ -31,7 +31,12 @@ public sealed unsafe class SoundEngine : IDisposable
     private uint[] _sources = [];
     private uint[] _buffers = [];
 
-    /// <summary>Start the sound engine with the sound effects, returning null if no audio device is available.</summary>
+    /// <summary>
+    /// Start the sound engine with the sound effects, returning null if sound
+    /// isn't available (there is no OpenAL library or audio device, or OpenAL
+    /// can't be set up), so the game can run without it. Any other failure is
+    /// a mistake in the game, so it is thrown.
+    /// </summary>
     public static SoundEngine? TryCreate(SoundSamples[] effects)
     {
         var engine = new SoundEngine();
@@ -40,13 +45,34 @@ public sealed unsafe class SoundEngine : IDisposable
             engine.Start(effects);
             return engine;
         }
-        catch (Exception exception) when (exception is not OutOfMemoryException)
+        catch (Exception exception) when (IsSoundUnavailable(exception))
         {
             engine.Dispose();
             Console.Error.WriteLine($"Sound is disabled: {exception.Message}");
             return null;
         }
+        catch
+        {
+            engine.Dispose();
+            throw;
+        }
     }
+
+    /// <summary>
+    /// Whether an exception from starting the sound engine means that sound
+    /// isn't available: the OpenAL library can't be found or loaded (Silk.NET
+    /// throws <see cref="FileNotFoundException"/>, or
+    /// <see cref="PlatformNotSupportedException"/> on a platform that can't
+    /// load native libraries), it lacks a function, or OpenAL itself fails.
+    /// </summary>
+    private static bool IsSoundUnavailable(Exception exception) =>
+        exception is SoundUnavailableException
+            or DllNotFoundException
+            or FileNotFoundException
+            or BadImageFormatException
+            or EntryPointNotFoundException
+            or PlatformNotSupportedException
+            or Silk.NET.Core.Loader.SymbolLoadingException;
 
     /// <summary>Set the function that returns the volume setting (VOL, 0-7).</summary>
     public void SetVolumeSource(Func<int> source) => _volumeSource = source;
@@ -58,11 +84,15 @@ public sealed unsafe class SoundEngine : IDisposable
         _device = _alc.OpenDevice("");
         if (_device == null)
         {
-            throw new InvalidOperationException("Could not open an audio device");
+            throw new SoundUnavailableException("Could not open an audio device");
         }
 
         _context = _alc.CreateContext(_device, null);
-        _alc.MakeContextCurrent(_context);
+        if (_context == null || !_alc.MakeContextCurrent(_context))
+        {
+            throw new SoundUnavailableException($"Could not set up OpenAL on the audio device ({_alc.GetError(_device)})");
+        }
+
         _sources = _al.GenSources(VoiceCount);
         _buffers = _al.GenBuffers(effects.Length);
         for (int i = 0; i < effects.Length; i++)
@@ -123,33 +153,59 @@ public sealed unsafe class SoundEngine : IDisposable
         return MathF.Pow(10, -2f * (LoudestVolume - volume) / 20);
     }
 
+    /// <summary>
+    /// Stop the sounds and release OpenAL's sources and buffers, then its
+    /// context, then the audio device. Each is forgotten once it is released,
+    /// so disposing the engine again (or after it failed to start) does
+    /// nothing more, and <see cref="Noise"/> does nothing.
+    /// </summary>
     public void Dispose()
     {
         if (_al != null)
         {
-            foreach (uint source in _sources)
+            if (_sources.Length > 0)
             {
-                _al.SourceStop(source);
+                foreach (uint source in _sources)
+                {
+                    _al.SourceStop(source);
+                }
+
+                _al.DeleteSources(_sources);
             }
 
-            _al.DeleteSources(_sources);
-            _al.DeleteBuffers(_buffers);
+            if (_buffers.Length > 0)
+            {
+                _al.DeleteBuffers(_buffers);
+            }
         }
+
+        _sources = [];
+        _buffers = [];
+        Array.Clear(_priority);
 
         if (_alc != null)
         {
-            _alc.MakeContextCurrent(null);
             if (_context != null)
             {
+                _alc.MakeContextCurrent(null);
                 _alc.DestroyContext(_context);
             }
 
+            _context = null;
             if (_device != null)
             {
                 _alc.CloseDevice(_device);
             }
+
+            _device = null;
         }
 
+        _al?.Dispose();
         _al = null;
+        _alc?.Dispose();
+        _alc = null;
     }
 }
+
+/// <summary>OpenAL couldn't be set up on the audio device, so the game has no sound.</summary>
+internal sealed class SoundUnavailableException(string message) : Exception(message);

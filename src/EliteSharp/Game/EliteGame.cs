@@ -258,6 +258,9 @@ public sealed partial class EliteGame
     /// <summary>solaun: launching from or docking with the space station.</summary>
     private const int SoundLaunch = 8;
 
+    /// <summary>The first part of the sound of us being hit by lasers, which ELASNO makes (the original has no name for it).</summary>
+    private const int SoundHitUs = 9;
+
     /// <summary>sohyp: hyperspace (first part).</summary>
     private const int SoundHyperspace = 10;
 

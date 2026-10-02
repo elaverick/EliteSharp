@@ -32,7 +32,7 @@ public sealed partial class EliteGame
     /// <summary>ELASNO: make the sound of us being hit by lasers.</summary>
     private void HitByLaserSound()
     {
-        MakeSound(9);
+        MakeSound(SoundHitUs);
         MakeSound(SoundLaser2);
     }
 }

@@ -31,7 +31,7 @@ try
     _ = HudAtlas.Texels;
     soundEffects = options.Sound ? SoundEffects.Load() : null;
 }
-catch (Exception e) when (e is InvalidDataException or IOException or MissionLoadException)
+catch (Exception e) when (e is InvalidDataException or IOException or MissionLoadException or ArgumentException { ParamName: "language" })
 {
     Directory.CreateDirectory(options.DataFolder);
     File.WriteAllText(Path.Combine(options.DataFolder, "crash.log"), e.Message);

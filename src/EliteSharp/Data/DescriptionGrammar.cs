@@ -73,7 +73,12 @@ public sealed class DescriptionGrammar
     public IReadOnlyDictionary<string, DescriptionRule> Rules { get; }
 
     /// <summary>The name of the descriptions file for a language, such as "en-descriptions.yml".</summary>
-    public static string FileName(string language) => $"{language}-descriptions.yml";
+    /// <exception cref="ArgumentException">The language isn't a valid <see cref="LanguageIdentifier"/>.</exception>
+    public static string FileName(string language)
+    {
+        LanguageIdentifier.Check(language);
+        return $"{language}-descriptions.yml";
+    }
 
     /// <summary>Load the descriptions for a language from its file in a folder.</summary>
     public static DescriptionGrammar Load(string language, string? folder = null)

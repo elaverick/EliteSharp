@@ -41,7 +41,12 @@ public sealed class GameStrings
     public IEnumerable<string> Keys => _strings.Keys;
 
     /// <summary>The name of the strings file for a language, such as "en-strings.yml".</summary>
-    public static string FileName(string language) => $"{language}-strings.yml";
+    /// <exception cref="ArgumentException">The language isn't a valid <see cref="LanguageIdentifier"/>.</exception>
+    public static string FileName(string language)
+    {
+        LanguageIdentifier.Check(language);
+        return $"{language}-strings.yml";
+    }
 
     /// <summary>Load the strings for a language from its file in a folder.</summary>
     /// <param name="canPrint">Whether the game can print a character (such as whether it is in the font).</param>

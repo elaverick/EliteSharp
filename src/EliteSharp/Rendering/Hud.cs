@@ -58,15 +58,17 @@ public sealed class Hud
 
     /// <summary>
     /// The lines of the space view's border (BOX): along the top, and two
-    /// pixels wide down each side.
+    /// pixels wide down each side. The sides run on into the dashboard's top
+    /// row (where they are clipped off), so that they meet the bottom of the
+    /// border without a gap.
     /// </summary>
     private static readonly ScreenLine[] BorderLines =
     [
         new(0, 0, Width - 1, 0, Ink.Yellow),
-        new(1, 0, 1, SpaceViewHeight - 1, Ink.Yellow),
-        new(0, 0, 0, SpaceViewHeight - 1, Ink.Yellow),
-        new(Width - 1, 0, Width - 1, SpaceViewHeight - 1, Ink.Yellow),
-        new(Width - 2, 0, Width - 2, SpaceViewHeight - 1, Ink.Yellow),
+        new(1, 0, 1, SpaceViewHeight, Ink.Yellow),
+        new(0, 0, 0, SpaceViewHeight, Ink.Yellow),
+        new(Width - 1, 0, Width - 1, SpaceViewHeight, Ink.Yellow),
+        new(Width - 2, 0, Width - 2, SpaceViewHeight, Ink.Yellow),
     ];
 
     private readonly Dictionary<(int Column, int Row), (char Character, Ink Ink)> _text = [];
@@ -299,6 +301,15 @@ public sealed class Hud
         if (DashboardVisible)
         {
             builder.Layer = HudLayer.Dashboard;
+
+            // The dashboard's top row is the bottom of the space view's border,
+            // so in a widened space view it carries on out to the edges (behind
+            // the dashboard, which covers it in the middle)
+            if (SideMargin > 0)
+            {
+                builder.WideRect(0, SpaceViewHeight, Width, 1, Ink.DashboardYellow);
+            }
+
             DashboardRenderer?.Invoke(builder);
         }
 

@@ -45,7 +45,8 @@ public struct HudLine(Vector4 ends, Ink ink)
 /// The HUD is in three parts, each drawn with its own clipping: the space
 /// view (the top 192 rows, over the 3D world), the lines that span the full
 /// width of a widened space view (the border and the tunnels), and the
-/// dashboard (the bottom 56 rows).
+/// dashboard (the bottom 56 rows), along with the rectangles that span the
+/// full width of the window beside it (the bottom of the border).
 /// </summary>
 public sealed class FrameData
 {
@@ -72,6 +73,13 @@ public sealed class FrameData
     /// </summary>
     public List<HudLine> WideLines { get; } = new(256);
 
+    /// <summary>
+    /// The rectangles that span the full width of the window in the
+    /// dashboard's rows (in the same coordinates as <see cref="WideLines"/>),
+    /// which are drawn behind the dashboard.
+    /// </summary>
+    public List<HudQuad> DashboardWideQuads { get; } = new(4);
+
     /// <summary>What the inks look like.</summary>
     public Palette Palette { get; set; }
 
@@ -86,6 +94,7 @@ public sealed class FrameData
         DashboardQuads.Clear();
         SpaceLines.Clear();
         WideLines.Clear();
+        DashboardWideQuads.Clear();
     }
 }
 
@@ -140,6 +149,13 @@ public sealed class HudBuilder
     /// <summary>Add a line that spans the full width of the space view (see <see cref="FrameData.WideLines"/>).</summary>
     public void WideLine(float x1, float y1, float x2, float y2, Ink ink) =>
         _frame.WideLines.Add(new HudLine(new Vector4(x1 + 0.5f, y1 + 0.5f, x2 + 0.5f, y2 + 0.5f), ink));
+
+    /// <summary>
+    /// Add a filled rectangle that spans the full width of the window beside
+    /// the dashboard (see <see cref="FrameData.DashboardWideQuads"/>).
+    /// </summary>
+    public void WideRect(float x, float y, float width, float height, Ink ink) =>
+        _frame.DashboardWideQuads.Add(new HudQuad(new Vector4(x, y, width, height), Source(HudAtlas.Solid), ink));
 
     private static Vector4 Source(AtlasRegion region) => new(region.X, region.Y, region.Width, region.Height);
 }

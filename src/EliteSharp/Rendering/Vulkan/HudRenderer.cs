@@ -205,8 +205,9 @@ public sealed unsafe class HudRenderer : IDisposable
 
     /// <summary>
     /// Record the commands to draw the HUD. The wide lines (the border and the
-    /// tunnels) are drawn across the given area if there is one (when the 3D
-    /// view is wider than the HUD), or across the HUD's space view otherwise.
+    /// tunnels) and the bottom of the border beside the dashboard are drawn
+    /// across the given area if there is one (when the 3D view is wider than
+    /// the HUD), or across the HUD otherwise.
     /// </summary>
     public void Draw(CommandBuffer commandBuffer, int frameIndex, FrameData frame, HudLayout layout, float lineWidth, Rect2D? wideArea)
     {
@@ -215,12 +216,13 @@ public sealed unsafe class HudRenderer : IDisposable
 
         // Upload this frame's inks and instances
         frame.Palette.Patterns.CopyTo(new Span<uint>(resources.Inks.Mapped, Inks.Count * Palette.PatternLength));
-        int spaceQuads = frame.SpaceQuads.Count, spaceLines = frame.SpaceLines.Count;
-        if (spaceQuads + frame.DashboardQuads.Count > 0)
+        int spaceQuads = frame.SpaceQuads.Count, dashboardQuads = frame.DashboardQuads.Count, spaceLines = frame.SpaceLines.Count;
+        if (spaceQuads + dashboardQuads + frame.DashboardWideQuads.Count > 0)
         {
-            var quads = resources.Quads.Map<HudQuad>(spaceQuads + frame.DashboardQuads.Count);
+            var quads = resources.Quads.Map<HudQuad>(spaceQuads + dashboardQuads + frame.DashboardWideQuads.Count);
             CollectionsMarshal.AsSpan(frame.SpaceQuads).CopyTo(quads);
             CollectionsMarshal.AsSpan(frame.DashboardQuads).CopyTo(quads[spaceQuads..]);
+            CollectionsMarshal.AsSpan(frame.DashboardWideQuads).CopyTo(quads[(spaceQuads + dashboardQuads)..]);
         }
 
         if (spaceLines + frame.WideLines.Count > 0)
@@ -254,11 +256,24 @@ public sealed unsafe class HudRenderer : IDisposable
         SetArea(commandBuffer, wide, SpaceView(wide, layout), constants);
         DrawLines(commandBuffer, resources, spaceLines, frame.WideLines.Count);
 
-        // The dashboard
+        // The dashboard, over the rectangles that span the window beside it
+        // (which are stretched across, but have the same rows as the dashboard).
+        // Those are clipped to match the top of the border, which is a line
+        // between the centres of the outermost pixels, half a pixel in from
+        // the edges (a pixel whose centre is exactly on the left end is part
+        // of the line, and one on the right end isn't)
         if (frame.DashboardVisible)
         {
+            float end = layout.Scale / 2;
+            int left = Math.Max(0, (int)MathF.Ceiling(end - 0.5f));
+            int right = Math.Max(0, (int)MathF.Floor(end + 0.5f));
+            var besideDashboard = new Rect2D(
+                new Offset2D(wide.Offset.X + left, wide.Offset.Y),
+                new Extent2D((uint)Math.Max(0, (int)wide.Extent.Width - left - right), wide.Extent.Height));
+            SetArea(commandBuffer, wide, besideDashboard, constants);
+            DrawQuads(commandBuffer, resources, spaceQuads + dashboardQuads, frame.DashboardWideQuads.Count);
             SetArea(commandBuffer, area, area, constants);
-            DrawQuads(commandBuffer, resources, spaceQuads, frame.DashboardQuads.Count);
+            DrawQuads(commandBuffer, resources, spaceQuads, dashboardQuads);
         }
     }
 

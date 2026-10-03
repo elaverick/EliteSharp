@@ -10,7 +10,7 @@
 # The release is for 64-bit Windows, with .NET included (so players don't
 # need to install anything): a zip of a folder holding EliteSharp.exe, its
 # Assets folder and the libraries it needs. The release notes list the
-# commits since the last release.
+# titles of the commits since the last release (see release-notes.sh).
 name: Release
 
 on:
@@ -88,4 +88,6 @@ jobs:
           TAG: ${{ steps.version.outputs.tag }}
           ZIP: ${{ steps.version.outputs.zip }}
           PRERELEASE: ${{ steps.version.outputs.suffix != '' && '--prerelease' || '' }}
-        run: gh release create "$TAG" "$ZIP" --title "EliteSharp $TAG" --generate-notes --target "$GITHUB_SHA" $PRERELEASE
+        run: |
+          bash .github/release-notes.sh "$TAG" "$GITHUB_SHA" > release-notes.md
+          gh release create "$TAG" "$ZIP" --title "EliteSharp $TAG" --notes-file release-notes.md --target "$GITHUB_SHA" $PRERELEASE

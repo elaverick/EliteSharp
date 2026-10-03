@@ -36,6 +36,8 @@ jobs:
         with:
           # All the history and tags, for the release notes
           fetch-depth: 0
+          # The original's source code, which some tests compare the game with
+          submodules: true
 
       - name: Work out the version
         id: version

@@ -21,6 +21,9 @@ jobs:
     runs-on: windows-latest
     steps:
       - uses: actions/checkout@v7
+        with:
+          # The original's source code, which some tests compare the game with
+          submodules: true
 
       - uses: actions/setup-dotnet@v6
         with:

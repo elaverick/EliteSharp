@@ -48,8 +48,8 @@ public sealed class GameOptions
             string? next = i + 1 < args.Length ? args[i + 1] : null;
             switch (arg)
             {
-                case "--fps" when next != null && int.TryParse(next, out int fps):
-                    options.MainLoopRate = Math.Clamp(fps, 1, 50);
+                case "--simulation-rate" when next != null && int.TryParse(next, out int simulationRate):
+                    options.MainLoopRate = Math.Clamp(simulationRate, 1, 50);
                     i++;
                     break;
                 case "--scale" when next != null && int.TryParse(next, out int scale):

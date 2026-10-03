@@ -24,16 +24,19 @@ fills a widescreen display.
 ## What you need
 
 - A 64-bit Windows 10 or 11 PC
+- The free [.NET 10 Runtime](https://dotnet.microsoft.com/download/dotnet/10.0)
+  from Microsoft (if it isn't installed, the game offers to take you there)
 - A graphics card with Vulkan 1.3 support (almost any card from the last ten years,
   with up-to-date drivers)
 - Optionally, an Xbox controller (or any controller Windows recognises)
 
 ## Getting the game
 
-Download the zip for the latest version from the
+Install the [.NET 10 Runtime](https://dotnet.microsoft.com/download/dotnet/10.0)
+if you don't have it (on that page, it's the **.NET Runtime** download for
+Windows x64). Then download the zip for the latest version from the
 [Releases page](https://github.com/elaverick/EliteSharp/releases), unzip it
-anywhere, and run `EliteSharp.exe` in the `EliteSharp` folder. Everything the
-game needs is in the zip, so there's nothing else to install.
+anywhere, and run `EliteSharp.exe` in the `EliteSharp` folder.
 
 ### Building the game yourself
 

@@ -7,9 +7,9 @@
 # which tags the latest commit on the chosen branch. A version with a suffix
 # (such as 0.2.0-beta) makes a pre-release.
 #
-# The release is for 64-bit Windows, with .NET included (so players don't
-# need to install anything): a zip of a folder holding EliteSharp.exe, its
-# Assets folder and the libraries it needs. The release notes list the
+# The release is for 64-bit Windows, and needs the .NET 10 Runtime (which
+# isn't included, to keep the download small): a zip of a folder holding
+# EliteSharp.exe, its Assets folder and the libraries it needs. The release notes list the
 # titles of the commits since the last release (see release-notes.sh).
 name: Release
 
@@ -72,7 +72,7 @@ jobs:
         shell: bash
         run: >
           dotnet publish src/EliteSharp/EliteSharp.csproj
-          -c Release -r win-x64 --self-contained
+          -c Release -r win-x64 --self-contained false
           -p:VersionPrefix=${{ steps.version.outputs.prefix }}
           -p:VersionSuffix=${{ steps.version.outputs.suffix }}
           -o publish/EliteSharp

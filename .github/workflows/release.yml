@@ -1,0 +1,89 @@
+# Make a GitHub release when a version tag (such as v0.1.0) is pushed:
+#
+#   git tag v0.1.0
+#   git push origin v0.1.0
+#
+# or from the Actions tab (Release, then Run workflow), by typing a version,
+# which tags the latest commit on the chosen branch. A version with a suffix
+# (such as 0.2.0-beta) makes a pre-release.
+#
+# The release is for 64-bit Windows, with .NET included (so players don't
+# need to install anything): a zip of a folder holding EliteSharp.exe, its
+# Assets folder and the libraries it needs. The release notes list the
+# commits since the last release.
+name: Release
+
+on:
+  push:
+    tags: ['v*']
+  workflow_dispatch:
+    inputs:
+      version:
+        description: The version to release, such as 0.2.0
+        required: true
+
+concurrency:
+  group: release-${{ github.ref }}
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          # All the history and tags, for the release notes
+          fetch-depth: 0
+
+      - name: Work out the version
+        id: version
+        shell: bash
+        env:
+          REQUESTED: ${{ github.event_name == 'workflow_dispatch' && inputs.version || github.ref_name }}
+        run: |
+          version="${REQUESTED#v}"
+          if ! [[ "$version" =~ ^[0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z.-]+)?$ ]]; then
+            echo "::error::'$REQUESTED' isn't a version like 0.1.0 or 0.2.0-beta"
+            exit 1
+          fi
+          prefix="${version%%-*}"
+          suffix=""
+          [[ "$version" == *-* ]] && suffix="${version#*-}"
+          {
+            echo "version=$version"
+            echo "prefix=$prefix"
+            echo "suffix=$suffix"
+            echo "tag=v$version"
+            echo "zip=EliteSharp-v$version-win-x64.zip"
+          } >> "$GITHUB_OUTPUT"
+
+      - uses: actions/setup-dotnet@v6
+        with:
+          dotnet-version: 10.0.x
+
+      - name: Test
+        run: dotnet test src/EliteSharp.sln -c Release
+
+      - name: Publish
+        shell: bash
+        run: >
+          dotnet publish src/EliteSharp/EliteSharp.csproj
+          -c Release -r win-x64 --self-contained
+          -p:VersionPrefix=${{ steps.version.outputs.prefix }}
+          -p:VersionSuffix=${{ steps.version.outputs.suffix }}
+          -o publish/EliteSharp
+
+      - name: Zip
+        shell: pwsh
+        run: Compress-Archive -Path publish/EliteSharp -DestinationPath ${{ steps.version.outputs.zip }}
+
+      - name: Create the release
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ steps.version.outputs.tag }}
+          ZIP: ${{ steps.version.outputs.zip }}
+          PRERELEASE: ${{ steps.version.outputs.suffix != '' && '--prerelease' || '' }}
+        run: gh release create "$TAG" "$ZIP" --title "EliteSharp $TAG" --generate-notes --target "$GITHUB_SHA" $PRERELEASE

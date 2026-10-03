@@ -1,0 +1,33 @@
+# Build the game and run the tests on every push to main and on pull
+# requests. This never makes a release: releases are made by pushing a
+# version tag (see release.yml).
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+# Pushing several commits at once only needs the latest one tested
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-dotnet@v6
+        with:
+          dotnet-version: 10.0.x
+
+      - name: Build
+        run: dotnet build src/EliteSharp.sln -c Release
+
+      - name: Test
+        run: dotnet test src/EliteSharp.sln -c Release --no-build

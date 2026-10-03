@@ -30,8 +30,15 @@ fills a widescreen display.
 
 ## Getting the game
 
-There isn't a ready-made download yet, so for now you need to build the game
-yourself, which only takes a couple of minutes:
+Download the zip for the latest version from the
+[Releases page](https://github.com/elaverick/EliteSharp/releases), unzip it
+anywhere, and run `EliteSharp.exe` in the `EliteSharp` folder. Everything the
+game needs is in the zip, so there's nothing else to install.
+
+### Building the game yourself
+
+To play the latest changes, or to work on the game, you can build it yourself,
+which only takes a couple of minutes:
 
 1. Install the free [.NET 10 SDK](https://dotnet.microsoft.com/download) from
    Microsoft.

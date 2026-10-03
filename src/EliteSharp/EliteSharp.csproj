@@ -6,7 +6,13 @@
     <ImplicitUsings>enable</ImplicitUsings>
     <Nullable>enable</Nullable>
     <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
+    <ApplicationIcon>elitesharp.ico</ApplicationIcon>
   </PropertyGroup>
+
+  <ItemGroup>
+    <!-- The window's icon, the same as the executable's -->
+    <EmbeddedResource Include="elitesharp.ico" LogicalName="elitesharp.ico" />
+  </ItemGroup>
 
   <ItemGroup>
     <!-- Everything the game loads at run time: the ships, missions, images,

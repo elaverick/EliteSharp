@@ -79,6 +79,11 @@ void ToggleFullScreen() =>
 
 window.Load += () =>
 {
+    if (GameIcon.Load() is { Length: > 0 } icon)
+    {
+        window.SetWindowIcon(icon);
+    }
+
     renderer = new VulkanRenderer(window, ShipCatalogue.ModelPaths, options.FourByThreeFrame ? WorldFraming.FourByThree : WorldFraming.Wide);
     var input = window.CreateInput();
     foreach (var kb in input.Keyboards)

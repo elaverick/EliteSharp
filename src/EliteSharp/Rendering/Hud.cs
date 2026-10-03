@@ -79,6 +79,10 @@ public sealed class Hud
     private readonly HudBuilder _builder = new();
     private readonly FrameExchange _exchange;
 
+    /// <summary>The 3D world in the last frame that was presented (see <see cref="FrameData.PreviousWorld"/>).</summary>
+    private readonly SceneFrame _lastWorld = new();
+    private bool _lastHasWorld;
+
     /// <summary>The group that lines are being drawn into, if any (see <see cref="Group"/>).</summary>
     private List<ScreenLine>? _currentGroup;
 
@@ -258,8 +262,12 @@ public sealed class Hud
     /// </summary>
     private static float ToWide(float x, float margin) => (x + 0.5f + margin) * Width / (Width + 2 * margin) - 0.5f;
 
-    /// <summary>Build the current frame and hand it to the renderer.</summary>
-    public void Present()
+    /// <summary>
+    /// Build the current frame and hand it to the renderer, with the time it
+    /// was published and the time the next one is expected (on the game's
+    /// clock).
+    /// </summary>
+    public void Present(long time = 0, long nextTime = 0)
     {
         var frame = _exchange.Writing;
         frame.Clear();
@@ -319,8 +327,15 @@ public sealed class Hud
             frame.HasWorld = true;
         }
 
+        frame.PreviousWorld.CopyFrom(_lastWorld);
+        frame.HasPreviousWorld = _lastHasWorld;
+        _lastWorld.CopyFrom(frame.World);
+        _lastHasWorld = frame.HasWorld;
+
         frame.Palette = new Palette(HyperspaceColours ? SpacePalette.Hyperspace : Palette, EscapePodFitted);
         frame.DashboardVisible = DashboardVisible;
+        frame.Time = time;
+        frame.NextTime = nextTime;
         _exchange.Publish();
     }
 }

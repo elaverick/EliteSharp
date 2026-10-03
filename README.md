@@ -188,7 +188,9 @@ shortcut:
 | `--scale <1-8>` | The size of the window, as a multiple of the original screen size (default 4) |
 | `--window <width>x<height>` | The size of the window in pixels, e.g. `--window 1920x1080` (any shape works; the 3D view fills the width) |
 | `--frame 4:3` | Keep the display within the original's 4:3 frame, rather than stretching it to the full width of the window |
-| `--simulation-rate <1-50>` | The game speed, in main loop updates per second (default 16, which feels like the original) |
+| `--simulation-rate <1-50>` | The game speed, in main loop updates per second (default 16, which feels like the original). The display is drawn once per screen refresh, whatever this is |
+| `--novsync` | Draw the display as often as possible, rather than once per screen refresh (the game runs at the same speed either way) |
+| `--nointerpolation` | Show each of the game's updates as it comes, rather than moving the 3D view smoothly between them (which shows the view up to one update late) |
 | `--nosound` | Turn off the sound |
 | `--nopad` | Ignore any game controllers |
 | `--data <folder>` | Where to keep saved commanders |

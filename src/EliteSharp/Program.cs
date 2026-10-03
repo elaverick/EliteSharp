@@ -1,3 +1,4 @@
+using System.Diagnostics;
 using EliteSharp;
 using EliteSharp.Data;
 using EliteSharp.Game;
@@ -55,7 +56,13 @@ var hud = new Hud(exchange);
 var keyboard = new BbcKeyboard();
 using var sound = soundEffects != null ? SoundEngine.TryCreate(soundEffects) : null;
 using var gamepad = options.Gamepad ? Gamepad.TryCreate(keyboard) : null;
-var game = new EliteGame(hud, keyboard, sound, options, gamepad, missions, strings, descriptions, trading);
+var game = new EliteGame(hud, keyboard, sound, options, gamepad, missions, strings, descriptions, trading, RealTimeClock.Instance);
+
+// The game runs at its own fixed rate on its own thread, and the window draws
+// as often as the display allows, moving the 3D world smoothly between the
+// game's frames (the game's clock is Stopwatch.GetTimestamp, so the frames'
+// times can be compared with the renderer's)
+var interpolator = new FrameInterpolator { Enabled = options.Interpolate };
 
 var windowOptions = WindowOptions.DefaultVulkan with
 {
@@ -84,7 +91,7 @@ window.Load += () =>
         window.SetWindowIcon(icon);
     }
 
-    renderer = new VulkanRenderer(window, ShipCatalogue.ModelPaths, options.FourByThreeFrame ? WorldFraming.FourByThree : WorldFraming.Wide);
+    renderer = new VulkanRenderer(window, ShipCatalogue.ModelPaths, options.FourByThreeFrame ? WorldFraming.FourByThree : WorldFraming.Wide, options.VSync);
     var input = window.CreateInput();
     foreach (var kb in input.Keyboards)
     {
@@ -151,7 +158,8 @@ window.Render += _ =>
     if (renderer != null)
     {
         hud.SideMargin = renderer.SideMargin;
-        renderer.Draw(exchange.TakeLatest());
+        var frame = exchange.TakeLatest();
+        renderer.Draw(frame, frame != null ? interpolator.World(frame, Stopwatch.GetTimestamp()) : null);
     }
 
     if (gameError != null || closeRequested)

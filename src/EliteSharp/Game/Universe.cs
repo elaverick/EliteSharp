@@ -330,11 +330,13 @@ public sealed partial class EliteGame
     {
         for (int particle = _stardustCount; particle > 0; particle--)
         {
+            RecycleStardust(particle);
             _dustZ[particle] = NextRandom() | 8;
             _dustX[particle] = SignedByte(NextRandom());
             _dustY[particle] = SignedByte(NextRandom());
         }
 
+        ScatterWideStardust();
         UpdateStardustImage();
     }
 

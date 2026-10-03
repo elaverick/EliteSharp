@@ -56,6 +56,16 @@ public sealed class FrameData
     /// <summary>Whether the frame has a 3D world.</summary>
     public bool HasWorld { get; set; }
 
+    /// <summary>
+    /// The 3D world as it was in the previous frame (if
+    /// <see cref="HasPreviousWorld"/> is set), which the renderer moves
+    /// smoothly from (see <see cref="FrameInterpolator"/>).
+    /// </summary>
+    public SceneFrame PreviousWorld { get; } = new();
+
+    /// <summary>Whether the previous frame had a 3D world.</summary>
+    public bool HasPreviousWorld { get; set; }
+
     /// <summary>The space view's rectangles.</summary>
     public List<HudQuad> SpaceQuads { get; } = new(1024);
 
@@ -86,10 +96,22 @@ public sealed class FrameData
     /// <summary>Whether the dashboard is shown (it is hidden on the death screen).</summary>
     public bool DashboardVisible { get; set; } = true;
 
+    /// <summary>When the game published the frame, on the game's clock (see EliteSharp.Game.IGameClock).</summary>
+    public long Time { get; set; }
+
+    /// <summary>
+    /// When the game expects to publish the next frame, on the same clock. The
+    /// renderer can move smoothly from the previous world to this one in the
+    /// meantime (see <see cref="FrameInterpolator"/>).
+    /// </summary>
+    public long NextTime { get; set; }
+
     public void Clear()
     {
         World.Clear();
         HasWorld = false;
+        PreviousWorld.Clear();
+        HasPreviousWorld = false;
         SpaceQuads.Clear();
         DashboardQuads.Clear();
         SpaceLines.Clear();

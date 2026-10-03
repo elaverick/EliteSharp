@@ -1,3 +1,4 @@
+using EliteSharp.Rendering.Scene;
 using Silk.NET.Core;
 using Silk.NET.Core.Native;
 using Silk.NET.Vulkan;
@@ -42,6 +43,7 @@ public sealed unsafe class VulkanRenderer : IDisposable
 
     private readonly IWindow _window;
     private readonly WorldFraming _framing;
+    private readonly bool _vsync;
     private readonly Vk _vk = Vk.GetApi();
     private Instance _instance;
     private KhrSurface _khrSurface = null!;
@@ -76,11 +78,16 @@ public sealed unsafe class VulkanRenderer : IDisposable
     /// <summary>Ask the renderer to save the next frame it draws to a PNG file.</summary>
     public void RequestCapture(string path) => Volatile.Write(ref _capturePath, path);
 
-    /// <summary>Create the renderer, loading the given ship models.</summary>
-    public VulkanRenderer(IWindow window, IEnumerable<string> shipModelPaths, WorldFraming framing = WorldFraming.Wide)
+    /// <summary>
+    /// Create the renderer, loading the given ship models. With vsync, it draws
+    /// one frame for each refresh of the display; without, it draws as many
+    /// frames as it can.
+    /// </summary>
+    public VulkanRenderer(IWindow window, IEnumerable<string> shipModelPaths, WorldFraming framing = WorldFraming.Wide, bool vsync = true)
     {
         _window = window;
         _framing = framing;
+        _vsync = vsync;
         CreateInstance();
         CreateSurface();
         PickPhysicalDevice();
@@ -308,7 +315,14 @@ public sealed unsafe class VulkanRenderer : IDisposable
             _khrSurface.GetPhysicalDeviceSurfacePresentModes(_physicalDevice, _surface, ref modeCount, p);
         }
 
-        var presentMode = modes.Contains(PresentModeKHR.MailboxKhr) ? PresentModeKHR.MailboxKhr : PresentModeKHR.FifoKhr;
+        // FIFO waits for the display's refresh (and every device has it).
+        // Without vsync, mailbox draws as fast as it can and shows the latest
+        // frame at each refresh, without tearing; failing that, immediate shows
+        // each frame straight away, which can tear
+        var presentMode = _vsync ? PresentModeKHR.FifoKhr
+            : modes.Contains(PresentModeKHR.MailboxKhr) ? PresentModeKHR.MailboxKhr
+            : modes.Contains(PresentModeKHR.ImmediateKhr) ? PresentModeKHR.ImmediateKhr
+            : PresentModeKHR.FifoKhr;
 
         if (capabilities.CurrentExtent.Width != uint.MaxValue)
         {
@@ -511,8 +525,12 @@ public sealed unsafe class VulkanRenderer : IDisposable
         }
     }
 
-    /// <summary>Draw a frame.</summary>
-    public void Draw(FrameData? frameData)
+    /// <summary>
+    /// Draw a frame, with the given 3D world in place of the frame's own (such
+    /// as one that is part of the way to the next frame, see
+    /// <see cref="FrameInterpolator"/>).
+    /// </summary>
+    public void Draw(FrameData? frameData, SceneFrame? world = null)
     {
         var size = _window.FramebufferSize;
         if (size.X == 0 || size.Y == 0)
@@ -559,7 +577,7 @@ public sealed unsafe class VulkanRenderer : IDisposable
             var worldViewport = WorldViewport(layout);
             if (frameData.HasWorld)
             {
-                _world.Draw(commandBuffer, _currentFrame, frameData.World, worldViewport, layout.Scale, lineWidth, frameData.Palette);
+                _world.Draw(commandBuffer, _currentFrame, world ?? frameData.World, worldViewport, layout.Scale, lineWidth, frameData.Palette);
             }
 
             // In the wide framing, the border (and the hangar) spans the whole

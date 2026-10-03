@@ -62,9 +62,9 @@ public sealed partial class EliteGame
     private readonly BbcKeyboard _keyboard;
     private readonly SoundEngine? _sound;
     private readonly GameOptions _options;
-    private readonly Stopwatch _clock = Stopwatch.StartNew();
-    private long _nextVsyncTicks;
-    private long _nextMainLoopTicks;
+    private readonly IGameClock _clock;
+    private readonly FixedRateTimer _vsyncTimer;
+    private readonly FixedRateTimer _mainLoopTimer;
     private volatile bool _quit;
 
     /// <summary>
@@ -72,7 +72,8 @@ public sealed partial class EliteGame
     /// game's text and system descriptions from Assets/Strings (in the language
     /// in the options), and the markets and equipment prices from
     /// Assets/trading.yml (or the mod's, see <see cref="GameAssets"/>), unless
-    /// they are given.
+    /// they are given. The game is paced by the real clock unless it is given
+    /// another one.
     /// </summary>
     public EliteGame(
         Hud hud,
@@ -83,8 +84,12 @@ public sealed partial class EliteGame
         MissionCatalogue? missions = null,
         GameStrings? strings = null,
         DescriptionGrammar? descriptions = null,
-        TradingData? trading = null)
+        TradingData? trading = null,
+        IGameClock? clock = null)
     {
+        _clock = clock ?? RealTimeClock.Instance;
+        _vsyncTimer = new FixedRateTimer(_clock);
+        _mainLoopTimer = new FixedRateTimer(_clock);
         _missions = new MissionRuntime(missions ?? MissionLoader.LoadGame());
         _strings = strings ?? GameStrings.Load(options.Language, HudAtlas.InFont);
         _descriptions = descriptions ?? DescriptionGrammar.Load(options.Language);
@@ -503,6 +508,23 @@ public sealed partial class EliteGame
     /// <summary>SZ: the distance of each stardust particle.</summary>
     private readonly float[] _dustZ = new float[NormalStardustCount + 1];
 
+    /// <summary>
+    /// The number of times each stardust particle has been recycled (which
+    /// isn't in the original). It goes into the particle's id in the 3D world,
+    /// so the renderer doesn't move a recycled particle smoothly from where it
+    /// was to where it starts again.
+    /// </summary>
+    private readonly int[] _dustRecycles = new int[NormalStardustCount + 1];
+
+    /// <summary>
+    /// For each stardust particle that was recycled in the latest move, where
+    /// it would have been a move earlier had it been there all along (which
+    /// isn't in the original), or null. The renderer moves it in from there,
+    /// so it carries on like the rest of the stardust rather than sitting
+    /// still for a move.
+    /// </summary>
+    private readonly (float X, float Y, float Z)?[] _dustEntries = new (float, float, float)?[NormalStardustCount + 1];
+
     // ------------------------------------------------------------------------
     // Universe and commander state
     // ------------------------------------------------------------------------
@@ -694,8 +716,12 @@ public sealed partial class EliteGame
     /// <summary>The time between vertical syncs (the BBC's screen refreshes at 50 Hz).</summary>
     private static readonly long VsyncTicks = Stopwatch.Frequency / 50;
 
-    /// <summary>Send the current screen contents to the renderer.</summary>
-    private void Present()
+    /// <summary>
+    /// Send the current screen contents to the renderer, saying when the game
+    /// expects to send the next frame (so the renderer can move smoothly from
+    /// this frame to the next in the meantime).
+    /// </summary>
+    private void Present(long nextFrameTime)
     {
         if (_quit)
         {
@@ -703,21 +729,15 @@ public sealed partial class EliteGame
         }
 
         _hud.EscapePodFitted = _escapePod != 0;
-        _hud.Present();
+        _hud.Present(_clock.Now, nextFrameTime);
     }
 
     /// <summary>WSCAN: wait for the vertical sync (the original runs at 50 Hz).</summary>
     private void WaitForVsync()
     {
-        Present();
-        long now = _clock.ElapsedTicks;
-        if (_nextVsyncTicks < now - VsyncTicks)
-        {
-            _nextVsyncTicks = now;
-        }
-
-        _nextVsyncTicks += VsyncTicks;
-        SleepUntil(_nextVsyncTicks);
+        long next = _vsyncTimer.Schedule(VsyncTicks);
+        Present(next);
+        _clock.SleepUntil(next);
     }
 
     /// <summary>DELAY: wait for Y vertical syncs.</summary>
@@ -733,50 +753,23 @@ public sealed partial class EliteGame
 
     /// <summary>
     /// The original main loop runs as fast as the 6502 can manage, so here we
-    /// limit the rate of the main loop to the configured frame rate, which
-    /// gives a similar game speed to the original.
+    /// limit the rate of the main loop to the configured simulation rate, which
+    /// gives a similar game speed to the original. Each iteration moves the
+    /// game on by one fixed step, however often the renderer draws.
     /// </summary>
     private void ThrottleMainLoop()
     {
-        Present();
-        long period = Stopwatch.Frequency / Math.Max(1, _options.MainLoopRate);
-        long now = _clock.ElapsedTicks;
-        if (_nextMainLoopTicks < now - period)
-        {
-            _nextMainLoopTicks = now;
-        }
-
-        _nextMainLoopTicks += period;
-        SleepUntil(_nextMainLoopTicks);
-    }
-
-    private void SleepUntil(long ticks)
-    {
-        while (true)
-        {
-            long remaining = ticks - _clock.ElapsedTicks;
-            if (remaining <= 0)
-            {
-                return;
-            }
-
-            double ms = remaining * 1000.0 / Stopwatch.Frequency;
-            if (ms > 2)
-            {
-                Thread.Sleep((int)(ms - 1));
-            }
-            else
-            {
-                Thread.Yield();
-            }
-        }
+        long next = _mainLoopTimer.Schedule(Stopwatch.Frequency / Math.Max(1, _options.MainLoopRate));
+        Present(next);
+        _clock.SleepUntil(next);
     }
 
     /// <summary>Send the screen to the renderer and pause for a number of milliseconds.</summary>
     private void PresentAndPause(int milliseconds)
     {
-        Present();
-        SleepUntil(_clock.ElapsedTicks + milliseconds * Stopwatch.Frequency / 1000);
+        long until = _clock.Now + milliseconds * Stopwatch.Frequency / 1000;
+        Present(until);
+        _clock.SleepUntil(until);
     }
 
     // ------------------------------------------------------------------------

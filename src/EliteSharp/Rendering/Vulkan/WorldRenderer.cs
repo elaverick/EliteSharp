@@ -279,7 +279,7 @@ public sealed unsafe class WorldRenderer : IDisposable
         DrawShipWireframes(commandBuffer);
         DrawPlanetLines(commandBuffer, scene);
         DrawLines(commandBuffer, frame, scene);
-        DrawParticles(commandBuffer, frame, scene, aspect);
+        DrawParticles(commandBuffer, frame, scene);
     }
 
     /// <summary>
@@ -530,13 +530,10 @@ public sealed unsafe class WorldRenderer : IDisposable
     }
 
     /// <summary>
-    /// Draw the particles, as one instanced draw. The stardust is spread out
-    /// horizontally to fill views that are wider than the original's 4:3 (the
-    /// game simulates it within that field of view, and each particle moves
-    /// directly away from the centre in the front and rear views, so this
-    /// keeps its motion looking the same).
+    /// Draw the particles, as one instanced draw. In views that are wider than
+    /// the original's, the game fills the whole width with stardust itself.
     /// </summary>
-    private void DrawParticles(CommandBuffer commandBuffer, FrameResources frame, SceneFrame scene, float aspect)
+    private void DrawParticles(CommandBuffer commandBuffer, FrameResources frame, SceneFrame scene)
     {
         var particles = CollectionsMarshal.AsSpan(scene.Particles);
         if (particles.IsEmpty)
@@ -544,22 +541,13 @@ public sealed unsafe class WorldRenderer : IDisposable
             return;
         }
 
-        float spread = MathF.Max(1, aspect / (4f / 3f));
-        var view = scene.Camera.ViewMatrix;
         var instances = frame.Particles.Map<ParticleInstance>(particles.Length);
         for (int i = 0; i < particles.Length; i++)
         {
             ref readonly var particle = ref particles[i];
-            var position = particle.Position;
-            if (particle.Stardust && spread > 1)
-            {
-                var inView = Vector3.TransformNormal(position, view);
-                position = Camera.ViewToWorld(scene.Camera.View, inView with { X = inView.X * spread });
-            }
-
             instances[i] = new ParticleInstance
             {
-                Position = position,
+                Position = particle.Position,
                 Size = new Vector2(particle.Width, particle.Height),
                 Ink = (uint)particle.Colour,
             };

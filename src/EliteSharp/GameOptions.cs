@@ -11,6 +11,21 @@ public sealed class GameOptions
     /// </summary>
     public int MainLoopRate { get; set; } = 16;
 
+    /// <summary>
+    /// Whether the renderer moves the 3D world smoothly between the main
+    /// loop's iterations (see <see cref="Rendering.FrameInterpolator"/>), rather
+    /// than showing each one as it comes. Either way, the game runs at
+    /// <see cref="MainLoopRate"/>.
+    /// </summary>
+    public bool Interpolate { get; set; } = true;
+
+    /// <summary>
+    /// Whether to draw one frame for each refresh of the display (vsync),
+    /// rather than as many frames as possible. Either way, the game runs at
+    /// <see cref="MainLoopRate"/>.
+    /// </summary>
+    public bool VSync { get; set; } = true;
+
     /// <summary>Whether to play sound.</summary>
     public bool Sound { get; set; } = true;
 
@@ -73,6 +88,12 @@ public sealed class GameOptions
                     break;
                 case "--nopad":
                     options.Gamepad = false;
+                    break;
+                case "--nointerpolation":
+                    options.Interpolate = false;
+                    break;
+                case "--novsync":
+                    options.VSync = false;
                     break;
                 case "--fullscreen":
                     options.FullScreen = true;

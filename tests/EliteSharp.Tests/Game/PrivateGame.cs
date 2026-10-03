@@ -16,9 +16,20 @@ internal sealed class PrivateGame
 {
     private const BindingFlags Private = BindingFlags.Instance | BindingFlags.NonPublic;
 
-    public PrivateGame(GameStrings? strings = null)
+    /// <summary>
+    /// Create the game, optionally paced by the given clock (such as a
+    /// <see cref="VirtualClock"/>), reading the given keyboard and handing its
+    /// frames to the given exchange.
+    /// </summary>
+    public PrivateGame(
+        GameStrings? strings = null,
+        IGameClock? clock = null,
+        BbcKeyboard? keyboard = null,
+        FrameExchange? exchange = null,
+        int mainLoopRate = 50)
     {
-        Game = new EliteGame(new Hud(new FrameExchange()), new BbcKeyboard(), null, new GameOptions { Sound = false, Gamepad = false, MainLoopRate = 50 }, strings: strings);
+        var options = new GameOptions { Sound = false, Gamepad = false, MainLoopRate = mainLoopRate };
+        Game = new EliteGame(new Hud(exchange ?? new FrameExchange()), keyboard ?? new BbcKeyboard(), null, options, strings: strings, clock: clock);
     }
 
     public EliteGame Game { get; }

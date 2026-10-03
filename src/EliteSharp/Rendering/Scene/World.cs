@@ -1,3 +1,5 @@
+using System.Runtime.CompilerServices;
+
 namespace EliteSharp.Rendering.Scene;
 
 /// <summary>
@@ -10,12 +12,18 @@ namespace EliteSharp.Rendering.Scene;
 ///
 /// The objects' storage is kept and reused, so updating the world doesn't
 /// allocate anything once it has warmed up.
+///
+/// Each owner has an id that stays the same for as long as the owner exists
+/// (even if it is removed and put back, as the sun is each time it is
+/// redrawn), which goes into the frames so the renderer can match up the
+/// objects in one frame with those in the next.
 /// </summary>
 public sealed class World
 {
     /// <summary>Everything that one owner contributes to the world.</summary>
     private sealed class WorldObject
     {
+        public int Id;
         public bool HasShip, HasPlanet, HasSun;
         public ShipInstance Ship;
         public PlanetInstance Planet;
@@ -33,9 +41,14 @@ public sealed class World
 
     private readonly Dictionary<object, WorldObject> _objects = [];
     private readonly Stack<WorldObject> _spare = [];
+    private readonly ConditionalWeakTable<object, StrongBox<int>> _ids = [];
+    private int _lastId;
 
     /// <summary>The space view that the camera is looking out of.</summary>
     public int CameraView { get; set; }
+
+    /// <summary>The number of times the world has been cleared (see <see cref="SceneFrame.Generation"/>).</summary>
+    public int Generation { get; private set; }
 
     /// <summary>The object for an owner, emptied ready to be set.</summary>
     private WorldObject Replace(object owner)
@@ -43,6 +56,7 @@ public sealed class World
         if (!_objects.TryGetValue(owner, out var worldObject))
         {
             worldObject = _spare.TryPop(out var spare) ? spare : new WorldObject();
+            worldObject.Id = _ids.GetValue(owner, _ => new StrongBox<int>(++_lastId)).Value;
             _objects[owner] = worldObject;
         }
 
@@ -96,6 +110,7 @@ public sealed class World
         }
 
         _objects.Clear();
+        Generation++;
     }
 
     /// <summary>Copy the world into a frame for the renderer.</summary>
@@ -103,21 +118,22 @@ public sealed class World
     {
         frame.Clear();
         frame.Camera = new Camera(CameraView);
+        frame.Generation = Generation;
         foreach (var worldObject in _objects.Values)
         {
             if (worldObject.HasShip)
             {
-                frame.Ships.Add(worldObject.Ship);
+                frame.Ships.Add(worldObject.Ship with { Id = worldObject.Id });
             }
 
             if (worldObject.HasPlanet)
             {
-                frame.Planets.Add(worldObject.Planet);
+                frame.Planets.Add(worldObject.Planet with { Id = worldObject.Id });
             }
 
             if (worldObject.HasSun)
             {
-                frame.Suns.Add(worldObject.Sun);
+                frame.Suns.Add(worldObject.Sun with { Id = worldObject.Id });
             }
 
             frame.Particles.AddRange(worldObject.Particles);

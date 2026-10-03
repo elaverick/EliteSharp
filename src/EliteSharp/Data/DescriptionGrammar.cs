@@ -44,7 +44,7 @@ public sealed class DescriptionGrammar
         Rules = rules;
     }
 
-    /// <summary>The folder containing the descriptions files.</summary>
+    /// <summary>The game's own folder containing the descriptions files (a mod can replace any of them).</summary>
     public static string DefaultFolder => GameStrings.DefaultFolder;
 
     /// <summary>The text that makes a system's description.</summary>
@@ -73,10 +73,10 @@ public sealed class DescriptionGrammar
         return $"{language}-descriptions.yml";
     }
 
-    /// <summary>Load the descriptions for a language from its file in a folder.</summary>
+    /// <summary>Load the descriptions for a language from its file in a folder (by default, the mod's or the game's Assets/Strings).</summary>
     public static DescriptionGrammar Load(string language, string? folder = null)
     {
-        string path = Path.Combine(folder ?? DefaultFolder, FileName(language));
+        string path = folder != null ? Path.Combine(folder, FileName(language)) : GameAssets.File("Strings", FileName(language));
         if (!File.Exists(path))
         {
             throw new FileNotFoundException($"There are no system descriptions for the language '{language}' (the file '{path}' is missing)", path);

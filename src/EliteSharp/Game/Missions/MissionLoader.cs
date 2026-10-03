@@ -21,8 +21,11 @@ public sealed class MissionLoadException(IReadOnlyList<string> errors)
 /// </summary>
 public static class MissionLoader
 {
-    /// <summary>The folder containing the mission files.</summary>
-    public static string DefaultFolder => Path.Combine(AppContext.BaseDirectory, "Assets", "Missions");
+    /// <summary>The game's own folder containing the mission files.</summary>
+    public static string DefaultFolder => Path.Combine(GameAssets.BaseFolder, "Missions");
+
+    /// <summary>The mission file with the sequences that any mission can run.</summary>
+    public const string CommonFile = "common.yml";
 
     /// <summary>The number of bits in the mission byte (TP).</summary>
     private const int MissionBits = 8;
@@ -30,6 +33,30 @@ public static class MissionLoader
     /// <summary>The ship names that the mission files can use (the ship asset names, such as "constrictor").</summary>
     private static IReadOnlyDictionary<string, int> ShipTypes =>
         ShipCatalogue.All.ToDictionary(b => b.Id, b => b.BlueprintNumber, StringComparer.Ordinal);
+
+    /// <summary>
+    /// Load and check the game's missions: the mod's (see <see cref="GameAssets"/>),
+    /// if it has a Missions folder, or else the game's own. If the mod's missions
+    /// don't include common.yml, they use the game's.
+    /// </summary>
+    public static MissionCatalogue LoadGame()
+    {
+        var folders = GameAssets.FoldersNamed("Missions");
+        if (folders.Count == 0)
+        {
+            throw new MissionLoadException([$"The missions folder '{DefaultFolder}' is missing"]);
+        }
+
+        var files = ReadFolder(folders[0]);
+        string common = Path.Combine(DefaultFolder, CommonFile);
+        if (!files.Any(f => f.Name.Equals(CommonFile, StringComparison.OrdinalIgnoreCase)) && File.Exists(common))
+        {
+            files.Add((CommonFile, File.ReadAllText(common)));
+            files.Sort((a, b) => StringComparer.Ordinal.Compare(a.Name, b.Name));
+        }
+
+        return Load(files);
+    }
 
     /// <summary>Load and check all the mission files in a folder.</summary>
     public static MissionCatalogue Load(string folder)
@@ -39,12 +66,15 @@ public static class MissionLoader
             throw new MissionLoadException([$"The missions folder '{folder}' is missing"]);
         }
 
-        var files = Directory.EnumerateFiles(folder, "*.yml")
+        return Load(ReadFolder(folder));
+    }
+
+    /// <summary>Read the mission files in a folder, as (file name, contents), in order of their names.</summary>
+    private static List<(string Name, string Text)> ReadFolder(string folder) =>
+        Directory.EnumerateFiles(folder, "*.yml")
             .Order(StringComparer.Ordinal)
             .Select(path => (Name: Path.GetFileName(path), Text: File.ReadAllText(path)))
             .ToList();
-        return Load(files);
-    }
 
     /// <summary>Load and check a set of mission files, given as (file name, contents), in the order the missions are checked.</summary>
     public static MissionCatalogue Load(IEnumerable<(string Name, string Text)> files)

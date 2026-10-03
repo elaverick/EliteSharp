@@ -38,8 +38,8 @@ public sealed record ShipMeshes(Mesh[] Surfaces, Mesh[] Wireframes, float Radius
 /// <summary>
 /// The geometry of the 3D world, uploaded to the GPU once at startup, as one
 /// vertex buffer and one index buffer: the surfaces and wireframes of each
-/// ship model at each level of detail (the ship models are all the models in
-/// the ship models folder, known by their file names), plus the unit shapes
+/// ship model at each level of detail (the ship models are the models the
+/// ship types use, known by their file names), plus the unit shapes
 /// used for the planet and sun (a circle, a sphere and a disc).
 /// </summary>
 public sealed class MeshLibrary : IDisposable
@@ -53,9 +53,9 @@ public sealed class MeshLibrary : IDisposable
     private readonly GpuBuffer _vertexBuffer;
     private readonly GpuBuffer _indexBuffer;
 
-    public MeshLibrary(GpuDevice gpu, string shipModelFolder)
+    public MeshLibrary(GpuDevice gpu, IEnumerable<string> shipModelPaths)
     {
-        foreach (string path in Directory.EnumerateFiles(shipModelFolder, "*.gltf").Order())
+        foreach (string path in shipModelPaths)
         {
             var geometry = ShipGeometry.Build(ShipMeshAsset.Load(path));
 

@@ -14,7 +14,8 @@ using Silk.NET.Windowing;
 var options = GameOptions.Parse(args);
 
 // Load the ship assets, the missions, the game's text, the HUD's images and
-// the sound effects before anything else, so any problems are reported
+// the sound effects (from the mod's folder, if there is one, or else the
+// game's Assets folder) before anything else, so any problems are reported
 // straight away
 MissionCatalogue missions;
 GameStrings strings;
@@ -23,8 +24,18 @@ TradingData trading;
 SoundSamples[]? soundEffects;
 try
 {
+    if (options.GameFolder is { } gameFolder)
+    {
+        if (!Directory.Exists(gameFolder))
+        {
+            throw new DirectoryNotFoundException($"The game folder '{gameFolder}' is missing");
+        }
+
+        GameAssets.ModFolder = gameFolder;
+    }
+
     ShipCatalogue.Reload();
-    missions = MissionLoader.Load(MissionLoader.DefaultFolder);
+    missions = MissionLoader.LoadGame();
     strings = GameStrings.Load(options.Language, HudAtlas.InFont);
     descriptions = DescriptionGrammar.Load(options.Language);
     trading = TradingData.Load();
@@ -68,7 +79,7 @@ void ToggleFullScreen() =>
 
 window.Load += () =>
 {
-    renderer = new VulkanRenderer(window, Path.Combine(ShipCatalogue.AssetFolder, "Models"), options.FourByThreeFrame ? WorldFraming.FourByThree : WorldFraming.Wide);
+    renderer = new VulkanRenderer(window, ShipCatalogue.ModelPaths, options.FourByThreeFrame ? WorldFraming.FourByThree : WorldFraming.Wide);
     var input = window.CreateInput();
     foreach (var kb in input.Keyboards)
     {

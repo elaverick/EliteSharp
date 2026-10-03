@@ -39,8 +39,8 @@ public sealed class TradingData
         EquipmentPrices = equipment;
     }
 
-    /// <summary>The trading data file.</summary>
-    public static string DefaultPath => Path.Combine(AppContext.BaseDirectory, "Assets", "trading.yml");
+    /// <summary>The game's own trading data file (a mod can replace it).</summary>
+    public static string DefaultPath => Path.Combine(GameAssets.BaseFolder, "trading.yml");
 
     /// <summary>The commodities, in the order of the market.</summary>
     public IReadOnlyList<Commodity> Commodities { get; }
@@ -48,10 +48,10 @@ public sealed class TradingData
     /// <summary>The equipment on the Equip Ship screen after fuel, and its price in tenths of a credit.</summary>
     public IReadOnlyList<(string Name, int Price)> EquipmentPrices { get; }
 
-    /// <summary>Load the trading data from a file.</summary>
+    /// <summary>Load the trading data from a file (by default, the mod's or the game's trading.yml).</summary>
     public static TradingData Load(string? path = null)
     {
-        path ??= DefaultPath;
+        path ??= GameAssets.File("trading.yml");
         if (!File.Exists(path))
         {
             throw new FileNotFoundException($"The trading data file '{path}' is missing", path);

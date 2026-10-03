@@ -28,8 +28,8 @@ public sealed class GameStrings
         _strings = strings;
     }
 
-    /// <summary>The folder containing the strings files.</summary>
-    public static string DefaultFolder => Path.Combine(AppContext.BaseDirectory, "Assets", "Strings");
+    /// <summary>The game's own folder containing the strings files (a mod can replace any of them).</summary>
+    public static string DefaultFolder => Path.Combine(GameAssets.BaseFolder, "Strings");
 
     /// <summary>The language, such as "en".</summary>
     public string Language { get; }
@@ -48,11 +48,11 @@ public sealed class GameStrings
         return $"{language}-strings.yml";
     }
 
-    /// <summary>Load the strings for a language from its file in a folder.</summary>
+    /// <summary>Load the strings for a language from its file in a folder (by default, the mod's or the game's Assets/Strings).</summary>
     /// <param name="canPrint">Whether the game can print a character (such as whether it is in the font).</param>
     public static GameStrings Load(string language, Func<char, bool> canPrint, string? folder = null)
     {
-        string path = Path.Combine(folder ?? DefaultFolder, FileName(language));
+        string path = folder != null ? Path.Combine(folder, FileName(language)) : GameAssets.File("Strings", FileName(language));
         if (!File.Exists(path))
         {
             throw new FileNotFoundException($"There are no strings for the language '{language}' (the file '{path}' is missing)", path);

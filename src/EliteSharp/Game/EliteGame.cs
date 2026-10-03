@@ -71,7 +71,8 @@ public sealed partial class EliteGame
     /// Create the game. The missions are loaded from Assets/Missions, and the
     /// game's text and system descriptions from Assets/Strings (in the language
     /// in the options), and the markets and equipment prices from
-    /// Assets/trading.yml, unless they are given.
+    /// Assets/trading.yml (or the mod's, see <see cref="GameAssets"/>), unless
+    /// they are given.
     /// </summary>
     public EliteGame(
         Hud hud,
@@ -84,7 +85,7 @@ public sealed partial class EliteGame
         DescriptionGrammar? descriptions = null,
         TradingData? trading = null)
     {
-        _missions = new MissionRuntime(missions ?? MissionLoader.Load(MissionLoader.DefaultFolder));
+        _missions = new MissionRuntime(missions ?? MissionLoader.LoadGame());
         _strings = strings ?? GameStrings.Load(options.Language, HudAtlas.InFont);
         _descriptions = descriptions ?? DescriptionGrammar.Load(options.Language);
         _trading = trading ?? TradingData.Load();

@@ -193,6 +193,24 @@ shortcut:
 | `--nopad` | Ignore any game controllers |
 | `--data <folder>` | Where to keep saved commanders |
 | `--language <code>` | The language of the game's text, from `Assets\Strings\<code>-strings.yml` and `<code>-descriptions.yml` (default `en`) |
+| `--game <folder>` | Play a mod: use the assets in this folder (usually a path relative to where you start the game) in place of the `Assets` folder (see below) |
+
+### Mods
+
+A mod is a folder laid out like the `Assets` folder next to `EliteSharp.exe`,
+which `--game <folder>` (or `-game <folder>`) uses in its place, for example
+`EliteSharp.exe --game mods\my-mod`. A mod only needs the files it changes;
+anything it doesn't have comes from the `Assets` folder:
+
+* `Strings`, `Images`, `Sounds` and `trading.yml`: each file the mod doesn't
+  have (such as `Strings\en-strings.yml`) is the game's own.
+* `Ships`: each ship type the mod doesn't define (by the `type` in its JSON
+  file) is the game's own, and each model a ship uses (such as
+  `Models\cobra-mk3.gltf`) comes from the mod if it has it, or else the game.
+* `Missions`: if the mod has a `Missions` folder, its missions replace all of
+  the game's (so an empty folder means no missions), and if it doesn't have
+  `common.yml`, the game's is used. Without a `Missions` folder, the game's
+  missions are used.
 
 Your saved commanders live in `%APPDATA%\EliteSharp`, in a folder for each of the
 game's "disc drives".

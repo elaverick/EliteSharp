@@ -36,6 +36,9 @@ public sealed class GameOptions
     /// <summary>The language of the game's text (the strings file is Assets/Strings/&lt;language&gt;-strings.yml).</summary>
     public string Language { get; set; } = GameStrings.DefaultLanguage;
 
+    /// <summary>A mod's folder, used in place of the Assets folder (see <see cref="GameAssets"/>), or null for none.</summary>
+    public string? GameFolder { get; set; }
+
     public static GameOptions Parse(string[] args)
     {
         var options = new GameOptions();
@@ -73,6 +76,10 @@ public sealed class GameOptions
                     break;
                 case "--fullscreen":
                     options.FullScreen = true;
+                    break;
+                case "--game" or "-game" when next != null:
+                    options.GameFolder = Path.GetFullPath(next);
+                    i++;
                     break;
                 case "--language" when next != null:
                     options.Language = next.ToLowerInvariant();

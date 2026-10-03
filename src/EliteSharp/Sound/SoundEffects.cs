@@ -41,13 +41,15 @@ public static class SoundEffects
         new("hyperspace-2", 239, NoiseVoice: false), // sohyp2: hyperspace (second part)
     ];
 
-    /// <summary>The folder containing the sound effects.</summary>
-    public static string DefaultFolder => Path.Combine(AppContext.BaseDirectory, "Assets", "Sounds");
+    /// <summary>The game's own folder containing the sound effects (a mod can replace any of them).</summary>
+    public static string DefaultFolder => Path.Combine(GameAssets.BaseFolder, "Sounds");
 
-    /// <summary>Load all the sound effects' samples, in the order of <see cref="All"/>.</summary>
+    /// <summary>Load all the sound effects' samples, in the order of <see cref="All"/>, from a folder (by default, each from the mod's or the game's Assets/Sounds).</summary>
     /// <exception cref="InvalidDataException">A sound effect isn't valid (the message says which and why).</exception>
     public static SoundSamples[] Load(string? folder = null) =>
-        All.Select(effect => LoadSamples(Path.Combine(folder ?? DefaultFolder, effect.Name + ".ogg"))).ToArray();
+        All.Select(effect => LoadSamples(folder != null
+            ? Path.Combine(folder, effect.Name + ".ogg")
+            : GameAssets.File("Sounds", effect.Name + ".ogg"))).ToArray();
 
     /// <summary>Load a sound effect's samples from an OGG file.</summary>
     /// <exception cref="InvalidDataException">The file isn't a valid sound effect (the message says why).</exception>

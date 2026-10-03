@@ -66,12 +66,12 @@ public static class HudAtlas
     /// <summary>A single texel of <see cref="QuadInk"/>, for solid rectangles.</summary>
     public static readonly AtlasRegion Solid = new(2 * BulbSize, BulbTop, 1, 1);
 
-    /// <summary>The folder containing the HUD's images.</summary>
-    public static string ImageFolder => Path.Combine(AppContext.BaseDirectory, "Assets", "Images");
+    /// <summary>The game's own folder containing the HUD's images (a mod can replace any of them).</summary>
+    public static string ImageFolder => Path.Combine(GameAssets.BaseFolder, "Images");
 
-    private static readonly Lazy<(byte[] Texels, bool[] InFont)> Loaded = new(() => Load(ImageFolder));
+    private static readonly Lazy<(byte[] Texels, bool[] InFont)> Loaded = new(() => Load(file => GameAssets.File("Images", file)));
 
-    /// <summary>The texture's texels, row by row, built from the images in <see cref="ImageFolder"/> the first time they are needed.</summary>
+    /// <summary>The texture's texels, row by row, built from the images (each the mod's or the game's) the first time they are needed.</summary>
     /// <exception cref="InvalidDataException">An image isn't valid (the message says which and why).</exception>
     public static byte[] Texels => Loaded.Value.Texels;
 
@@ -97,12 +97,12 @@ public static class HudAtlas
 
     /// <summary>Build the texture's texels, row by row, with the images in a folder.</summary>
     /// <exception cref="InvalidDataException">An image isn't valid (the message says which and why).</exception>
-    public static byte[] Build(string imageFolder) => Load(imageFolder).Texels;
+    public static byte[] Build(string imageFolder) => Load(file => Path.Combine(imageFolder, file)).Texels;
 
-    /// <summary>Build the texture's texels with the images in a folder, and find which characters are in the font.</summary>
-    private static (byte[] Texels, bool[] InFont) Load(string imageFolder)
+    /// <summary>Build the texture's texels with the images (finding each image's path by its file name), and find which characters are in the font.</summary>
+    private static (byte[] Texels, bool[] InFont) Load(Func<string, string> imagePath)
     {
-        var font = ReadImage(Path.Combine(imageFolder, "font.png"));
+        var font = ReadImage(imagePath("font.png"));
         if (font.Width != Width || font.Height == 0 || font.Height % GlyphSize != 0)
         {
             throw new InvalidDataException(
@@ -111,9 +111,9 @@ public static class HudAtlas
         }
 
         var texels = new byte[Width * (FontTop + font.Height)];
-        PutImage(texels, Dashboard, Path.Combine(imageFolder, "dashboard.png"));
-        PutImage(texels, EcmBulb, Path.Combine(imageFolder, "ecm-bulb.png"));
-        PutImage(texels, StationBulb, Path.Combine(imageFolder, "station-bulb.png"));
+        PutImage(texels, Dashboard, imagePath("dashboard.png"));
+        PutImage(texels, EcmBulb, imagePath("ecm-bulb.png"));
+        PutImage(texels, StationBulb, imagePath("station-bulb.png"));
         texels[Solid.Y * Width + Solid.X] = QuadInk;
         PutImage(texels, new AtlasRegion(0, FontTop, Width, font.Height), "font.png", font, FontInks, "white");
 

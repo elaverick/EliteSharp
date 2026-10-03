@@ -76,8 +76,8 @@ public sealed unsafe class VulkanRenderer : IDisposable
     /// <summary>Ask the renderer to save the next frame it draws to a PNG file.</summary>
     public void RequestCapture(string path) => Volatile.Write(ref _capturePath, path);
 
-    /// <summary>Create the renderer, loading the ship models from the given folder.</summary>
-    public VulkanRenderer(IWindow window, string shipModelFolder, WorldFraming framing = WorldFraming.Wide)
+    /// <summary>Create the renderer, loading the given ship models.</summary>
+    public VulkanRenderer(IWindow window, IEnumerable<string> shipModelPaths, WorldFraming framing = WorldFraming.Wide)
     {
         _window = window;
         _framing = framing;
@@ -93,7 +93,7 @@ public sealed unsafe class VulkanRenderer : IDisposable
         CreateFrameResources();
         var targets = new RenderTargetFormats(_swapchainFormat, _depthFormat);
         _hud = new HudRenderer(_gpu, targets, FramesInFlight);
-        _world = new WorldRenderer(_gpu, targets, FramesInFlight, shipModelFolder);
+        _world = new WorldRenderer(_gpu, targets, FramesInFlight, shipModelPaths);
     }
 
     public void Resize() => _swapchainDirty = true;

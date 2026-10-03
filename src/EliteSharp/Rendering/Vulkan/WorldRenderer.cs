@@ -101,11 +101,11 @@ public sealed unsafe class WorldRenderer : IDisposable
     /// <summary>The ships to draw this frame (reused from frame to frame).</summary>
     private readonly List<ShipDraw> _ships = [];
 
-    public WorldRenderer(GpuDevice gpu, RenderTargetFormats targets, int framesInFlight, string shipModelFolder)
+    public WorldRenderer(GpuDevice gpu, RenderTargetFormats targets, int framesInFlight, IEnumerable<string> shipModelPaths)
     {
         _gpu = gpu;
         var vk = gpu.Vk;
-        _meshes = new MeshLibrary(gpu, shipModelFolder);
+        _meshes = new MeshLibrary(gpu, shipModelPaths);
 
         // The per-frame uniforms are in a uniform buffer, bound as descriptor set 0
         var binding = new DescriptorSetLayoutBinding

@@ -3,6 +3,7 @@ using EliteSharp.Game.Ships;
 using EliteSharp.Input;
 using EliteSharp.Rendering.Scene;
 using EliteSharp.Rendering;
+using EliteSharp.Sound;
 
 namespace EliteSharp.Game;
 
@@ -49,6 +50,10 @@ public sealed partial class EliteGame
     /// <summary>The body of <see cref="ShowTitleScreen"/>.</summary>
     private int RunTitleScreen(string prompt, int type, int distance, bool askYesNo)
     {
+        // The Commodore 64 version's title theme plays on the title screens
+        // (carrying on from one to the next)
+        _sound?.PlayMusic(Music.Title);
+
         _titleShipDistance = distance;
         _shipType = type;
         ResetShipAndUniverse();

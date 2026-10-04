@@ -297,6 +297,7 @@ public sealed partial class EliteGame
                 break;
             case Setting.Music:
                 _options.MusicVolume += step;
+                ApplyMusicVolume();
                 break;
         }
 
@@ -313,6 +314,16 @@ public sealed partial class EliteGame
         int scale = step > 0 ? width / 256 + 1 : (width + 255) / 256 - 1;
         scale = Math.Clamp(scale, 1, 8);
         return (256 * scale, 248 * scale);
+    }
+
+    /// <summary>Set the music's volume from the settings (as the sound effects' volume is set).</summary>
+    private void ApplyMusicVolume()
+    {
+        if (_sound != null)
+        {
+            float level = (float)_options.MusicVolume / GameOptions.MaxVolume;
+            _sound.MusicGain = level * level;
+        }
     }
 
     /// <summary>

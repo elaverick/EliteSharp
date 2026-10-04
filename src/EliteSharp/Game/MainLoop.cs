@@ -1,6 +1,7 @@
 using System.Numerics;
 using EliteSharp.Game.Ships;
 using EliteSharp.Rendering;
+using EliteSharp.Sound;
 
 namespace EliteSharp.Game;
 
@@ -171,6 +172,11 @@ public sealed partial class EliteGame
         ThrottleMainLoop();
         RunDebugCommands();
         MainFlightLoop();
+
+        // As in the Commodore 64 version, The Blue Danube plays while the
+        // docking computer is on (and once the game is under way, the title
+        // theme stops)
+        _sound?.PlayMusic(_autoDocking != 0 ? Music.Docking : Music.None);
 
         // Count down the in-flight message delay
         _messageDelay = (_messageDelay - 1) & 0xFF;

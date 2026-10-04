@@ -78,6 +78,13 @@ from an emulation of the BBC Master's sound chip playing the original's sound
 data (`python tools/render_sounds.py` makes them again). You can replace any
 of them with your own OGG file, mono or stereo, with the same name.
 
+The music, from the Commodore 64 version, is in `src\EliteSharp\Assets\Music`:
+`title.ogg` plays on the title screens, and `docking.ogg` (The Blue Danube)
+while the docking computer flies you in. Each file's `LOOPSTART` and
+`LOOPLENGTH` (or `LOOPEND`) tags, in samples, say which part of it repeats,
+so an introduction plays once; without them, the whole piece repeats. You
+can replace either file, or leave it out for silence.
+
 ## Starting out
 
 When the game starts, it asks if you want to load a saved commander. Press

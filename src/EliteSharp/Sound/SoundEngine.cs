@@ -30,6 +30,7 @@ public sealed unsafe class SoundEngine : IDisposable
     private Context* _context;
     private uint[] _sources = [];
     private uint[] _buffers = [];
+    private MusicPlayer? _music;
 
     /// <summary>
     /// Start the sound engine with the sound effects, returning null if sound
@@ -80,6 +81,40 @@ public sealed unsafe class SoundEngine : IDisposable
     /// </summary>
     public float EffectsGain { get; set; } = 1;
 
+    /// <summary>The volume of the music from the Settings screen, as a gain from 0 to 1.</summary>
+    public float MusicGain
+    {
+        get => _music?.Gain ?? 0;
+        set
+        {
+            if (_music != null)
+            {
+                _music.Gain = value;
+            }
+        }
+    }
+
+    /// <summary>
+    /// Load the music in the background (it takes a moment to decode), so the
+    /// game can start straight away; a track that's asked for before it's
+    /// loaded starts as soon as it is.
+    /// </summary>
+    public void LoadMusic(Func<MusicTrack?[]> load)
+    {
+        var music = _music;
+        if (music != null)
+        {
+            Task.Run(() => music.SetTracks(load()));
+        }
+    }
+
+    /// <summary>
+    /// Play a piece of music (see <see cref="Music"/>), from the beginning
+    /// unless it's already playing, or stop the music with
+    /// <see cref="MusicPlayer.NoTrack"/>.
+    /// </summary>
+    public void PlayMusic(int track) => _music?.Play(track);
+
     /// <summary>Set the function that returns the volume setting (VOL, 0-7).</summary>
     public void SetVolumeSource(Func<int> source) => _volumeSource = source;
 
@@ -110,6 +145,8 @@ public sealed unsafe class SoundEngine : IDisposable
                 _al.BufferData(_buffers[i], format, p, effect.Samples.Length * sizeof(short), effect.SampleRate);
             }
         }
+
+        _music = new MusicPlayer(_al);
     }
 
     /// <summary>
@@ -167,6 +204,8 @@ public sealed unsafe class SoundEngine : IDisposable
     /// </summary>
     public void Dispose()
     {
+        _music?.Dispose();
+        _music = null;
         if (_al != null)
         {
             if (_sources.Length > 0)

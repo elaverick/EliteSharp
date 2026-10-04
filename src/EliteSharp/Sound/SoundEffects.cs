@@ -64,27 +64,43 @@ public static class SoundEffects
         try
         {
             using var reader = new VorbisReader(path);
-            if (reader.Channels is not (1 or 2))
-            {
-                throw new InvalidDataException($"{file}: the sound must be mono or stereo, not {reader.Channels} channels");
-            }
-
-            var samples = new List<short>();
-            var buffer = new float[4096 * reader.Channels];
-            int read;
-            while ((read = reader.ReadSamples(buffer, 0, buffer.Length)) > 0)
-            {
-                for (int i = 0; i < read; i++)
-                {
-                    samples.Add((short)Math.Clamp(MathF.Round(buffer[i] * short.MaxValue), short.MinValue, short.MaxValue));
-                }
-            }
-
-            return new SoundSamples(samples.ToArray(), reader.Channels, reader.SampleRate);
+            return ReadSamples(reader, file);
         }
         catch (Exception e) when (e is not (IOException or InvalidDataException))
         {
             throw new InvalidDataException($"{file}: the sound can't be read ({e.Message})", e);
         }
+    }
+
+    /// <summary>Decode all of an OGG file's samples (for a sound effect or music), as 16-bit samples.</summary>
+    /// <exception cref="InvalidDataException">The sound isn't mono or stereo.</exception>
+    public static SoundSamples ReadSamples(VorbisReader reader, string file)
+    {
+        if (reader.Channels is not (1 or 2))
+        {
+            throw new InvalidDataException($"{file}: the sound must be mono or stereo, not {reader.Channels} channels");
+        }
+
+        // The length is known up front for a whole file, though the decoded
+        // samples are what count
+        var samples = new short[Math.Max(0, reader.TotalSamples) * reader.Channels];
+        var buffer = new float[4096 * reader.Channels];
+        int count = 0;
+        int read;
+        while ((read = reader.ReadSamples(buffer, 0, buffer.Length)) > 0)
+        {
+            if (count + read > samples.Length)
+            {
+                Array.Resize(ref samples, Math.Max(samples.Length * 2, count + read));
+            }
+
+            for (int i = 0; i < read; i++)
+            {
+                samples[count++] = (short)Math.Clamp(MathF.Round(buffer[i] * short.MaxValue), short.MinValue, short.MaxValue);
+            }
+        }
+
+        Array.Resize(ref samples, count);
+        return new SoundSamples(samples, reader.Channels, reader.SampleRate);
     }
 }

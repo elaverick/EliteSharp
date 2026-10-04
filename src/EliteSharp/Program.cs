@@ -55,6 +55,7 @@ var exchange = new FrameExchange();
 var hud = new Hud(exchange);
 var keyboard = new BbcKeyboard();
 using var sound = soundEffects != null ? SoundEngine.TryCreate(soundEffects) : null;
+sound?.LoadMusic(Music.Load);
 // The controller is always read, so it can be switched on from the Settings
 // screen; while it's switched off, it is ignored
 using var gamepad = Gamepad.TryCreate(keyboard);

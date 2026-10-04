@@ -1,3 +1,4 @@
+using System.Diagnostics;
 using EliteSharp.Data;
 using EliteSharp.Game.Missions;
 
@@ -9,6 +10,9 @@ namespace EliteSharp.Game;
 /// </summary>
 public sealed partial class EliteGame
 {
+    /// <summary>How long the view's name stays on the space view, in milliseconds.</summary>
+    private const int ViewNameShowMilliseconds = 2000;
+
     /// <summary>XC and YC: the text cursor.</summary>
     private int _cursorX = 1, _cursorY = 1;
 
@@ -1160,7 +1164,11 @@ public sealed partial class EliteGame
         ClearScreenAndShowView();
     }
 
-    /// <summary>TTX66K: clear the screen, draw a border box, and print the view name if this is a space view.</summary>
+    /// <summary>
+    /// TTX66K: clear the screen, draw a border box, and print the view name if
+    /// this is a space view (which, unlike the original, disappears shortly
+    /// afterwards).
+    /// </summary>
     private void ClearScreenAndShowView()
     {
         ClearSpaceView();
@@ -1180,9 +1188,12 @@ public sealed partial class EliteGame
         {
             _cursorX = 11;
             _colour = Cyan;
-            PrintText(ViewKeys[_view]);
-            PrintSpace();
-            PrintText("views.view");
+            using (_hud.TimedText(_clock.Now + ViewNameShowMilliseconds * Stopwatch.Frequency / 1000))
+            {
+                PrintText(ViewKeys[_view]);
+                PrintSpace();
+                PrintText("views.view");
+            }
         }
 
         // tt66

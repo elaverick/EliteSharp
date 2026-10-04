@@ -86,6 +86,15 @@ public sealed class Hud
     /// <summary>The group that lines are being drawn into, if any (see <see cref="Group"/>).</summary>
     private List<ScreenLine>? _currentGroup;
 
+    /// <summary>The text cells that are removed after a while (see <see cref="TimedText"/>).</summary>
+    private readonly HashSet<(int Column, int Row)> _timedCells = [];
+
+    /// <summary>When the timed text is removed, on the game's clock.</summary>
+    private long _timedTextEnd;
+
+    /// <summary>Whether text is being printed as timed text (see <see cref="TimedText"/>).</summary>
+    private bool _printingTimedText;
+
     public Hud(FrameExchange exchange)
     {
         _exchange = exchange;
@@ -136,6 +145,8 @@ public sealed class Hud
         internal List<ScreenRect> Rects { get; init; } = default!;
         internal List<WideLine> WideLines { get; init; } = default!;
         internal Dictionary<HudGroup, List<ScreenLine>> Groups { get; init; } = default!;
+        internal HashSet<(int Column, int Row)> TimedCells { get; init; } = default!;
+        internal long TimedTextEnd { get; init; }
         internal bool Border { get; init; }
         internal SpacePalette Palette { get; init; }
         internal bool WorldHidden { get; init; }
@@ -152,6 +163,8 @@ public sealed class Hud
         Rects = [.. _rects],
         WideLines = [.. _wideLines],
         Groups = _groups.ToDictionary(g => g.Key, g => g.Value.ToList()),
+        TimedCells = [.. _timedCells],
+        TimedTextEnd = _timedTextEnd,
         Border = Border,
         Palette = Palette,
         WorldHidden = WorldHidden,
@@ -174,6 +187,8 @@ public sealed class Hud
             _groups[group] = lines;
         }
 
+        _timedCells.UnionWith(saved.TimedCells);
+        _timedTextEnd = saved.TimedTextEnd;
         Border = saved.Border;
         Palette = saved.Palette;
         WorldHidden = saved.WorldHidden;
@@ -190,6 +205,7 @@ public sealed class Hud
         _rects.Clear();
         _wideLines.Clear();
         _groups.Clear();
+        _timedCells.Clear();
         Border = false;
     }
 
@@ -199,19 +215,50 @@ public sealed class Hud
         if (character != ' ')
         {
             _text[(column, row)] = (character, ink);
+            if (_printingTimedText)
+            {
+                _timedCells.Add((column, row));
+            }
+            else
+            {
+                _timedCells.Remove((column, row));
+            }
         }
     }
 
     /// <summary>Remove the character in a text cell.</summary>
-    public void EraseCharacter(int column, int row) => _text.Remove((column, row));
+    public void EraseCharacter(int column, int row)
+    {
+        _text.Remove((column, row));
+        _timedCells.Remove((column, row));
+    }
 
     /// <summary>Remove a character from a text cell, if it's the one there.</summary>
     public void EraseCharacter(int column, int row, char character)
     {
         if (_text.TryGetValue((column, row), out var cell) && cell.Character == character)
         {
-            _text.Remove((column, row));
+            EraseCharacter(column, row);
         }
+    }
+
+    /// <summary>
+    /// Print timed text: the characters printed until the returned scope is
+    /// disposed are removed at <paramref name="end"/> (on the game's clock, as
+    /// passed to <see cref="Present"/>). Any timed text that is already shown
+    /// is now removed at the same time.
+    /// </summary>
+    public TimedTextScope TimedText(long end)
+    {
+        _timedTextEnd = end;
+        _printingTimedText = true;
+        return new TimedTextScope(this);
+    }
+
+    /// <summary>The scope of <see cref="TimedText"/>: text is printed as normal again when it ends.</summary>
+    public readonly struct TimedTextScope(Hud hud) : IDisposable
+    {
+        public void Dispose() => hud._printingTimedText = false;
     }
 
     /// <summary>
@@ -331,6 +378,17 @@ public sealed class Hud
         foreach (var rect in _rects)
         {
             builder.Rect(rect.X, rect.Y, rect.Width, rect.Height, rect.Ink);
+        }
+
+        // Timed text whose time is up is removed
+        if (time >= _timedTextEnd && _timedCells.Count > 0)
+        {
+            foreach (var cell in _timedCells)
+            {
+                _text.Remove(cell);
+            }
+
+            _timedCells.Clear();
         }
 
         foreach (var ((column, row), (character, ink)) in _text)

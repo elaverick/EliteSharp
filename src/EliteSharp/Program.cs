@@ -79,10 +79,24 @@ Thread? gameThread = null;
 Exception? gameError = null;
 bool closeRequested = false;
 bool fullScreenToggleRequested = false;
+IInputContext? input = null;
+
+// Hide the mouse pointer in full screen, and show it in a window
+void UpdateCursor()
+{
+    var mode = window.WindowState == WindowState.Fullscreen ? CursorMode.Hidden : CursorMode.Normal;
+    foreach (var mouse in input?.Mice ?? [])
+    {
+        mouse.Cursor.CursorMode = mode;
+    }
+}
 
 // Switch between a window and full screen (on the window's thread)
-void ToggleFullScreen() =>
+void ToggleFullScreen()
+{
     window.WindowState = window.WindowState == WindowState.Fullscreen ? WindowState.Normal : WindowState.Fullscreen;
+    UpdateCursor();
+}
 
 window.Load += () =>
 {
@@ -92,7 +106,8 @@ window.Load += () =>
     }
 
     renderer = new VulkanRenderer(window, ShipCatalogue.ModelPaths, options.FourByThreeFrame ? WorldFraming.FourByThree : WorldFraming.Wide, options.VSync);
-    var input = window.CreateInput();
+    input = window.CreateInput();
+    UpdateCursor();
     foreach (var kb in input.Keyboards)
     {
         kb.KeyDown += (k, key, _) =>

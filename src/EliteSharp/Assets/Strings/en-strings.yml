@@ -25,7 +25,6 @@
 #       {system}             the name of the selected system
 #       {commander}          the commander's name
 #       {default_commander}  the default commander's name (JAMESON)
-#       {drive}              the drive number, in the disc catalogue
 #
 # Where the text goes on the screen is up to the game, so a translation only
 # needs to translate the words.
@@ -47,6 +46,7 @@ status:
   hyperspace_system: "Hyperspace System"
   condition: "Condition"
   docked: "Docked"
+  save_load: "S to save, L to load"
   condition_green: "Green"
   condition_yellow: "Yellow"
   condition_red: "Red"
@@ -142,6 +142,8 @@ settings:
   controller: "Controller"
   sound_effects: "Sound Effects"
   music: "Music"
+  save_commander: "Save Commander"
+  load_commander: "Load Commander"
   on: "On"
   off: "Off"
   wide: "Wide"
@@ -202,18 +204,32 @@ messages:
 prompts:
   yes_no: "(Y/N)?"
 
-disk_menu:
-  title: " DISK ACCESS MENU"
-  load: "1. Load New Commander"
-  save: "2. Save Commander {commander}"
-  catalogue: "3. Catalogue Disk"
-  delete: "4. Delete File"
-  default: "5. Default {default_commander}"
-  exit: "6. Exit"
-
-disk:
-  which_drive: "\nWhich Drive?"
-  catalogue_header: "DRIVE {drive} CATALOGUE"
-  commander_name: "Commander's Name? "
-  illegal_file: "ILLEGAL ELITE II FILE"
-  are_you_sure: "Are You Sure?"
+commanders:
+  load_title: "LOAD COMMANDER"
+  save_title: "SAVE COMMANDER"
+  save: "Save"
+  saves: "Saves"
+  start_again: "Start Again As JAMESON"
+  new_save: "New Save"
+  new_commander: "Save As New Commander"
+  saved: "Saved"
+  system: "System"
+  cash: "Cash"
+  rating: "Rating"
+  galaxy: "Galaxy "
+  credits: " Cr"
+  default_label: "Docked at "
+  load_help: "Return (or A) to load"
+  save_help: "Return (or A) to save"
+  delete_help: "Delete (or X) to delete"
+  back_help: "Escape (or B) to go back"
+  name_prompt: "Commander's Name? "
+  label_prompt: "Label? "
+  edit_help: "Return: OK  Escape: Cancel"
+  confirm_start_again: "Start Again As JAMESON"
+  confirm_overwrite: "Save Over This Save"
+  delete_save: "Delete This Save"
+  delete_commander: "Delete Commander "
+  delete_commander_saves: "And All Their Saves"
+  saved_message: "Commander Saved"
+  save_failed: "Could Not Save The Commander"

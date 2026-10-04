@@ -71,27 +71,8 @@ public sealed partial class EliteGame
         PrintTextLine(legal);
         PrintTextSpace("status.rating");
 
-        int rating;
-        int tallyHi = _killTally >> 8;
-        if (tallyHi != 0)
-        {
-            // st4
-            rating = tallyHi >= 25 ? 9 : tallyHi >= 10 ? 8 : tallyHi >= 2 ? 7 : 6;
-        }
-        else
-        {
-            rating = 0;
-            int conditionToken = (_killTally & 0xFF) >> 2;
-            do
-            {
-                rating++;
-                conditionToken >>= 1;
-            }
-            while (conditionToken != 0);
-        }
-
         // st3
-        PrintTextLine(RatingKeys[rating - 1]);
+        PrintTextLine(RatingKeys[RatingFor(_killTally) - 1]);
         PrintEquipmentHeading();
 
         if (_escapePod != 0)
@@ -147,6 +128,17 @@ public sealed partial class EliteGame
 
             PrintTextLineIndented(name);
         }
+
+        if ((_docked & 0x80) != 0 && _cursorY <= 23)
+        {
+            // Not in the original: the keys for saving and loading, which
+            // work on this screen while we're docked (shown on the bottom
+            // row, unless the equipment reaches down to it), centred
+            string help = _strings.Get("status.save_load");
+            _cursorX = Math.Max(1, (32 - help.Length) / 2);
+            _cursorY = 23;
+            PrintRaw(help);
+        }
     }
 
     /// <summary>
@@ -190,6 +182,28 @@ public sealed partial class EliteGame
         _textCase = 0x80;
         PrintNewline();
         _cursorX = 6;
+    }
+
+    /// <summary>The combat rating for a kill tally, from Harmless (1) to Elite (9).</summary>
+    private static int RatingFor(int killTally)
+    {
+        int tallyHi = killTally >> 8;
+        if (tallyHi != 0)
+        {
+            // st4
+            return tallyHi >= 25 ? 9 : tallyHi >= 10 ? 8 : tallyHi >= 2 ? 7 : 6;
+        }
+
+        int rating = 0;
+        int conditionToken = (killTally & 0xFF) >> 2;
+        do
+        {
+            rating++;
+            conditionToken >>= 1;
+        }
+        while (conditionToken != 0);
+
+        return rating;
     }
 
     /// <summary>The combat ratings, from Harmless (1) to Elite (9), which the original prints as tokens 22 onwards.</summary>

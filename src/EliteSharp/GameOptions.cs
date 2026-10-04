@@ -138,7 +138,7 @@ public sealed class GameOptions
         }
     }
 
-    /// <summary>The folder containing the disc drive folders for saved commanders.</summary>
+    /// <summary>The folder for the settings file and the saved commanders (in its Commanders folder).</summary>
     public string DataFolder { get; set; } =
         Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData), "EliteSharp");
 

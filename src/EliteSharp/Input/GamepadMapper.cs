@@ -11,6 +11,9 @@ public enum PadContext
 
     /// <summary>The game is paused.</summary>
     Paused,
+
+    /// <summary>Typing a line of text (such as a save's label), where the controller can only accept, cancel or delete.</summary>
+    TextEntry,
 }
 
 /// <summary>
@@ -27,7 +30,7 @@ public enum PadContext
 ///
 /// Other screens (and when docked):
 ///   D-pad cursor keys (the sticks also move the chart cross-hairs), A Return,
-///   Y "Y", B "N" (for the yes/no prompts), RB Shift (fast cross-hairs),
+///   Y "Y", B "N" (for the yes/no prompts), X Delete, RB Shift (fast cross-hairs),
 ///   Start front view (or launch when docked), Back short-range chart,
 ///   L3 in-system jump, R3 docking computer on/off
 ///
@@ -40,6 +43,9 @@ public enum PadContext
 ///   Start or B resume, Back quit to the title screen, D-pad left/right
 ///   volume down/up, D-pad up/down sound on/off, Y reverse joystick Y channel,
 ///   X toggle joystick-only mode, RB the Settings screen
+///
+/// Typing text:
+///   A Return, B Escape, X Delete
 /// </summary>
 public sealed class GamepadMapper(BbcKeyboard keyboard)
 {
@@ -58,7 +64,7 @@ public sealed class GamepadMapper(BbcKeyboard keyboard)
     public void Update(PadButton buttons)
     {
         var context = Context;
-        bool layer = context != PadContext.Paused && (buttons & PadButton.LeftShoulder) != 0;
+        bool layer = context is not (PadContext.Paused or PadContext.TextEntry) && (buttons & PadButton.LeftShoulder) != 0;
         var newlyPressed = new List<int>();
 
         foreach (var button in AllButtons)
@@ -103,6 +109,17 @@ public sealed class GamepadMapper(BbcKeyboard keyboard)
                 PadButton.Y => [BbcKeyboard.Y],
                 PadButton.X => [BbcKeyboard.K],
                 PadButton.RightShoulder => RequestSettings(),
+                _ => [],
+            };
+        }
+
+        if (context == PadContext.TextEntry)
+        {
+            return button switch
+            {
+                PadButton.A => [BbcKeyboard.Return],
+                PadButton.B => [BbcKeyboard.Escape],
+                PadButton.X => [BbcKeyboard.Delete],
                 _ => [],
             };
         }
@@ -160,6 +177,7 @@ public sealed class GamepadMapper(BbcKeyboard keyboard)
             PadButton.A => [BbcKeyboard.Return],
             PadButton.B => [BbcKeyboard.N],
             PadButton.Y => [BbcKeyboard.Y],
+            PadButton.X => [BbcKeyboard.Delete],
             PadButton.RightShoulder => [BbcKeyboard.Shift],
             PadButton.Start => [BbcKeyboard.F0],
             PadButton.DpadUp => [BbcKeyboard.Up],

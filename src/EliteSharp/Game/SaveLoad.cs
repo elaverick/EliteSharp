@@ -3,9 +3,11 @@ using System.Text;
 namespace EliteSharp.Game;
 
 /// <summary>
-/// Saving and loading commanders. The original uses the BBC's disc filing
-/// system, with drives 0-3; here each drive is a folder on disk, and the
-/// commander files are saved in the same 256-byte format as the original.
+/// Saving and loading commanders. The original saves each commander to a file
+/// on a disc; here a commander can have any number of saves, each with a
+/// label, kept by <see cref="CommanderStore"/> (the screens for choosing them
+/// are in CommanderScreens.cs). The commander data block in each save is in
+/// the same format as the original's commander files, with its checksums.
 /// </summary>
 public sealed partial class EliteGame
 {
@@ -18,19 +20,8 @@ public sealed partial class EliteGame
     /// </summary>
     private readonly byte[] _savedCommander = new byte[8 + CommanderDataSize + 16];
 
-    /// <summary>CATF: non-zero while the disc catalogue is being printed.</summary>
-    private int _printingCatalogue;
-
     /// <summary>The last line of text entered with MT26 (INWK+5 in the original).</summary>
     private string _lastInput = "";
-
-    /// <summary>The folder for a drive number.</summary>
-    private string DriveFolder(int drive)
-    {
-        string folder = Path.Combine(_options.DataFolder, $"Drive{drive}");
-        Directory.CreateDirectory(folder);
-        return folder;
-    }
 
     /// <summary>
     /// JAMESON: restore the default commander into NA%, laid out as a saved
@@ -203,148 +194,6 @@ public sealed partial class EliteGame
         _savedCommander[b + 73] = (byte)_saveCount;
     }
 
-    /// <summary>
-    /// SVE: display the disc access menu and process the choice. Returns true
-    /// (C set) if a new commander was loaded.
-    /// </summary>
-    private bool DiscAccessMenu()
-    {
-        while (true)
-        {
-            SetTradingPalette();
-            PrintDiscAccessMenu();
-            int key = WaitForKey();
-            switch (key)
-            {
-                case '1':
-                {
-                    // loading
-                    AskForCommanderName();
-                    int drive = AskForDrive();
-                    if (drive < 0)
-                    {
-                        return true;
-                    }
-
-                    if (!LoadCommanderFile(drive))
-                    {
-                        continue;
-                    }
-
-                    StoreCommanderName();
-                    return true;
-                }
-
-                case '2':
-                {
-                    // SV1: saving
-                    AskForCommanderName();
-                    StoreCommanderName();
-                    _saveCount >>= 1;
-
-                    // The original prints extended token 4 here, which is empty
-                    CopyCommanderToSaveBlock();
-                    int check = CalculateChecksum();
-                    _savedCommander[8 + 75] = (byte)check;
-                    _savedCommander[8 + 74] = (byte)(check ^ 0xA9);
-                    PrintNewline();
-                    PrintNewline();
-                    int drive = AskForDrive();
-                    if (drive >= 0)
-                    {
-                        SaveCommanderFile(drive);
-                    }
-
-                    // SVEX9
-                    ApplySavedCommander();
-                    return false;
-                }
-
-                case '3':
-                    // feb10: show the catalogue
-                    ShowCatalogue();
-                    WaitForKey();
-                    continue;
-
-                case '4':
-                    DeleteCommanderFile();
-                    continue;
-
-                case '5':
-                    // jan18: restore the default commander
-                    PrintExtendedText("disk.are_you_sure");
-                    if (WaitForYesNo())
-                    {
-                        RestoreDefaultCommander();
-                        ApplySavedCommander();
-                        return true;
-                    }
-
-                    return false;
-
-                default:
-                    // feb13
-                    return false;
-            }
-        }
-    }
-
-    /// <summary>YESNO: wait for "Y" or "N", returning true for "Y".</summary>
-    private bool WaitForYesNo()
-    {
-        while (true)
-        {
-            int key = WaitForKey();
-            if (key == 'Y')
-            {
-                return true;
-            }
-
-            if (key == 'N')
-            {
-                return false;
-            }
-        }
-    }
-
-    /// <summary>GTNMEW: ask for a commander's name.</summary>
-    private void AskForCommanderName()
-    {
-        _inputLimit = 7;
-        PrintExtendedText("disk.commander_name");
-        ReadLine();
-        _inputLimit = 9;
-        if (_lastInput.Length == 0)
-        {
-            // TR1: use the current name
-            _lastInput = SavedCommanderName();
-        }
-    }
-
-    /// <summary>The name stored in NA%.</summary>
-    private string SavedCommanderName()
-    {
-        var name = new StringBuilder();
-        for (int i = 0; i < 7 && _savedCommander[i] != 13; i++)
-        {
-            name.Append((char)_savedCommander[i]);
-        }
-
-        return name.ToString();
-    }
-
-    /// <summary>TRNME: copy the entered name into NA%.</summary>
-    private void StoreCommanderName()
-    {
-        string name = _lastInput.Length > 7 ? _lastInput[..7] : _lastInput;
-        for (int i = 0; i < 8; i++)
-        {
-            _savedCommander[i] = i < name.Length ? (byte)name[i] : (byte)13;
-        }
-
-        _savedCommander[name.Length] = 13;
-    }
-
     /// <summary>RLINE+2: the maximum number of characters that MT26 accepts.</summary>
     private int _inputLimit = 9;
 
@@ -405,198 +254,77 @@ public sealed partial class EliteGame
         }
     }
 
-    /// <summary>GTDRV: ask for a drive number, returning -1 (C set) if the key wasn't a drive.</summary>
-    private int AskForDrive()
+    /// <summary>The saved games, which are read when they are first needed.</summary>
+    private CommanderStore Store => _store ??= new CommanderStore(_options.DataFolder);
+
+    private CommanderStore? _store;
+
+    /// <summary>The name stored in NA%.</summary>
+    private string SavedCommanderName()
     {
-        PrintExtendedText("disk.which_drive");
-        int key = WaitForKey() | 0b00010000;
-        PutCharacter(key);
-        PrintCharacter(12);
-        if (key < '0' || key >= '4')
+        var name = new StringBuilder();
+        for (int i = 0; i < 7 && _savedCommander[i] != 13; i++)
         {
-            return -1;
+            name.Append((char)_savedCommander[i]);
         }
 
-        return key - '0';
+        return name.ToString();
     }
 
-    /// <summary>The DFS file name for a commander name.</summary>
-    private static string FileNameFor(string name) => "E." + name.Trim().ToUpperInvariant();
-
-    /// <summary>wfile: save the commander in NA% to a file.</summary>
-    private void SaveCommanderFile(int drive)
+    /// <summary>TRNME: store a commander's name in NA% (up to 7 characters, terminated by a carriage return).</summary>
+    private void StoreCommanderName(string name)
     {
-        var data = new byte[256];
+        name = name.Length > 7 ? name[..7] : name;
+        for (int i = 0; i < 8; i++)
+        {
+            _savedCommander[i] = i < name.Length ? (byte)name[i] : (byte)13;
+        }
+    }
+
+    /// <summary>The commander in NA% as a commander file, as wfile saves it.</summary>
+    private byte[] CommanderFileData()
+    {
+        var data = new byte[CommanderStore.FileSize];
         Array.Copy(_savedCommander, 8, data, 0, CommanderDataSize + 1);
-        string name = SavedCommanderName();
+        return data;
+    }
+
+    /// <summary>
+    /// SV1: save the current commander under the given name and label, as a
+    /// new save or over an old one, returning false if the file couldn't be
+    /// written. As in the original, the commander becomes the last saved
+    /// commander (which we go back to if we die) even if the file isn't written.
+    /// </summary>
+    private bool SaveCommander(string name, string label, CommanderSave? replacing)
+    {
+        StoreCommanderName(name);
+        _saveCount >>= 1;
+        CopyCommanderToSaveBlock();
+
+        // CHK and CHK2
+        int check = CalculateChecksum();
+        _savedCommander[8 + 75] = (byte)check;
+        _savedCommander[8 + 74] = (byte)(check ^ 0xA9);
+
+        bool saved = true;
         try
         {
-            File.WriteAllBytes(Path.Combine(DriveFolder(drive), FileNameFor(name)), data);
+            Store.Write(SavedCommanderName(), label, CommanderFileData(), DateTimeOffset.Now, replacing);
         }
-        catch (IOException)
+        catch (Exception e) when (e is IOException or UnauthorizedAccessException)
         {
-            // The original would show a disc error here
+            saved = false;
         }
+
+        // SVEX9
+        ApplySavedCommander();
+        return saved;
     }
 
-    /// <summary>LOD: load a commander file into NA%, returning false if the file isn't a commander file.</summary>
-    private bool LoadCommanderFile(int drive)
+    /// <summary>LOD and TRNME: make a save the last saved commander, ready for DFAULT to load.</summary>
+    private void LoadCommander(CommanderSave save)
     {
-        byte[]? data = null;
-        try
-        {
-            string path = Path.Combine(DriveFolder(drive), FileNameFor(_lastInput));
-            if (File.Exists(path))
-            {
-                data = File.ReadAllBytes(path);
-            }
-        }
-        catch (IOException)
-        {
-        }
-
-        if (data == null || data.Length < CommanderDataSize + 1 || (data[0] & 0x80) != 0)
-        {
-            // ELT2F: not a valid file
-            PrintIllegalFile();
-            WaitForKey();
-            return false;
-        }
-
-        Array.Copy(data, 0, _savedCommander, 8, CommanderDataSize + 1);
-        return true;
-    }
-
-    /// <summary>CATS: ask for a drive number and show the disc catalogue.</summary>
-    private bool ShowCatalogue()
-    {
-        int drive = AskForDrive();
-        if (drive < 0)
-        {
-            return false;
-        }
-
-        _catalogueDriveCharacter = '0' + drive;
-        PrintCatalogueHeader();
-        _printingCatalogue = 1;
-        _cursorX = 1;
-
-        // Print the catalogue in the style of the DFS *CAT command
-        string[] files;
-        try
-        {
-            files = Directory.GetFiles(DriveFolder(drive))
-                .Select(Path.GetFileName)
-                .Where(f => f != null && f.Length <= 9)
-                .Select(f => f!)
-                .OrderBy(f => f, StringComparer.Ordinal)
-                .ToArray();
-        }
-        catch (IOException)
-        {
-            files = [];
-        }
-
-        PrintLine("ELITE        (00)");
-        PrintLine($"Drive {drive}      Option 0 (off)");
-        PrintLine("Dir. :0.$      Lib. :0.$");
-        PrintLine("");
-        for (int i = 0; i < files.Length; i += 2)
-        {
-            string line = "  " + files[i].PadRight(14);
-            if (i + 1 < files.Length)
-            {
-                line += files[i + 1];
-            }
-
-            PrintLine(line);
-        }
-
-        _printingCatalogue = 0;
-        return true;
-
-        void PrintLine(string text)
-        {
-            foreach (char c in text)
-            {
-                PutCharacter(c);
-            }
-
-            PutCharacter(13);
-            PutCharacter(10);
-        }
-    }
-
-    /// <summary>DELT: delete a file from a disc.</summary>
-    private void DeleteCommanderFile()
-    {
-        if (!ShowCatalogue())
-        {
-            return;
-        }
-
-        int drive = _catalogueDriveCharacter - '0';
-        PrintExtendedText("disk.commander_name");
-        ReadLine();
-        if (_lastInput.Length == 0)
-        {
-            return;
-        }
-
-        try
-        {
-            string path = Path.Combine(DriveFolder(drive), FileNameFor(_lastInput));
-            if (File.Exists(path))
-            {
-                File.Delete(path);
-            }
-        }
-        catch (IOException)
-        {
-        }
-    }
-
-    /// <summary>Clear the screen for a disc screen, and start its title in capitals in column 6.</summary>
-    private void StartDiscScreen()
-    {
-        _cursorX = 1;
-        ClearScreen(1);
-        DrawTitleLine();
-        SetAllCaps();
-        MoveToColumn6();
-    }
-
-    /// <summary>Print the disc access menu.</summary>
-    private void PrintDiscAccessMenu()
-    {
-        StartDiscScreen();
-        PrintExtendedText("disk_menu.title");
-        PrintCharacter(12);
-        PrintCharacter(10);
-        PrintCharacter(10);
-        SetSentenceCase();
-        foreach (string item in new[] { "load", "save", "catalogue", "delete", "default", "exit" })
-        {
-            PrintExtendedText("disk_menu." + item);
-            PrintCharacter(12);
-            PrintCharacter(10);
-        }
-    }
-
-    /// <summary>Print the title of the disc catalogue.</summary>
-    private void PrintCatalogueHeader()
-    {
-        StartDiscScreen();
-        PrintExtendedText("disk.catalogue_header");
-        PrintCharacter(12);
-        PrintCharacter(10);
-    }
-
-    /// <summary>Say that the file isn't a commander file, in capitals.</summary>
-    private void PrintIllegalFile()
-    {
-        PrintCharacter(12);
-        SetAllCaps();
-        PrintExtendedText("disk.illegal_file");
+        Array.Copy(save.Data, 0, _savedCommander, 8, CommanderDataSize + 1);
+        StoreCommanderName(save.Commander);
     }
 }

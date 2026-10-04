@@ -16,7 +16,7 @@ public sealed class GameStrings
     /// <summary>The placeholders that the strings can use, such as {cash}, each of which prints a value.</summary>
     public static readonly IReadOnlySet<string> Placeholders = new HashSet<string>(StringComparer.Ordinal)
     {
-        "cash", "galaxy", "current_system", "system", "commander", "default_commander", "drive",
+        "cash", "galaxy", "current_system", "system", "commander", "default_commander",
     };
 
     private readonly Dictionary<string, (string Text, IReadOnlyList<TextPart> Parts)> _strings;

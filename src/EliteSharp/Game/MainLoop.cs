@@ -47,7 +47,7 @@ public sealed partial class EliteGame
         if (key == 'Y')
         {
             ApplySavedCommander();
-            DiscAccessMenu();
+            ShowLoadCommander();
         }
 
         LoadDefaultCommander();
@@ -413,7 +413,7 @@ public sealed partial class EliteGame
     }
 
     /// <summary>
-    /// TT102: process function keys, the save key, hyperspace and chart keys,
+    /// TT102: process function keys, the save and load keys, hyperspace and chart keys,
     /// and update the hyperspace countdown.
     /// </summary>
     private void ProcessKey(int key, int cursorX, int cursorY)
@@ -460,13 +460,21 @@ public sealed partial class EliteGame
                 return;
             }
 
-            if (key == '@')
+            // Not in the original (which has "@" for its disc access menu):
+            // L and S on the Status screen load and save commanders
+            if (_viewType == 8 && key == 'L')
             {
-                if (DiscAccessMenu())
+                if (ShowLoadCommander())
                 {
                     throw new GameJumpException(GameJump.LoadDefaultCommander);
                 }
 
+                GoToDockingBay();
+            }
+
+            if (_viewType == 8 && key == 'S')
+            {
+                ShowSaveCommander();
                 GoToDockingBay();
             }
 

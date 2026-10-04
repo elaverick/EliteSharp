@@ -89,7 +89,7 @@ can replace either file, or leave it out for silence.
 
 When the game starts, it asks if you want to load a saved commander. Press
 **N** to start a new career as Commander Jameson, then **Space** to go to your
-ship.
+ship. Press **Y** to pick one of your saved commanders instead.
 
 A few tips for new pilots:
 
@@ -110,8 +110,9 @@ A few tips for new pilots:
   yourself up with the slot, match the station's spin, and fly in slowly. Until
   you get the hang of it, save up for a **docking computer**. Press **C** to let
   it fly you in.
-- **Save** your commander while docked by pressing the **`** key for the disc
-  menu. Do this often!
+- **Save** your commander while docked by pressing **S** on the Status screen
+  (**F9**), and load one with **L**. Do this often! See
+  [Saving and loading](#saving-and-loading) below.
 
 ## Keyboard controls
 
@@ -151,7 +152,7 @@ function keys f0 to f9 are on your **F1** to **F10** keys.
 | **F8** | Market prices | Market prices |
 | **F9** | Status | Status |
 | **F10** | Inventory | Inventory |
-| **`** | Save and load commanders | |
+| **S** / **L** | Save / load commanders (on the Status screen) | |
 | **F12** | Settings | Settings |
 
 On the charts, the **cursor keys** move the cross-hairs (hold **Shift** to move
@@ -194,6 +195,28 @@ size if you resize it and whether you switched to full screen with
 **Alt + Enter**, and the game starts with them next time. The options below
 override them for one run, without changing the file.
 
+### Saving and loading
+
+While you're docked, press **S** on the Status screen (**F9**) to save your
+commander, or **L** to load one. Both are also at the bottom of the Settings
+screen while you're docked.
+
+A commander can have as many saves as you like. The **Save Commander** screen
+lists your commander's saves, newest first, below **New Save** and
+**Save As New Commander**. Pick **New Save** to add a save, or pick an old save
+to save over it. You can then label the save. It starts as where you're docked,
+such as "Docked at Lave", and you can type over it or just press **Return** to
+keep it.
+
+The **Load Commander** screen lists every commander you've saved, with the most
+recent first. Pick one to see their saves, and pick a save to load it. Under the
+list are the highlighted save's details: when it was made, where, and the
+commander's cash and rating. **Start Again As JAMESON** starts a new career.
+
+On either screen, **Delete** deletes the highlighted save, or on the Load
+Commander screen, a whole commander and all their saves. It asks first.
+**Escape** goes back.
+
 ## Playing with a controller
 
 Plug in an Xbox controller (or any controller Windows recognises) and it just
@@ -212,11 +235,14 @@ the D-pad or left stick moves up and down the list and changes how much is in
 your basket; **A** buys or sells it, **B** empties it, and **Y** fills it with as
 much as you can. On the equipment screen, **A** buys the highlighted item (and
 picks the view for a laser), and **B** changes your mind about a laser. While
-paused, **RB** opens the Settings screen.
+paused, **RB** opens the Settings screen, which has **Save Commander** and
+**Load Commander** at the bottom while you're docked. On those screens, **A**
+chooses, **X** deletes and **B** goes back.
 
 ![Xbox controller controls](images/xbox-controls.png)
 
-You still need the keyboard for typing, such as naming your commander.
+You still need the keyboard for typing, such as naming a new commander or
+changing a save's label (**A** takes the label as it is).
 
 ## Options
 
@@ -257,8 +283,8 @@ anything it doesn't have comes from the `Assets` folder:
   `common.yml`, the game's is used. Without a `Missions` folder, the game's
   missions are used.
 
-Your saved commanders live in `%APPDATA%\EliteSharp`, in a folder for each of the
-game's "disc drives".
+Your saved commanders live in the `Commanders` folder in `%APPDATA%\EliteSharp`
+(or the folder given with `--data`), one small file per save.
 
 ## Credits and thanks
 

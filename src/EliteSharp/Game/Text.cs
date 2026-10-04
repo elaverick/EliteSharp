@@ -42,9 +42,6 @@ public sealed partial class EliteGame
     /// <summary>DTW8: the mask for capitalising the next letter (%11011111 to capitalise, %11111111 to leave it alone).</summary>
     private int _capitaliseMask = 0b11111111;
 
-    /// <summary>DTW7: the character printed by MT16 (the drive number in the catalogue).</summary>
-    private int _catalogueDriveCharacter = 'A';
-
     /// <summary>LL: the line length for justified text.</summary>
     private const int LineLength = 30;
 
@@ -113,12 +110,6 @@ public sealed partial class EliteGame
                 _cursorY++;
             }
 
-            return;
-        }
-
-        // RR1: in the catalogue, skip spaces at column 17
-        if (_printingCatalogue != 0 && character == ' ' && _cursorX == 17)
-        {
             return;
         }
 
@@ -783,10 +774,6 @@ public sealed partial class EliteGame
                     PrintCharacter(c);
                 }
 
-                break;
-            case "drive":
-                // MT16
-                PrintCharacter(_catalogueDriveCharacter);
                 break;
             default:
                 throw new InvalidOperationException($"Unknown placeholder '{{{name}}}'");

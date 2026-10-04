@@ -117,6 +117,9 @@ commodities:
 market:
   title: "{current_system} MARKET PRICES"
   headers: "UNIT  QUANTITY\n PRODUCT   UNIT PRICE FOR SALE\n"
+  sell_headers: "UNIT  QUANTITY\n PRODUCT   UNIT PRICE  IN HOLD\n"
+  buy: "Buy"
+  total: "Total"
   quantity_of: "Quantity Of "
   quantity: "Quantity"
   sell: "Sell"

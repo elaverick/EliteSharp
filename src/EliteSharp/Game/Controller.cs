@@ -207,6 +207,30 @@ public sealed partial class EliteGame
         return true;
     }
 
+    /// <summary>How far the left stick must be pushed to move through a list (such as on the trading screens).</summary>
+    private const float PadListThreshold = 0.4f;
+
+    /// <summary>
+    /// The direction the left stick is pushed in, for moving through lists:
+    /// -1, 0 or +1 along whichever axis it is pushed further (with +y down).
+    /// </summary>
+    private (int X, int Y) ReadPadStickDirection()
+    {
+        if (!PadConnected)
+        {
+            return (0, 0);
+        }
+
+        var axes = _gamepad!.Axes;
+        float x = axes.LeftX, y = axes.LeftY;
+        if (MathF.Max(MathF.Abs(x), MathF.Abs(y)) < PadListThreshold)
+        {
+            return (0, 0);
+        }
+
+        return MathF.Abs(x) > MathF.Abs(y) ? (MathF.Sign(x), 0) : (0, MathF.Sign(y));
+    }
+
     /// <summary>TJS1: A = round(A / 32) - 4, turning a joystick value into a cursor movement of -4 to +4.</summary>
     private static int JoystickToCursorStep(int value) => (value >> 5) + ((value >> 4) & 1) - 4;
 }

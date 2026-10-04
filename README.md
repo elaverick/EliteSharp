@@ -90,7 +90,12 @@ A few tips for new pilots:
 - **Trade** by buying goods cheaply in one system (**F2** while docked) and
   selling them for more in another (**F3**). Agricultural worlds sell food
   cheaply, and industrial worlds pay well for it. Look at a system's data
-  (**F7**) to see what kind of economy it has.
+  (**F7**) to see what kind of economy it has. On the buy and sell screens,
+  move up and down the list with the cursor keys, and use left and right (or
+  type a number) to choose how much goes in your basket; **Y** fills it with as
+  much as you can. Press **Return** to buy or sell everything in the basket, or
+  **Escape** to empty it. Equipment (**F4** while docked) works the same way:
+  pick an item and press **Return** to buy it.
 - **Travel** by picking a destination on the short-range chart (**F6**) with the
   cursor keys, then pressing **H** to start the hyperspace countdown. You can
   jump as far as your fuel allows (up to 7 light years).
@@ -179,12 +184,15 @@ faster you speed up, and the **left trigger** slows you down. Let go of the
 stick, and the keyboard takes over again. If you'd rather the stick was always in
 charge, press **K** while paused.
 
-On the charts, either stick moves the cross-hairs.
+On the charts, either stick moves the cross-hairs. On the buy and sell screens,
+the D-pad or left stick moves up and down the list and changes how much is in
+your basket; **A** buys or sells it, **B** empties it, and **Y** fills it with as
+much as you can. On the equipment screen, **A** buys the highlighted item (and
+picks the view for a laser), and **B** changes your mind about a laser.
 
 ![Xbox controller controls](images/xbox-controls.png)
 
-You still need the keyboard for typing: naming your commander, and entering how
-much cargo to buy.
+You still need the keyboard for typing, such as naming your commander.
 
 ## Options
 

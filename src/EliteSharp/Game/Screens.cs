@@ -984,10 +984,10 @@ public sealed partial class EliteGame
     // ------------------------------------------------------------------------
 
     /// <summary>TT163: print the headers for the market prices table.</summary>
-    private void PrintMarketHeaders()
+    private void PrintMarketHeaders(string key = "market.headers")
     {
         _cursorX = 17;
-        PrintText("market.headers");
+        PrintText(key);
         PrintToken(10);
     }
 
@@ -1009,7 +1009,14 @@ public sealed partial class EliteGame
     }
 
     /// <summary>TT151: print the name, price and availability of a market item.</summary>
-    private void PrintMarketItem(int item)
+    private void PrintMarketItem(int item) => PrintMarketItem(item, () => _marketAvailability[item]);
+
+    /// <summary>
+    /// TT151: print the name and price of a market item, and the quantity
+    /// given (the availability on the market screens, or what's left after
+    /// the basket on the trading screens).
+    /// </summary>
+    private void PrintMarketItem(int item, Func<int> quantity)
     {
         _scratch[4] = item;
         _scratch[0] = (item << 2) & 0xFF;
@@ -1022,26 +1029,13 @@ public sealed partial class EliteGame
         PrintText(CommodityKeys[item]);
         _cursorX = 14;
 
-        var commodity = _trading.Commodities[item];
-        _scratch[1] = commodity.FactorAndUnit;
-        _itemPrice = ((_marketRandom & commodity.Fluctuation) + commodity.BasePrice) & 0xFF;
+        _itemPrice = CalculateItemPrice(item);
         PrintUnits();
-        CalculateEconomicFactor();
-
-        if ((_scratch[1] & 0x80) != 0)
-        {
-            // TT155
-            _itemPrice = (_itemPrice - _scratch[3]) & 0xFF;
-        }
-        else
-        {
-            _itemPrice = (_itemPrice + _scratch[3]) & 0xFF;
-        }
 
         // TT156
         PrintNumber5((_itemPrice << 2) & 0xFFFF, true);
 
-        int available = _marketAvailability[_scratch[4]];
+        int available = quantity();
         _itemAvailability = available;
         if (available == 0)
         {
@@ -1053,6 +1047,26 @@ public sealed partial class EliteGame
 
         PrintNumber16(available, 5, false);
         PrintUnits();
+    }
+
+    /// <summary>
+    /// TT151 to TT156: work out the price of a market item, leaving its
+    /// economic factor and units in QQ19+1 (for TT152).
+    /// </summary>
+    private int CalculateItemPrice(int item)
+    {
+        var commodity = _trading.Commodities[item];
+        _scratch[1] = commodity.FactorAndUnit;
+        int price = ((_marketRandom & commodity.Fluctuation) + commodity.BasePrice) & 0xFF;
+        CalculateEconomicFactor();
+
+        if ((_scratch[1] & 0x80) != 0)
+        {
+            // TT155
+            return (price - _scratch[3]) & 0xFF;
+        }
+
+        return (price + _scratch[3]) & 0xFF;
     }
 
     /// <summary>TT152: print the units for the current market item ("t", "kg" or "g").</summary>
@@ -1078,168 +1092,11 @@ public sealed partial class EliteGame
         }
     }
 
-    /// <summary>TT219: show the Buy Cargo screen (red key f1).</summary>
-    private void ShowBuyCargo()
-    {
-        ShowTradingScreen(2);
-        PrintMarketHeaders();
-        _textCase = 0x80;
-        _itemNumber = 0;
-
-        while (true)
-        {
-            // TT220
-            PrintMarketItem(_itemNumber);
-            if (_itemAvailability != 0)
-            {
-                BuyItem();
-            }
-
-            // TT222
-            _cursorY = _itemNumber + 5;
-            _cursorX = 0;
-            _itemNumber++;
-            if (_itemNumber >= 17)
-            {
-                // BAY2
-                throw new GameJumpException(GameJump.ForceKey, FunctionKey9);
-            }
-        }
-    }
-
-    /// <summary>TT224: ask how many of the current item to buy, and buy them.</summary>
-    private void BuyItem()
-    {
-        while (true)
-        {
-            // TT224
-            ClearBottomRows();
-            PrintText("market.quantity_of");
-            PrintText(CommodityKeys[_itemNumber]);
-            PrintToken('/');
-            PrintUnits();
-            PrintToken('?');
-            PrintNewline();
-
-            var (quantity, error) = ReadNumber();
-            if (error)
-            {
-                // TQ4
-                AskQuestion(() => PrintText("market.quantity"));
-                continue;
-            }
-
-            if (quantity != 0 && HasRoomInHold(quantity))
-            {
-                AskQuestion(PrintCargo);
-                continue;
-            }
-
-            if (!SpendCash(CalculateCost(quantity, _itemPrice)))
-            {
-                AskQuestion(() => PrintText("market.cash"));
-                continue;
-            }
-
-            _cargo[_itemNumber] = (_cargo[_itemNumber] + quantity) & 0xFF;
-            _marketAvailability[_itemNumber] = (_marketAvailability[_itemNumber] - quantity) & 0xFF;
-            if (quantity != 0)
-            {
-                PrintCashLeft();
-            }
-
-            return;
-        }
-    }
-
-    /// <summary>Tc: print a space, a question and a question mark, and beep.</summary>
-    private void AskQuestion(Action printQuestion)
-    {
-        PrintSpace();
-        printQuestion();
-        PrintToken('?');
-
-        // TTX224
-        BeepAndWait();
-    }
-
     /// <summary>
-    /// gnum: get a number from the keyboard, returning the number and whether
-    /// the number was too large (the C flag).
+    /// TT219: show the Buy Cargo screen (red key f1), which in this version
+    /// lists every item in the market for filling a basket (see TradeScreen.cs).
     /// </summary>
-    private (int Value, bool Error) ReadNumber()
-    {
-        _colour = Magenta;
-        int number = 0;
-        for (int digitsLeft = 12; digitsLeft > 0; digitsLeft--)
-        {
-            // TT223
-            int key = WaitForKey();
-            if (number == 0)
-            {
-                if (key == 'Y')
-                {
-                    // NWDAV1
-                    PrintCharacter(key);
-                    number = _itemAvailability;
-                    _colour = Cyan;
-                    return (number, false);
-                }
-
-                if (key == 'N')
-                {
-                    // NWDAV3
-                    PrintCharacter(key);
-                    _colour = Cyan;
-                    return (0, false);
-                }
-            }
-
-            // NWDAV2
-            int digit = key - '0';
-            if (digit < 0)
-            {
-                break;
-            }
-
-            if (digit >= 10)
-            {
-                // BAY2
-                throw new GameJumpException(GameJump.ForceKey, FunctionKey9);
-            }
-
-            if (number >= 26)
-            {
-                return Reject(key);
-            }
-
-            int value = number * 10 + digit;
-            if (value > 0xFF)
-            {
-                return Reject(key);
-            }
-
-            number = value;
-            if (number > _itemAvailability)
-            {
-                return Reject(key);
-            }
-
-            // TT226
-            PrintCharacter(key);
-        }
-
-        // OUT
-        _colour = Cyan;
-        return (number, false);
-
-        (int, bool) Reject(int key)
-        {
-            PrintCharacter(key);
-            _colour = Cyan;
-            return (number, true);
-        }
-    }
+    private void ShowBuyCargo() => ShowTradeScreen(selling: false);
 
     /// <summary>
     /// tnpr: work out whether there is room in the cargo hold for the given
@@ -1273,24 +1130,11 @@ public sealed partial class EliteGame
     /// <summary>GCASH: calculate the cost of a quantity at a price (in Cr * 10), i.e. quantity * price * 4.</summary>
     private static int CalculateCost(int quantity, int price) => (quantity * price * 4) & 0xFFFF;
 
-    /// <summary>TT208: show the Sell Cargo screen (red key f2).</summary>
-    private void ShowSellCargo()
-    {
-        ShowTradingScreen(4);
-        _cursorX = 10;
-        PrintText("market.sell");
-        PrintCargo();
-        DrawTitleLine();
-        PrintNewline();
-        ListCargo();
-    }
-
-    /// <summary>Print " CARGO", and switch to Sentence Case.</summary>
-    private void PrintCargo()
-    {
-        PrintText("market.cargo");
-        _textCase = 0x80;
-    }
+    /// <summary>
+    /// TT208: show the Sell Cargo screen (red key f2), which in this version
+    /// lists every item in the market for filling a basket (see TradeScreen.cs).
+    /// </summary>
+    private void ShowSellCargo() => ShowTradeScreen(selling: true);
 
     /// <summary>TT213: show the Inventory screen (red key f9).</summary>
     private void ShowInventory()
@@ -1308,67 +1152,31 @@ public sealed partial class EliteGame
         ListCargo();
     }
 
-    /// <summary>TT210: show a list of the cargo in the hold, and sell it if this is the Sell Cargo screen.</summary>
+    /// <summary>
+    /// TT210: show a list of the cargo in the hold (the original also sells
+    /// it here on the Sell Cargo screen, which now has its own basket).
+    /// </summary>
     private void ListCargo()
     {
         for (int item = 0; item < 17; item++)
         {
             // TT211
             _itemNumber = item;
-            while (true)
+
+            // NWDAVxx
+            int amount = _cargo[item];
+            if (amount == 0)
             {
-                // NWDAVxx
-                int amount = _cargo[item];
-                if (amount == 0)
-                {
-                    break;
-                }
-
-                _scratch[1] = _trading.Commodities[item].FactorAndUnit;
-                PrintSentenceNewline();
-                PrintText(CommodityKeys[_itemNumber]);
-                _cursorX = 14;
-                _itemAvailability = amount;
-                PrintNumber3(amount);
-                PrintUnits();
-
-                if (_viewType != 4)
-                {
-                    break;
-                }
-
-                // Sell this item?
-                PrintText("market.sell");
-                PrintYesNo();
-                var (quantity, error) = ReadNumber();
-                if (quantity == 0)
-                {
-                    break;
-                }
-
-                if (error)
-                {
-                    // NWDAV4
-                    PrintNewline();
-                    PrintTextQuestion("market.quantity");
-                    BeepAndWait();
-                    continue;
-                }
-
-                // Work out the price without printing anything
-                _textCase = 0xFF;
-                PrintMarketItem(_itemNumber);
-                _cargo[_itemNumber] = (_cargo[_itemNumber] - quantity) & 0xFF;
-                AddCash(CalculateCost(quantity, _itemPrice));
-                _textCase = 0;
-                break;
+                continue;
             }
-        }
 
-        if (_viewType == 4)
-        {
-            BeepAndWait();
-            throw new GameJumpException(GameJump.ForceKey, FunctionKey9);
+            _scratch[1] = _trading.Commodities[item].FactorAndUnit;
+            PrintSentenceNewline();
+            PrintText(CommodityKeys[_itemNumber]);
+            _cursorX = 14;
+            _itemAvailability = amount;
+            PrintNumber3(amount);
+            PrintUnits();
         }
 
         PrintSentenceNewline();
@@ -1406,237 +1214,89 @@ public sealed partial class EliteGame
     /// <summary>prx: the price of an item of equipment.</summary>
     private int EquipmentPrice(int item) => item == 0 ? _fuelPrice : ListedEquipmentPrice(item);
 
-    /// <summary>EQSHP: show the Equip Ship screen (red key f3).</summary>
-    private void ShowEquipShip()
+    /// <summary>
+    /// EQSHP: show the Equip Ship screen (red key f3), which in this version
+    /// has a highlighted list to buy from (see EquipScreen.cs).
+    /// </summary>
+    private void ShowEquipShip() => ShowEquipScreen();
+
+    /// <summary>EQSHP: the number of items of equipment for sale, which depends on the tech level.</summary>
+    private int EquipmentForSale()
     {
-        while (true)
-        {
-            ShowTradingScreen(32);
-            _cursorX = 12;
-            PrintTextSpace("market.equip");
-            PrintTitle("market.ship");
-            _textCase = 0x80;
-            _cursorY++;
-
-            int itemCount = _techLevel + 3;
-            if (itemCount >= 12)
-            {
-                itemCount = 14;
-            }
-
-            _itemAvailability = itemCount;
-            int itemLimit = itemCount + 1;
-            _fuelPrice = ((70 - _fuel) << 1) & 0xFFFF;
-
-            for (int number = 1; number < itemLimit; number++)
-            {
-                // EQL1
-                PrintNewline();
-                PrintNumber3(number);
-                PrintSpace();
-                PrintText(EquipmentKeys[number - 1]);
-                int price = EquipmentPrice(number - 1);
-                _cursorX = 25;
-                PrintNumber16(price, 6, true);
-            }
-
-            ClearBottomRows();
-            PrintTextQuestion("market.item");
-            var (item, error) = ReadNumber();
-            if (item == 0 || error)
-            {
-                GoToDockingBay();
-            }
-
-            item--;
-            _cursorX = 2;
-            _cursorY++;
-            PayForEquipment(item);
-
-            if (!BuyEquipment(item))
-            {
-                return;
-            }
-
-            // et11
-            PrintCashLeft();
-        }
+        int itemCount = _techLevel + 3;
+        return itemCount >= 12 ? 14 : itemCount;
     }
 
     /// <summary>
-    /// Fit a newly bought item of equipment, returning false if the item was
-    /// already present (in which case we have jumped to BAY).
+    /// The pres checks in EQSHP: the text key for an item that is already
+    /// fitted (or "all" for missiles when there are four), or null if the item
+    /// can be bought.
     /// </summary>
-    private bool BuyEquipment(int item)
+    private string? EquipmentAlreadyPresent(int item) => item switch
+    {
+        1 when _missiles + 1 >= 5 => "equipment.all",
+        2 when _cargoCapacity == 37 => "equipment.large_cargo_bay",
+        3 when _ecm != 0 => "equipment.ecm",
+        6 when _fuelScoops != 0 => "equipment.fuel_scoops",
+        7 when _escapePod != 0 => "equipment.escape_pod",
+        8 when _energyBomb != 0 => "equipment.energy_bomb",
+        9 when _energyUnit != 0 => "equipment.energy_unit",
+        10 when _dockingComputer != 0 => "equipment.docking_computers",
+        11 when _galacticHyperdrive != 0 => "equipment.galactic_hyperspace",
+        _ => null,
+    };
+
+    /// <summary>Whether an item of equipment is a laser, which is fitted to one of the views.</summary>
+    private static bool IsLaser(int item) => item is 4 or 5 or 12 or 13;
+
+    /// <summary>EQSHP: fit a newly bought item of equipment (a laser goes on the given view).</summary>
+    private void FitEquipment(int item, int view)
     {
         switch (item)
         {
             case 0:
                 _fuel = 70;
-                return true;
+                break;
             case 1:
-                if (_missiles + 1 >= 5)
-                {
-                    Present(item, "equipment.all");
-                }
-
                 _missiles++;
                 ResetMissileIndicators();
-                return true;
+                break;
             case 2:
-                if (_cargoCapacity == 37)
-                {
-                    Present(item, "equipment.large_cargo_bay");
-                }
-
                 _cargoCapacity = 37;
-                return true;
+                break;
             case 3:
-                if (_ecm != 0)
-                {
-                    Present(item, "equipment.ecm");
-                }
-
                 _ecm = 0xFF;
-                return true;
+                break;
             case 4:
-                Refund(AskForLaserView(), PulseLaserPower);
-                return true;
+                Refund(view, PulseLaserPower);
+                break;
             case 5:
-                Refund(AskForLaserView(), PulseLaserPower + 128);
-                return true;
+                Refund(view, PulseLaserPower + 128);
+                break;
             case 6:
-                if (_fuelScoops != 0)
-                {
-                    Present(item, "equipment.fuel_scoops");
-                }
-
                 _fuelScoops = 0xFF;
-                return true;
+                break;
             case 7:
-                if (_escapePod != 0)
-                {
-                    Present(item, "equipment.escape_pod");
-                }
-
                 _escapePod = 0xFF;
-                return true;
+                break;
             case 8:
-                if (_energyBomb != 0)
-                {
-                    Present(item, "equipment.energy_bomb");
-                }
-
                 _energyBomb = 0x7F;
-                return true;
+                break;
             case 9:
-                if (_energyUnit != 0)
-                {
-                    Present(item, "equipment.energy_unit");
-                }
-
                 _energyUnit = 1;
-                return true;
+                break;
             case 10:
-                if (_dockingComputer != 0)
-                {
-                    Present(item, "equipment.docking_computers");
-                }
-
                 _dockingComputer = 0xFF;
-                return true;
+                break;
             case 11:
-                if (_galacticHyperdrive != 0)
-                {
-                    Present(item, "equipment.galactic_hyperspace");
-                }
-
                 _galacticHyperdrive = 0xFF;
-                return true;
+                break;
             case 12:
-                Refund(AskForLaserView(), MilitaryLaserPower);
-                return true;
+                Refund(view, MilitaryLaserPower);
+                break;
             case 13:
-                Refund(AskForLaserView(), MiningLaserPower);
-                return true;
-        }
-
-        return true;
-    }
-
-    /// <summary>pres: the item is already fitted, so refund the price and say so.</summary>
-    private void Present(int item, string key)
-    {
-        AddCash(EquipmentPrice(item));
-        PrintTextSpace(key);
-        PrintText("equipment.present");
-
-        // err
-        BeepAndWait();
-        GoToDockingBay();
-    }
-
-    /// <summary>eq: subtract the price of an item from our cash, jumping to BAY if we can't afford it.</summary>
-    private void PayForEquipment(int item)
-    {
-        if (SpendCash(EquipmentPrice(item)))
-        {
-            return;
-        }
-
-        PrintTextQuestion("market.cash");
-        BeepAndWait();
-        GoToDockingBay();
-    }
-
-    /// <summary>dn: print the amount of cash left, and beep.</summary>
-    private void PrintCashLeft()
-    {
-        PrintSpace();
-        PrintTextSpace("market.cash_balance");
-        BeepAndWait();
-    }
-
-    /// <summary>dn2: make a short, high beep and wait a moment.</summary>
-    private void BeepAndWait()
-    {
-        Beep();
-        Delay(25);
-    }
-
-    /// <summary>qv: ask which view to fit a laser to, returning the view number.</summary>
-    private int AskForLaserView()
-    {
-        if (_techLevel >= 8)
-        {
-            ClearScreen(32);
-        }
-
-        int y = 16;
-        _cursorY = y;
-        do
-        {
-            // qv1
-            _cursorX = 12;
-            PrintTokenSpace(y + '0' - 16);
-            PrintText(ViewKeys[_cursorY - 16]);
-            _cursorY++;
-            y = _cursorY;
-        }
-        while (y < 20);
-
-        ClearBottomRows();
-        while (true)
-        {
-            // qv2
-            PrintTextQuestion("views.view");
-            int view = WaitForKey() - '0';
-            if (view >= 0 && view < 4)
-            {
-                return view;
-            }
-
-            ClearBottomRows();
+                Refund(view, MiningLaserPower);
+                break;
         }
     }
 

@@ -1,6 +1,6 @@
 # EliteSharp
 
-**Classic Elite, as it played on the BBC Master, rebuilt for modern Windows PCs.**
+**The original Elite, rebuilt from the BBC Master source for modern Windows PCs.**
 
 ![A pirate Cobra Mk III sweeps across the planet, with a Mamba alongside](images/close-quarters.png)
 
@@ -10,16 +10,23 @@ orbiting Lave. From there the eight galaxies are yours: trade between the stars,
 hunt pirates for bounties (or turn pirate yourself), take on missions for the
 Navy, and work your way up the ranks from Harmless all the way to Elite.
 
-EliteSharp is a faithful recreation of the BBC Master version of the game. The
-ships, the universe, the markets, the combat and the missions all behave exactly
-as they did in 1986. The difference is that it runs in a window on your PC, drawn
-with crisp wireframes that you can scale up to fill your screen, and that you
-can play it with an Xbox controller as well as the keyboard.
+It is my aim to make EliteSharp the best way to play the original Elite on a PC
+in 2026. It starts from the source code of the BBC Master version, released in
+1986, and keeps its gameplay intact. The ships, the universe, the markets, the
+combat and the missions all behave just as they did on the Master. Elite's
+flight model, its economy and its difficulty are part of what made it great, so
+EliteSharp doesn't rebalance or modernise any of them.
 
-Space itself is drawn as a real 3D scene: the ships, stations and planets are 3D
-models that your graphics card renders, still as Elite's classic wireframes, but
-now with true perspective, planets that hide what's behind them, and a view that
-fills a widescreen display.
+What has changed is everything around the game. Space is now a real 3D scene
+drawn by your graphics card. You still see Elite's classic wireframes, but with
+true perspective, planets that hide what's behind them, smooth motion and a
+view that fills a widescreen display. The PC also allows some quality-of-life
+improvements the Master had no room for: you can play in a window or full
+screen at any size, fly with an Xbox controller, keep as many labelled saves as
+you like, and change settings from a proper menu.
+
+EliteSharp also draws inspiration from the other 8-bit versions of Elite, such
+as those for the Commodore 64 and the NES.
 
 ## What you need
 
@@ -290,7 +297,7 @@ Your saved commanders live in the `Commanders` folder in `%APPDATA%\EliteSharp`
 
 **Elite was written by David Braben and Ian Bell**, and first published by
 Acornsoft for the BBC Micro in 1984. The BBC Master version that EliteSharp
-recreates was released by Acornsoft in 1986. Their game created a whole genre
+is built from was released by Acornsoft in 1986. Their game created a whole genre
 and inspired generations of players and programmers, and EliteSharp exists
 purely out of admiration for what they achieved.
 
@@ -303,12 +310,15 @@ line-by-line commentary on how Elite works. His annotated BBC Master source
 and his wonderful website at [bbcelite.com](https://www.bbcelite.com), explain
 every routine, every table and every trick in the game. EliteSharp was translated
 from his commented code, and it was used at every step to check that the game
-behaves exactly like the original. This project simply wouldn't exist without
+plays exactly like the original. This project simply wouldn't exist without
 his amazing work, so thank you, Mark.
 
 **Aidan Bell and Julie Dunn** wrote the music for the Commodore 64 version of
 Elite, including its arrangement of The Blue Danube for docking. The music in
 EliteSharp replicates their work.
+
+**Claude**, by Anthropic, did much of the work of porting the game and has
+been a partner in its development ever since.
 
 EliteSharp also stands on the shoulders of:
 

@@ -424,10 +424,12 @@ public sealed class Hud
 
             // The dashboard's top row is the bottom of the space view's border,
             // so in a widened space view it carries on out to the edges (behind
-            // the dashboard, which covers it in the middle)
+            // the dashboard, which covers it in the middle). Beside the
+            // dashboard it is part of the border, so it is in the border's
+            // yellow, which (unlike the dashboard's) an escape pod leaves alone
             if (SideMargin > 0)
             {
-                builder.WideRect(0, SpaceViewHeight, Width, 1, Ink.DashboardYellow);
+                builder.WideRect(0, SpaceViewHeight, Width, 1, Ink.Yellow);
             }
 
             DashboardRenderer?.Invoke(builder);

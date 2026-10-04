@@ -156,8 +156,20 @@ public sealed partial class EliteGame
             _autoDocking = 0xFF;
         }
 
+        // Erase the laser lines that were left on-screen for the last frame
+        // (unless clearing the screen has already removed them)
+        if (_laserBeamsErasePending)
+        {
+            _laserBeamsErasePending = false;
+            if (_world.Contains(_laserOwner))
+            {
+                _world.Remove(_laserOwner);
+            }
+        }
+
         // MA68
         _firingLaserPower = 0;
+        _laserBeamsDrawnThisIteration = false;
 
         if (_laserPulseCounter == 0 && _keyFireLaser && _laserTemperature < 242)
         {
@@ -168,6 +180,7 @@ public sealed partial class EliteGame
                 _laserBeamPower = _firingLaserPower;
                 LaserSound();
                 DrawLaserBeams();
+                _laserBeamsDrawnThisIteration = true;
                 int count = (laser & 0x80) != 0 ? 0 : laser;
                 _laserPulseCounter = count & 0b11111010;
             }
@@ -274,7 +287,20 @@ public sealed partial class EliteGame
         // Part 16 (MA23): process laser pulsing, E.C.M. energy drain and the stardust
         if (_laserBeamPower != 0 && _laserPulseCounter < 8)
         {
-            ToggleLaserBeams();
+            // The lines of a beam or military laser are erased in the same
+            // iteration that draws them. The original's screen shows them
+            // while the iteration runs, but ours only shows what is there
+            // between iterations, so we leave them for one frame and erase
+            // them at the start of the next iteration
+            if (_laserBeamsDrawnThisIteration)
+            {
+                _laserBeamsErasePending = true;
+            }
+            else
+            {
+                ToggleLaserBeams();
+            }
+
             _laserBeamPower = 0;
         }
 

@@ -369,6 +369,16 @@ public sealed partial class EliteGame
     /// <summary>LAS2: the laser power of the laser beam currently on-screen.</summary>
     private int _laserBeamPower;
 
+    /// <summary>
+    /// Whether the laser lines were due to be erased in the same iteration
+    /// that drew them, so they are erased at the start of the next one
+    /// instead (see the main flight loop's part 16).
+    /// </summary>
+    private bool _laserBeamsErasePending;
+
+    /// <summary>Whether the laser lines were drawn in this iteration of the main flight loop.</summary>
+    private bool _laserBeamsDrawnThisIteration;
+
     /// <summary>LASCT: the laser pulse counter.</summary>
     private int _laserPulseCounter;
 

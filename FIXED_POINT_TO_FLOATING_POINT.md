@@ -15,7 +15,7 @@ EliteSharp originally reproduced the BBC Master version's arithmetic exactly: si
 | Unit vectors and the AI | Discrete | The original's NORM loses a carry in TIS2 when a vector is longer than 127, giving directions up to 44° wrong (4.5° on average). With exact vectors, ships in firing position fire 37% more often and hit us 2.3 times as often. |
 | Docking | Discrete | The docking computer docks in every scenario with both implementations, but much sooner (at ticks 135, 417 and 932 against 743, 1,440 and 5,131). The safe cone of approach is now exactly 22°, which changes 326 of 18,081 docking decisions. |
 | Altitude | Discrete | We crash 24,904 from the planet's centre in every direction; the original's per-axis truncation made it 25,336 to 25,848, depending on the direction. |
-| Hyperspace range | Discrete | 76% of distances grow by 0.1 to 0.5 light years, as the original rounded the square root down before multiplying by 4. 452 pairs of systems are no longer within 7.0 light years (for example, Lave to Leesti goes from 3.6 to 3.8), and none become reachable. |
+| Hyperspace range | None | Distances are calculated as in the original (the y difference halved and the square root rounded down before multiplying by 4), so exactly the same 16,564 pairs of systems are within 7.0 light years. Only distances over 102 light years, where the original's 16-bit sum of squares overflows, are now larger (638 pairs). |
 | Rendering calculations | Numerical | Explosions take the same random numbers and last as long. Circles differ by up to 2 pixels, the planet's and sun's centres by up to 16, and the compass by up to 4. Scanner blips are identical. |
 | Whole-game runs | Accumulated | The random number generator is seeded from the planet's position (x_lo), so its sequence diverges within 50 to 100 ticks, and which ships appear and how fights go diverge after that. |
 
@@ -31,7 +31,7 @@ EliteSharp originally reproduced the BBC Master version's arithmetic exactly: si
 
 ## How this was measured
 
-A temporary harness ran the same deterministic scenarios in both implementations, starting from the same states and random seeds, and compared the results. Each legacy arithmetic routine was also run over its input range against the exact operation that replaces it. The harness itself isn't kept in the repository; the tests in `tests/EliteSharp.Tests/Game` now cover the new maths, including a checksum of the whole universe as the original generates it.
+A temporary harness ran the same deterministic scenarios in both implementations, starting from the same states and random seeds, and compared the results. Each legacy arithmetic routine was also run over its input range against the exact operation that replaces it. The harness itself isn't kept in the repository; the tests in `tests/EliteSharp.Tests/Game` now cover the new maths, including a checksum of the whole universe as the original generates it, and every hyperspace distance against the original's routine.
 
 ## Detailed results
 
@@ -248,18 +248,24 @@ All 8 galaxies x 256 systems.
 
 ### 5. Hyperspace distances
 
-Every pair of systems in all 8 galaxies (524288 pairs). Distances are in tenths of a light year.
+Every ordered pair of systems in all 8 galaxies (524,288 pairs, including each system to itself). Distances are in tenths of a light year.
 
-- Distances that differ: 397254 (75.8%)
-- Maximum difference: 8.4 light years; mean difference where different: 0.23 light years
-- Difference distribution (float - baseline, tenths): 0: 127034, 1: 109720, 2: 123654, 3: 107952, 4: 43384, 5: 11952, 6: 20, 7: 22, 8: 30, 9: 28, 10: 10, 11: 20, 12: 8, 13: 8, 14: 20, 15: 18, 16: 16, 17: 10, 18: 20, 19: 12, 20: 14, 21: 24, 22: 14, 23: 16, 24: 22, 25: 10, 26: 4, 27: 10, 28: 8, 29: 8, 30: 8, 31: 12, 32: 14, 33: 14, 34: 8, 35: 2, 36: 14, 37: 12, 38: 4, 39: 2, 40: 8, 41: 8, 42: 4, 43: 6, 44: 10, 45: 2, 46: 4, 47: 4, 48: 4, 49: 4, 50: 4, 51: 4, 52: 2, 53: 4, 54: 4, 55: 6, 56: 2, 57: 4, 59: 2, 60: 4, 61: 2, 62: 4, 64: 2, 67: 4, 68: 4, 69: 2, 70: 4, 74: 6, 76: 2, 77: 2, 80: 2, 82: 2, 83: 2, 84: 2
-- Pairs whose reachability with a full tank (7.0 light years) changed: 452 (0 newly reachable, 452 no longer reachable)
-  - galaxy 1, system 0 to 19: 4.0 -> 4.3 light years
-  - galaxy 1, system 0 to 53: 7.2 -> 7.3 light years
-  - galaxy 1, system 0 to 71: 1.6 -> 1.8 light years
-  - galaxy 1, system 0 to 75: 3.6 -> 3.9 light years
-  - galaxy 1, system 0 to 165: 7.6 -> 7.9 light years
-  - galaxy 1, system 1 to 40: 5.2 -> 5.6 light years
+The first floating-point version calculated `4 * sqrt(dx² + (dy / 2)²)` exactly. The original halves the y difference with a shift (rounding it down) and rounds the square root down before multiplying by 4, so its distances are always multiples of 0.4 light years and are usually shorter. That made 75.8% of distances differ (397,254 pairs, mostly by 0.1 to 0.5 light years) and took 452 pairs out of range of a full tank (for example, Lave to Leesti went from 3.6 to 3.8 light years).
+
+The distance is now `4 * floor(sqrt(dx² + (|dy| >> 1)²))`, using `Math.Sqrt` on the original's integer inputs (exact, as the sum is far below 2⁵²). The original's LL5 rounds the square root down for every 16-bit value, so this matches it wherever the sum fits in 16 bits. The original also caps the sum's high byte at 255 rather than going beyond 16 bits; that isn't reproduced, as it only applies to distances of more than 102 light years, which are out of range either way.
+
+| | First float version | Now |
+|---|---|---|
+| Distances that differ from the original | 397,254 (75.8%) | 638 (0.12%), all over 102 light years |
+| Largest difference | 8.4 light years | 8.0 light years (over 102 light years only) |
+| Pairs within 7.0 light years (original: 16,564) | 16,112 | 16,564 |
+| Pairs no longer within range | 452 | 0 |
+| Pairs newly within range | 0 | 0 |
+| Distances that differ within 7.0 light years | not measured | 0 |
+
+At the edge of a full tank, the original's distances step from 6.8 light years (1,588 pairs) to 7.2 (1,756 pairs), and so do the new ones; no pair is exactly 7.0 light years away in either.
+
+The tests in `HyperspaceDistanceTests` check this against a copy of the original's routine (readdistnce with LL5): every combination of x and y differences (0 to 255 each), every pair of systems in all 8 galaxies, and LL5 itself against the rounded-down square root for all 65,536 inputs.
 
 ### 6. Explosions
 

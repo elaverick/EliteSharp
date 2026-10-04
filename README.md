@@ -280,6 +280,10 @@ from his commented code, and it was used at every step to check that the game
 behaves exactly like the original. This project simply wouldn't exist without
 his amazing work, so thank you, Mark.
 
+**Aidan Bell and Julie Dunn** wrote the music for the Commodore 64 version of
+Elite, including its arrangement of The Blue Danube for docking. The music in
+EliteSharp replicates their work.
+
 EliteSharp also stands on the shoulders of:
 
 - [Silk.NET](https://github.com/dotnet/Silk.NET), for Vulkan, windowing and input

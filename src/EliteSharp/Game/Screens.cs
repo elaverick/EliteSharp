@@ -309,10 +309,13 @@ public sealed partial class EliteGame
     private void CalculateDistance(int systemX)
     {
         // The galaxy's y-coordinates are at twice the scale of its
-        // x-coordinates, and each unit is 0.4 light years
-        float dx = systemX - _currentSystemX;
-        float dy = (_selectedSeeds[1] - _currentSystemY) / 2f;
-        _selectedDistance = (int)(4 * MathF.Sqrt(dx * dx + dy * dy));
+        // x-coordinates, and each unit is 0.4 light years. As in the
+        // original, the y difference is halved and the square root rounded
+        // down before multiplying by 4, so the distances (and so which
+        // systems are within range) are the original's
+        int dx = Math.Abs(systemX - _currentSystemX);
+        int dy = Math.Abs(_selectedSeeds[1] - _currentSystemY) >> 1;
+        _selectedDistance = 4 * (int)Math.Sqrt(dx * dx + dy * dy);
         CalculateSystemData();
     }
 

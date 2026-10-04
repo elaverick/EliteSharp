@@ -4,8 +4,8 @@ using EliteSharp.Game.Ships;
 namespace EliteSharp.Tests.Game;
 
 /// <summary>
-/// The docking checks (ISDK), the altimeter (MA93) and hyperspace distances,
-/// whose thresholds come from the original.
+/// The docking checks (ISDK) and the altimeter (MA93), whose thresholds come
+/// from the original.
 /// </summary>
 public sealed class DockingAndAltitudeTests
 {
@@ -114,29 +114,4 @@ public sealed class DockingAndAltitudeTests
 
     [Fact]
     public void TheAltimeterIsFullOutOfRange() => Assert.Equal(255, Altitude(new Vector3(0, 0, 70000)));
-
-    /// <summary>The distance in tenths of a light year between two systems at the given galactic coordinates.</summary>
-    private static int Distance(int fromX, int fromY, int toX, int toY)
-    {
-        var game = new PrivateGame();
-        game.Set("_currentSystemX", fromX);
-        game.Set("_currentSystemY", fromY);
-        var seeds = game.Get<int[]>("_selectedSeeds");
-        seeds[1] = toY;
-        seeds[3] = toX;
-        game.Call("CalculateDistance", toX);
-        return game.Get<int>("_selectedDistance");
-    }
-
-    [Theory]
-    [InlineData(20, 173, 11, 174, 36)]  // Lave to Diso
-    [InlineData(20, 173, 13, 186, 38)]  // Lave to Leesti
-    [InlineData(20, 173, 20, 173, 0)]
-    [InlineData(0, 0, 255, 255, 1140)]
-    public void HyperspaceDistancesAreInTenthsOfALightYear(int fromX, int fromY, int toX, int toY, int expected)
-    {
-        // Each unit of x is 0.4 light years, and each unit of y is 0.2
-        Assert.Equal(expected, Distance(fromX, fromY, toX, toY));
-        Assert.Equal(expected, Distance(toX, toY, fromX, fromY));
-    }
 }

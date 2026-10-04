@@ -672,6 +672,9 @@ public sealed partial class EliteGame
     /// <summary>DOENTRY: dock at the space station, show the ship hangar and work out any mission progression.</summary>
     private void DockAtStation()
     {
+        // The docking computer's music stops once we're docked (the main
+        // loop, which would otherwise stop it, doesn't run while we're docked)
+        _sound?.PlayMusic(Music.None);
         ResetFlight();
         LaunchTunnel();
         _speed = 0;

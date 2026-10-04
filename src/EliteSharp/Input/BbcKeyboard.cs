@@ -89,6 +89,7 @@ public sealed class BbcKeyboard
     private readonly bool[] _padHeld = new bool[128];
     private readonly bool[] _latched = new bool[128];
     private readonly object _lock = new();
+    private bool _settingsRequested;
 
     /// <summary>The mapping from PC keys to BBC internal key numbers.</summary>
     private static readonly Dictionary<Key, int> KeyMap = new()
@@ -109,7 +110,7 @@ public sealed class BbcKeyboard
         [Key.ShiftLeft] = Shift, [Key.ShiftRight] = Shift,
         [Key.ControlLeft] = Ctrl, [Key.ControlRight] = Ctrl,
         [Key.Left] = Left, [Key.Right] = Right, [Key.Up] = Up, [Key.Down] = Down,
-        [Key.GraveAccent] = At, [Key.F12] = At,
+        [Key.GraveAccent] = At,
         [Key.Minus] = Minus, [Key.Semicolon] = Semicolon, [Key.Apostrophe] = Colon,
         [Key.LeftBracket] = LeftBracket, [Key.RightBracket] = RightBracket, [Key.BackSlash] = Backslash,
         [Key.Equal] = Caret,
@@ -121,6 +122,13 @@ public sealed class BbcKeyboard
 
     public void OnKeyDown(Key key)
     {
+        // F12 opens the Settings screen, which isn't a BBC key
+        if (key == Key.F12)
+        {
+            RequestSettings();
+            return;
+        }
+
         if (KeyMap.TryGetValue(key, out int bbcKey))
         {
             lock (_lock)
@@ -141,6 +149,26 @@ public sealed class BbcKeyboard
                 // neither is still down is too fiddly; just release
                 _held[bbcKey] = false;
             }
+        }
+    }
+
+    /// <summary>Ask the game to open the Settings screen (F12, or RB on the controller while paused).</summary>
+    public void RequestSettings()
+    {
+        lock (_lock)
+        {
+            _settingsRequested = true;
+        }
+    }
+
+    /// <summary>Returns true if the Settings screen has been asked for since this was last called.</summary>
+    public bool TakeSettingsRequest()
+    {
+        lock (_lock)
+        {
+            bool requested = _settingsRequested;
+            _settingsRequested = false;
+            return requested;
         }
     }
 

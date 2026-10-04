@@ -103,8 +103,8 @@ A few tips for new pilots:
   yourself up with the slot, match the station's spin, and fly in slowly. Until
   you get the hang of it, save up for a **docking computer**. Press **C** to let
   it fly you in.
-- **Save** your commander while docked by pressing **F12** (or the **`** key)
-  for the disc menu. Do this often!
+- **Save** your commander while docked by pressing the **`** key for the disc
+  menu. Do this often!
 
 ## Keyboard controls
 
@@ -144,7 +144,8 @@ function keys f0 to f9 are on your **F1** to **F10** keys.
 | **F8** | Market prices | Market prices |
 | **F9** | Status | Status |
 | **F10** | Inventory | Inventory |
-| **F12** or **`** | Save and load commanders | |
+| **`** | Save and load commanders | |
+| **F12** | Settings | Settings |
 
 On the charts, the **cursor keys** move the cross-hairs (hold **Shift** to move
 them faster), **D** shows the distance to the selected system, **O** moves the
@@ -171,6 +172,21 @@ Press **F11** (or **Pause**, or **End**) to pause the game. While paused:
 
 Press **Alt + Enter** at any time to switch between a window and full screen.
 
+### Settings
+
+Press **F12** at any time (or **RB** on the controller while paused) for the
+Settings screen, where you can switch between a window and full screen, change
+the window's size and the screen's shape, turn vsync, smooth motion and the
+controller on and off, and set the volume of the sound effects and music. Move
+up and down with the cursor keys, change the highlighted setting with left and
+right, and press **Escape** (or **B**, or **F12** again) to carry on playing.
+
+Your settings are saved in `settings.yml` in the data folder
+(`%APPDATA%\EliteSharp`, unless you use `--data`), along with the window's
+size if you resize it and whether you switched to full screen with
+**Alt + Enter**, and the game starts with them next time. The options below
+override them for one run, without changing the file.
+
 ## Playing with a controller
 
 Plug in an Xbox controller (or any controller Windows recognises) and it just
@@ -188,7 +204,8 @@ On the charts, either stick moves the cross-hairs. On the buy and sell screens,
 the D-pad or left stick moves up and down the list and changes how much is in
 your basket; **A** buys or sells it, **B** empties it, and **Y** fills it with as
 much as you can. On the equipment screen, **A** buys the highlighted item (and
-picks the view for a laser), and **B** changes your mind about a laser.
+picks the view for a laser), and **B** changes your mind about a laser. While
+paused, **RB** opens the Settings screen.
 
 ![Xbox controller controls](images/xbox-controls.png)
 
@@ -196,7 +213,8 @@ You still need the keyboard for typing, such as naming your commander.
 
 ## Options
 
-You can add these options to the end of the command that starts the game, for
+Most of the display settings are on the Settings screen too (see above). You
+can add these options to the end of the command that starts the game, for
 example `EliteSharp.exe --fullscreen --scale 3`, or add them to a Windows
 shortcut:
 

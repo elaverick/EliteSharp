@@ -118,9 +118,24 @@ public sealed partial class EliteGame
         }
     }
 
-    /// <summary>RDKEY: scan the keyboard, returning the ASCII code of the key pressed (or 0).</summary>
+    /// <summary>
+    /// RDKEY: scan the keyboard, returning the ASCII code of the key pressed
+    /// (or 0). This is also where the Settings screen opens, whatever the game
+    /// is doing, as every screen reads the keyboard this way.
+    /// </summary>
     private int ReadKey()
     {
+        if (_keyboard.TakeSettingsRequest())
+        {
+            if (_settingsOpen)
+            {
+                // Asking again closes the Settings screen, as Escape does
+                return 0x1B;
+            }
+
+            ShowSettings();
+        }
+
         int key = ScanKeyboard();
         _keyPressed = KeyTranslationTable[key];
         return _keyPressed;

@@ -132,6 +132,23 @@ market:
   ship: "SHIP"
   item: "Item"
 
+settings:
+  title: "SETTINGS"
+  full_screen: "Full Screen"
+  window_size: "Window Size"
+  frame: "Screen Shape"
+  vsync: "Vsync"
+  smooth_motion: "Smooth Motion"
+  controller: "Controller"
+  sound_effects: "Sound Effects"
+  music: "Music"
+  on: "On"
+  off: "Off"
+  wide: "Wide"
+  four_by_three: "4:3"
+  change: "Left and right to change"
+  close: "Escape (or B) to close"
+
 system_data:
   title: "DATA ON {system}"
   distance: "Distance"

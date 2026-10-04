@@ -125,6 +125,60 @@ public sealed class Hud
     /// <summary>Called when building each frame, to add the dashboard.</summary>
     public Action<HudBuilder>? DashboardRenderer { get; set; }
 
+    /// <summary>Whether to leave the 3D world out of the frames (while a screen is shown over it).</summary>
+    public bool WorldHidden { get; set; }
+
+    /// <summary>What's on the space view, saved by <see cref="SaveScreen"/>.</summary>
+    public sealed class SavedScreen
+    {
+        internal Dictionary<(int Column, int Row), (char Character, Ink Ink)> Text { get; init; } = default!;
+        internal List<ScreenLine> Lines { get; init; } = default!;
+        internal List<ScreenRect> Rects { get; init; } = default!;
+        internal List<WideLine> WideLines { get; init; } = default!;
+        internal Dictionary<HudGroup, List<ScreenLine>> Groups { get; init; } = default!;
+        internal bool Border { get; init; }
+        internal SpacePalette Palette { get; init; }
+        internal bool WorldHidden { get; init; }
+    }
+
+    /// <summary>
+    /// Save what's on the space view (the text, lines, rectangles, border and
+    /// palette), so a screen can be shown over it and then taken away.
+    /// </summary>
+    public SavedScreen SaveScreen() => new()
+    {
+        Text = new(_text),
+        Lines = [.. _lines],
+        Rects = [.. _rects],
+        WideLines = [.. _wideLines],
+        Groups = _groups.ToDictionary(g => g.Key, g => g.Value.ToList()),
+        Border = Border,
+        Palette = Palette,
+        WorldHidden = WorldHidden,
+    };
+
+    /// <summary>Put back what was on the space view when it was saved.</summary>
+    public void RestoreScreen(SavedScreen saved)
+    {
+        ClearSpaceView();
+        foreach (var (cell, contents) in saved.Text)
+        {
+            _text[cell] = contents;
+        }
+
+        _lines.AddRange(saved.Lines);
+        _rects.AddRange(saved.Rects);
+        _wideLines.AddRange(saved.WideLines);
+        foreach (var (group, lines) in saved.Groups)
+        {
+            _groups[group] = lines;
+        }
+
+        Border = saved.Border;
+        Palette = saved.Palette;
+        WorldHidden = saved.WorldHidden;
+    }
+
     /// <summary>Called when building each frame, to copy the 3D world into it.</summary>
     public Action<SceneFrame>? CopyWorld { get; set; }
 
@@ -321,7 +375,7 @@ public sealed class Hud
             DashboardRenderer?.Invoke(builder);
         }
 
-        if (CopyWorld != null)
+        if (CopyWorld != null && !WorldHidden)
         {
             CopyWorld(frame.World);
             frame.HasWorld = true;

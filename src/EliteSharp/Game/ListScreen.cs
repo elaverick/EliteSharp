@@ -31,8 +31,11 @@ public sealed partial class EliteGame
     /// screen). Directions from the cursor keys, the D-pad or the left stick go
     /// to <paramref name="move"/>, repeating while held, and every other key
     /// press goes to <paramref name="press"/>, which returns true to finish.
+    /// Function keys are ignored if <paramref name="functionKeysLeave"/> is
+    /// false, and <paramref name="everyFrame"/>, if given, is called each
+    /// vertical sync (to keep up with changes made elsewhere).
     /// </summary>
-    private void RunListScreen(Action<int, int> move, Func<int, bool> press)
+    private void RunListScreen(Action<int, int> move, Func<int, bool> press, bool functionKeysLeave = true, Action? everyFrame = null)
     {
         // Ignore whatever is held down when the screen appears (such as the
         // key that chose it) until it is released
@@ -43,6 +46,7 @@ public sealed partial class EliteGame
         while (true)
         {
             WaitForVsync();
+            everyFrame?.Invoke();
             int key = ReadKey();
 
             var direction = CursorDirection(key) ?? ReadPadStickDirection();
@@ -72,7 +76,12 @@ public sealed partial class EliteGame
 
             if (key is >= FunctionKey0 and <= FunctionKey9)
             {
-                throw new GameJumpException(GameJump.ForceKey, key);
+                if (functionKeysLeave)
+                {
+                    throw new GameJumpException(GameJump.ForceKey, key);
+                }
+
+                continue;
             }
 
             if (press(key))

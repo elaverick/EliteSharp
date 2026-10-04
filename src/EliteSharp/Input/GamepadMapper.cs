@@ -39,7 +39,7 @@ public enum PadContext
 /// Paused:
 ///   Start or B resume, Back quit to the title screen, D-pad left/right
 ///   volume down/up, D-pad up/down sound on/off, Y reverse joystick Y channel,
-///   X toggle joystick-only mode
+///   X toggle joystick-only mode, RB the Settings screen
 /// </summary>
 public sealed class GamepadMapper(BbcKeyboard keyboard)
 {
@@ -81,6 +81,13 @@ public sealed class GamepadMapper(BbcKeyboard keyboard)
         keyboard.SetPadKeys(_pressedKeys.Values.SelectMany(k => k), newlyPressed);
     }
 
+    /// <summary>Ask for the Settings screen (which has no BBC key), pressing no keys.</summary>
+    private int[] RequestSettings()
+    {
+        keyboard.RequestSettings();
+        return [];
+    }
+
     private int[] Map(PadButton button, PadContext context, bool layer)
     {
         if (context == PadContext.Paused)
@@ -95,6 +102,7 @@ public sealed class GamepadMapper(BbcKeyboard keyboard)
                 PadButton.DpadDown => [BbcKeyboard.Q],
                 PadButton.Y => [BbcKeyboard.Y],
                 PadButton.X => [BbcKeyboard.K],
+                PadButton.RightShoulder => RequestSettings(),
                 _ => [],
             };
         }

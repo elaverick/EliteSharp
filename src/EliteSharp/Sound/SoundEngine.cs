@@ -74,6 +74,12 @@ public sealed unsafe class SoundEngine : IDisposable
             or PlatformNotSupportedException
             or Silk.NET.Core.Loader.SymbolLoadingException;
 
+    /// <summary>
+    /// The volume of the sound effects from the Settings screen, as a gain
+    /// from 0 to 1, on top of the original's volume setting.
+    /// </summary>
+    public float EffectsGain { get; set; } = 1;
+
     /// <summary>Set the function that returns the volume setting (VOL, 0-7).</summary>
     public void SetVolumeSource(Func<int> source) => _volumeSource = source;
 
@@ -150,7 +156,7 @@ public sealed unsafe class SoundEngine : IDisposable
     private float Gain()
     {
         int volume = Math.Clamp(_volumeSource(), 0, LoudestVolume);
-        return MathF.Pow(10, -2f * (LoudestVolume - volume) / 20);
+        return MathF.Pow(10, -2f * (LoudestVolume - volume) / 20) * EffectsGain;
     }
 
     /// <summary>

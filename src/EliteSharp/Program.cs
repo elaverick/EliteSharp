@@ -12,7 +12,7 @@ using Silk.NET.Input;
 using Silk.NET.Maths;
 using Silk.NET.Windowing;
 
-var options = GameOptions.Parse(args);
+var options = GameOptions.Load(args);
 
 // Load the ship assets, the missions, the game's text, the HUD's images and
 // the sound effects (from the mod's folder, if there is one, or else the
@@ -55,7 +55,9 @@ var exchange = new FrameExchange();
 var hud = new Hud(exchange);
 var keyboard = new BbcKeyboard();
 using var sound = soundEffects != null ? SoundEngine.TryCreate(soundEffects) : null;
-using var gamepad = options.Gamepad ? Gamepad.TryCreate(keyboard) : null;
+// The controller is always read, so it can be switched on from the Settings
+// screen; while it's switched off, it is ignored
+using var gamepad = Gamepad.TryCreate(keyboard);
 var game = new EliteGame(hud, keyboard, sound, options, gamepad, missions, strings, descriptions, trading, RealTimeClock.Instance);
 
 // The game runs at its own fixed rate on its own thread, and the window draws
@@ -78,7 +80,6 @@ VulkanRenderer? renderer = null;
 Thread? gameThread = null;
 Exception? gameError = null;
 bool closeRequested = false;
-bool fullScreenToggleRequested = false;
 IInputContext? input = null;
 
 // Hide the mouse pointer in full screen, and show it in a window
@@ -91,11 +92,36 @@ void UpdateCursor()
     }
 }
 
-// Switch between a window and full screen (on the window's thread)
-void ToggleFullScreen()
+// Switch between a window and full screen (which ApplySettings then does)
+void ToggleFullScreen() => options.FullScreen = !options.FullScreen;
+
+// Make the window, renderer and controller match the settings, which the
+// Settings screen changes from the game's thread (on the window's thread)
+void ApplySettings()
 {
-    window.WindowState = window.WindowState == WindowState.Fullscreen ? WindowState.Normal : WindowState.Fullscreen;
-    UpdateCursor();
+    var state = options.FullScreen ? WindowState.Fullscreen : WindowState.Normal;
+    if (window.WindowState != state && window.WindowState != WindowState.Minimized)
+    {
+        window.WindowState = state;
+        UpdateCursor();
+    }
+
+    if (window.WindowState == WindowState.Normal && options.WindowSize is var (width, height) && window.Size != new Vector2D<int>(width, height))
+    {
+        window.Size = new Vector2D<int>(width, height);
+    }
+
+    if (renderer != null)
+    {
+        renderer.Framing = options.FourByThreeFrame ? WorldFraming.FourByThree : WorldFraming.Wide;
+        renderer.VSync = options.VSync;
+    }
+
+    interpolator.Enabled = options.Interpolate;
+    if (gamepad != null)
+    {
+        gamepad.Enabled = options.Gamepad;
+    }
 }
 
 window.Load += () =>
@@ -150,7 +176,7 @@ window.Load += () =>
         {
             if (command == "fullscreen")
             {
-                fullScreenToggleRequested = true;
+                ToggleFullScreen();
             }
             else
             {
@@ -164,11 +190,7 @@ window.Load += () =>
 
 window.Render += _ =>
 {
-    if (fullScreenToggleRequested)
-    {
-        fullScreenToggleRequested = false;
-        ToggleFullScreen();
-    }
+    ApplySettings();
 
     if (renderer != null)
     {
@@ -184,6 +206,16 @@ window.Render += _ =>
 };
 
 window.FramebufferResize += _ => renderer?.Resize();
+
+// Remember the size of the window when it's resized by hand (but not when it
+// goes full screen or is maximised), so it opens at that size next time
+window.Resize += size =>
+{
+    if (window.WindowState == WindowState.Normal && size.X > 0 && size.Y > 0)
+    {
+        options.WindowSize = (size.X, size.Y);
+    }
+};
 window.FocusChanged += focused => gamepad?.SetFocus(focused);
 
 window.Closing += () =>
@@ -196,6 +228,7 @@ window.Closing += () =>
 
 window.Run();
 window.Dispose();
+options.Settings?.Flush();
 
 if (gameError != null)
 {

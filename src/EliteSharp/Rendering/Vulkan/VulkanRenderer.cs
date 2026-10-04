@@ -42,8 +42,8 @@ public sealed unsafe class VulkanRenderer : IDisposable
     }
 
     private readonly IWindow _window;
-    private readonly WorldFraming _framing;
-    private readonly bool _vsync;
+    private WorldFraming _framing;
+    private bool _vsync;
     private readonly Vk _vk = Vk.GetApi();
     private Instance _instance;
     private KhrSurface _khrSurface = null!;
@@ -104,6 +104,28 @@ public sealed unsafe class VulkanRenderer : IDisposable
     }
 
     public void Resize() => _swapchainDirty = true;
+
+    /// <summary>Whether the 3D world fills the width of the window, or the original's 4:3 frame (on the window's thread).</summary>
+    public WorldFraming Framing
+    {
+        get => _framing;
+        set => _framing = value;
+    }
+
+    /// <summary>Whether to draw one frame for each refresh of the display (on the window's thread).</summary>
+    public bool VSync
+    {
+        get => _vsync;
+        set
+        {
+            if (_vsync != value)
+            {
+                // The present mode is chosen with the swapchain
+                _vsync = value;
+                _swapchainDirty = true;
+            }
+        }
+    }
 
     private void CreateInstance()
     {

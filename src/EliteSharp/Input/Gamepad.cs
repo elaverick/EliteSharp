@@ -88,8 +88,17 @@ public sealed unsafe class Gamepad : IDisposable
     /// <summary>The mapper that turns buttons into key presses (the game sets its context).</summary>
     public GamepadMapper Mapper => _mapper;
 
-    /// <summary>Whether a controller is connected (or test input is being injected).</summary>
-    public bool Connected => _connected || _injectedAxes != null;
+    /// <summary>Whether to read the controller (when turned off on the Settings screen, it is ignored).</summary>
+    public bool Enabled
+    {
+        get => _enabled;
+        set => _enabled = value;
+    }
+
+    private volatile bool _enabled = true;
+
+    /// <summary>Whether a controller is connected and enabled (or test input is being injected).</summary>
+    public bool Connected => (_connected && _enabled) || _injectedAxes != null;
 
     /// <summary>The current analogue inputs.</summary>
     public PadAxes Axes => _injectedAxes ?? _axes.Value;
@@ -201,8 +210,9 @@ public sealed unsafe class Gamepad : IDisposable
                 }
             }
 
-            PadButton buttons = _focused ? ReadButtons() : PadButton.None;
-            _axes = new PadAxesBox(_focused ? ReadAxes() : default);
+            bool reading = _focused && _enabled;
+            PadButton buttons = reading ? ReadButtons() : PadButton.None;
+            _axes = new PadAxesBox(reading ? ReadAxes() : default);
 
             PadButton injected;
             lock (_injectLock)

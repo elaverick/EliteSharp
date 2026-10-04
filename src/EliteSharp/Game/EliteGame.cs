@@ -671,6 +671,7 @@ public sealed partial class EliteGame
         try
         {
             _sound?.SetVolumeSource(() => _soundDisabled != 0 ? -1 : _volume);
+            ApplyEffectsVolume();
             Begin();
             GameJump next = GameJump.StartGame;
             int key = 0;

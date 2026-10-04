@@ -8,7 +8,9 @@ namespace EliteSharp.Game;
 /// the basket, and the quantity column shows what is left once the basket is
 /// taken out. Nothing changes hands until Return (or A) buys or sells the
 /// whole basket; Escape or "N" (or B) empties it, and "Y" (or the Y button)
-/// puts as much of the highlighted item in it as possible.
+/// puts as much of the highlighted item in it as possible. Leaving the screen
+/// with something in the basket takes two presses of the function key (the
+/// first just beeps), so the basket isn't left behind by mistake.
 /// </summary>
 public sealed partial class EliteGame
 {
@@ -50,7 +52,8 @@ public sealed partial class EliteGame
     }
 
     /// <summary>Trade until a function key moves to another screen.</summary>
-    private void RunTradeScreen() => RunListScreen(MoveInTradeScreen, PressInTradeScreen);
+    private void RunTradeScreen() =>
+        RunListScreen(MoveInTradeScreen, PressInTradeScreen, confirmLeaving: () => _basket.Any(quantity => quantity != 0));
 
     /// <summary>Act on a key press (other than a direction) on the trading screens.</summary>
     private bool PressInTradeScreen(int key)

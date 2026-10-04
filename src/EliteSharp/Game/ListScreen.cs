@@ -34,9 +34,19 @@ public sealed partial class EliteGame
     /// Function keys are ignored if <paramref name="functionKeysLeave"/> is
     /// false, and <paramref name="everyFrame"/>, if given, is called each
     /// vertical sync (to keep up with changes made elsewhere).
+    ///
+    /// If <paramref name="confirmLeaving"/> returns true when a function key is
+    /// pressed (such as when there's something in the basket), the first press
+    /// only makes the low beep, and the screen is left if the same key is
+    /// pressed again straight after; doing anything else in between starts
+    /// again.
     /// </summary>
-    private void RunListScreen(Action<int, int> move, Func<int, bool> press, bool functionKeysLeave = true, Action? everyFrame = null)
+    private void RunListScreen(Action<int, int> move, Func<int, bool> press, bool functionKeysLeave = true, Action? everyFrame = null,
+        Func<bool>? confirmLeaving = null)
     {
+        // The function key that has been pressed once, and beeped, or 0
+        int leaving = 0;
+
         // Ignore whatever is held down when the screen appears (such as the
         // key that chose it) until it is released
         int lastKey = ReadKey();
@@ -55,11 +65,13 @@ public sealed partial class EliteGame
                 if (direction != lastDirection)
                 {
                     repeat = ListRepeatDelay;
+                    leaving = 0;
                     move(direction.X, direction.Y);
                 }
                 else if (--repeat == 0)
                 {
                     repeat = ListRepeatInterval;
+                    leaving = 0;
                     move(direction.X, direction.Y);
                 }
             }
@@ -78,11 +90,20 @@ public sealed partial class EliteGame
             {
                 if (functionKeysLeave)
                 {
+                    if (key != leaving && confirmLeaving?.Invoke() == true)
+                    {
+                        leaving = key;
+                        Boop();
+                        continue;
+                    }
+
                     throw new GameJumpException(GameJump.ForceKey, key);
                 }
 
                 continue;
             }
+
+            leaving = 0;
 
             if (press(key))
             {

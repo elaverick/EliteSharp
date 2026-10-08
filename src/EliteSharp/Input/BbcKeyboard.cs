@@ -90,6 +90,7 @@ public sealed class BbcKeyboard
     private readonly bool[] _latched = new bool[128];
     private readonly object _lock = new();
     private bool _settingsRequested;
+    private volatile bool _focused = true;
 
     /// <summary>The mapping from PC keys to BBC internal key numbers.</summary>
     private static readonly Dictionary<Key, int> KeyMap = new()
@@ -148,6 +149,29 @@ public sealed class BbcKeyboard
                 // Shift and Ctrl have two PC keys each, so only release if
                 // neither is still down is too fiddly; just release
                 _held[bbcKey] = false;
+            }
+        }
+    }
+
+    /// <summary>
+    /// True while the game window has the focus. The game pauses itself while
+    /// the window is in the background, and carries on when it comes back.
+    /// </summary>
+    public bool HasFocus => _focused;
+
+    /// <summary>
+    /// Tell the keyboard whether the game window has the focus. Losing the
+    /// focus releases any keys being held, as their key-up events will go to
+    /// another application.
+    /// </summary>
+    public void SetFocus(bool focused)
+    {
+        _focused = focused;
+        if (!focused)
+        {
+            lock (_lock)
+            {
+                Array.Clear(_held);
             }
         }
     }

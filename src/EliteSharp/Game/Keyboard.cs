@@ -324,10 +324,15 @@ public sealed partial class EliteGame
         return rate + 1;
     }
 
-    /// <summary>DK4: check for the pause key (COPY) and process the options while paused.</summary>
+    /// <summary>
+    /// DK4: check for the pause key (COPY) and process the options while
+    /// paused. We also pause while the game window is in the background,
+    /// until it gets the focus back.
+    /// </summary>
     private void CheckForPause()
     {
-        if (_keyPressed != 0x8B)
+        bool lostFocus = !_keyboard.HasFocus;
+        if (_keyPressed != 0x8B && !lostFocus)
         {
             return;
         }
@@ -336,7 +341,7 @@ public sealed partial class EliteGame
         _padContextOverride = PadContext.Paused;
         try
         {
-            PauseLoop();
+            PauseLoop(lostFocus);
         }
         finally
         {
@@ -344,12 +349,21 @@ public sealed partial class EliteGame
         }
     }
 
-    /// <summary>FREEZE: the pause loop, where the configuration options can be changed.</summary>
-    private void PauseLoop()
+    /// <summary>
+    /// FREEZE: the pause loop, where the configuration options can be changed.
+    /// If <paramref name="untilFocused"/> is true, we paused because the window
+    /// lost the focus, so we also unpause when it gets the focus back.
+    /// </summary>
+    private void PauseLoop(bool untilFocused)
     {
         while (true)
         {
             WaitForVsync();
+            if (untilFocused && _keyboard.HasFocus)
+            {
+                return;
+            }
+
             int key = ReadKey();
             if (key == 'Q')
             {

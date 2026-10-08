@@ -217,7 +217,17 @@ window.Resize += size =>
         options.WindowSize = (size.X, size.Y);
     }
 };
-window.FocusChanged += focused => gamepad?.SetFocus(focused);
+// Scripted tests run in the background, so they mustn't pause the game when
+// the window doesn't have the focus
+bool scripted = args.Any(a => a.Equals("--script", StringComparison.OrdinalIgnoreCase));
+window.FocusChanged += focused =>
+{
+    gamepad?.SetFocus(focused);
+    if (!scripted)
+    {
+        keyboard.SetFocus(focused);
+    }
+};
 
 window.Closing += () =>
 {

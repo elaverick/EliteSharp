@@ -96,6 +96,9 @@ public sealed class FrameData
     /// <summary>Whether the dashboard is shown (it is hidden on the death screen).</summary>
     public bool DashboardVisible { get; set; } = true;
 
+    /// <summary>The full-colour picture in the space view, if there is one (drawn behind the rest of the space view).</summary>
+    public HudPicture? Picture { get; set; }
+
     /// <summary>When the game published the frame, on the game's clock (see EliteSharp.Game.IGameClock).</summary>
     public long Time { get; set; }
 
@@ -117,6 +120,7 @@ public sealed class FrameData
         SpaceLines.Clear();
         WideLines.Clear();
         DashboardWideQuads.Clear();
+        Picture = null;
     }
 }
 

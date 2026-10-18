@@ -1,0 +1,123 @@
+# The Saitek (later Logitech) X52 HOTAS: a stick and throttle that are one USB
+# device. The button numbers follow FlightGear's X52 configuration; the
+# buttons whose names aren't known are shown by number. The axes after the
+# stick and throttle are in the order Linux reports them, which SDL may not
+# keep on every system, so check them on the Controls screen.
+#
+# By default the throttle sets the speed, and the stick rolls (left and
+# right) and pitches (forward and back). The twist, rotaries and slider do
+# nothing until they're bound.
+#
+# The picture is 1984 x 576 pixels, and each control's position is in its
+# pixels (tools/draw-controllers.py draws it, and writes the positions here).
+name: Saitek X52
+kind: hotas
+devices: [06A3:075C, 06A3:0255]
+image: x52.png
+buttons:
+  - Trigger @ 656,172
+  - Fire @ 640,30
+  - A @ 578,39
+  - B @ 660,50
+  - C @ 689,134
+  - Pinkie @ 669,281
+  - D @ 1416,28
+  - E @ 1379,52
+  - T1 @ 380,444
+  - T2 @ 396,472
+  - T3 @ 462,463
+  - T4 @ 478,492
+  - T5 @ 547,484
+  - T6 @ 562,512
+  - Trigger 2 @ 655,201
+  - Hat 2 Up @ 611,47
+  - Hat 2 Right @ 625,61
+  - Hat 2 Down @ 611,75
+  - Hat 2 Left @ 597,61
+  - Hat 3 Up @ 1476,141
+  - Hat 3 Right @ 1488,153
+  - Hat 3 Down @ 1476,165
+  - Hat 3 Left @ 1464,153
+  - Mode 1 @ 499,93
+  - Mode 2 @ 512,101
+  - Mode 3 @ 523,84
+  - Function @ 1428,387
+  - Start/Stop @ 1480,399
+  - Reset @ 1533,411
+  - Clutch @ 1457,263
+axes:
+  - Stick X @ 562,286
+  - Stick Y @ 562,286
+  - Throttle @ 1342,398
+  - Lower Rotary @ 1466,148
+  - Upper Rotary @ 1470,31
+  - Twist @ 565,334
+  - Slider @ 1517,154
+hats:
+  - Hat 1 @ 545,53
+dead_zone: 0.05
+defaults:
+  axes:
+    roll: axis 0
+    pitch: axis 1
+    throttle: axis 2 reversed
+  flight:
+    fire_laser: button 0
+    launch_missile: button 1
+    target_missile: button 2
+    unarm_missile: button 3
+    ecm: button 4
+    energy_bomb: button 10
+    front_view: hat 0 up
+    rear_view: hat 0 down
+    left_view: hat 0 left
+    right_view: hat 0 right
+    in_system_jump: button 6
+    docking_computer: button 7
+    hyperspace: button 8
+    short_range_chart: button 15
+    galactic_chart: button 16
+    data_on_system: button 17
+    status: button 18
+    market_prices: button 19
+    inventory: button 21
+    pause: button 29
+    settings: button 26
+  screens:
+    select: button 0
+    yes: button 2
+    no: button 3
+    delete: button 4
+    cursor_up: [hat 0 up, button 19]
+    cursor_down: [hat 0 down, button 21]
+    cursor_left: [hat 0 left, button 22]
+    cursor_right: [hat 0 right, button 20]
+    fast_cursor: button 14
+    launch: button 29
+    in_system_jump: button 6
+    docking_computer: button 7
+    hyperspace: button 8
+    short_range_chart: button 15
+    galactic_chart: button 16
+    data_on_system: button 17
+    status: button 18
+    settings: button 26
+  second_functions:
+    second_functions: button 5
+    galactic_hyperspace: button 9
+    escape_pod: button 11
+    equip_ship: button 29
+  paused:
+    resume: [button 29, button 0]
+    quit: button 28
+    volume_down: hat 0 left
+    volume_up: hat 0 right
+    sound_on: hat 0 up
+    sound_off: hat 0 down
+    reverse_pitch: button 2
+    controller_only: button 3
+    settings: button 26
+  typing:
+    accept: button 0
+    cancel: button 3
+    delete: button 4

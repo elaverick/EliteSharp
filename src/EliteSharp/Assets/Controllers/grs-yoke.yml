@@ -1,0 +1,60 @@
+# Thunderstick Studios' GRS Star Wars Flight Yoke, made for Atari's Star Wars
+# arcade machine: a box on a post, with a handle on each side, each with a
+# thumb button at its top and a trigger for the fingers behind, two function
+# buttons under the panel on the front of the box, and two axes (turning the
+# yoke, and pulling it back and pushing it forward). It has no throttle, so
+# the left handle speeds up and slows down.
+#
+# Its USB IDs aren't published, so it is recognised by its name. The order of
+# its buttons isn't published either, so these names are a guess: if they
+# don't match what the Controls screen shows when each button is pressed,
+# change their order here. The switches on the yoke (pitch reversing and the
+# mouse modes) aren't seen by the game; leave it in its gamepad mode.
+#
+# The picture is 1984 x 576 pixels, and each control's position is in its
+# pixels (tools/draw-controllers.py draws it, and writes the positions here).
+name: GRS Star Wars Flight Yoke
+kind: yoke
+names: [GRS Flight Yoke, GRS Star Wars, GRS Yoke, Thunderstick Yoke]
+image: grs-yoke.png
+buttons:
+  - L Trigger @ 657,167
+  - R Trigger @ 1375,224
+  - L Thumb @ 601,80
+  - R Thumb @ 1329,130
+  - Function 1 @ 878,397
+  - Function 2 @ 930,402
+axes:
+  - Yoke Turn @ 1318,326
+  - Yoke Pitch @ 908,308
+dead_zone: 0.05
+defaults:
+  axes:
+    roll: axis 0
+    pitch: axis 1
+  flight:
+    fire_laser: button 1
+    launch_missile: button 3
+    speed_up: button 2
+    slow_down: button 0
+    pause: button 5
+  screens:
+    select: button 1
+    yes: button 3
+    no: button 2
+    delete: button 0
+    launch: button 5
+  second_functions:
+    second_functions: button 4
+    target_missile: button 1
+    unarm_missile: button 3
+    ecm: button 0
+    in_system_jump: button 2
+    docking_computer: button 5
+  paused:
+    resume: [button 5, button 1]
+    settings: button 4
+  typing:
+    accept: button 1
+    cancel: button 2
+    delete: button 0

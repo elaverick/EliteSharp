@@ -18,18 +18,19 @@ internal sealed class PrivateGame
 
     /// <summary>
     /// Create the game, optionally paced by the given clock (such as a
-    /// <see cref="VirtualClock"/>), reading the given keyboard and handing its
-    /// frames to the given exchange.
+    /// <see cref="VirtualClock"/>), reading the given keyboard (and
+    /// controllers) and handing its frames to the given exchange.
     /// </summary>
     public PrivateGame(
         GameStrings? strings = null,
         IGameClock? clock = null,
         BbcKeyboard? keyboard = null,
         FrameExchange? exchange = null,
-        int mainLoopRate = 50)
+        int mainLoopRate = 50,
+        Controllers? controllers = null)
     {
         var options = new GameOptions { Sound = false, Gamepad = false, MainLoopRate = mainLoopRate };
-        Game = new EliteGame(new Hud(exchange ?? new FrameExchange()), keyboard ?? new BbcKeyboard(), null, options, strings: strings, clock: clock);
+        Game = new EliteGame(new Hud(exchange ?? new FrameExchange()), keyboard ?? new BbcKeyboard(), null, options, controllers, strings: strings, clock: clock);
     }
 
     public EliteGame Game { get; }

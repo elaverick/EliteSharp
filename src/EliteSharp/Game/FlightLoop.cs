@@ -67,20 +67,35 @@ public sealed partial class EliteGame
 
         _pitch = pitchNegative ? -angle : angle;
 
-        // Part 3: scan for flight keys and process the results
-        // BS2 (the Bitstik isn't supported)
-        if (_keySpeedUp && _speed < 40)
+        // A controller's throttle is the Bitstik's rotation (JOPOS+2), which
+        // sets the speed directly. The speed keys only work while it is at
+        // zero (when slowing down does nothing, rather than wrapping round to
+        // a speed of 255, as the original's DEC DELTA would)
+        bool throttleInControl = false;
+        int? throttle = ReadPadThrottle();
+        if (throttle != null)
         {
-            _speed++;
+            _speed = Math.Min(throttle.Value >> 2, 40);
+            throttleInControl = _speed != 0;
         }
 
-        // MA17
-        if (_keySlowDown)
+        // Part 3: scan for flight keys and process the results
+        // BS2
+        if (!throttleInControl)
         {
-            _speed--;
-            if (_speed == 0)
+            if (_keySpeedUp && _speed < 40)
             {
                 _speed++;
+            }
+
+            // MA17
+            if (_keySlowDown && (throttle == null || _speed != 0))
+            {
+                _speed--;
+                if (_speed == 0)
+                {
+                    _speed++;
+                }
             }
         }
 

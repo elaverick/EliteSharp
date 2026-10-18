@@ -12,8 +12,9 @@ namespace EliteSharp.Game;
 /// move up and down and change the highlighted setting (as does Return, or
 /// A, for the settings that are on or off), and every change takes effect
 /// straight away and is saved to the settings file (see <see cref="SettingsFile"/>).
-/// While we're docked, the bottom of the screen also has Save Commander and
-/// Load Commander, which open those screens (see CommanderScreens.cs).
+/// The bottom of the screen has Controls, which opens the Controls screen
+/// (see ControlsScreen.cs), and while we're docked, Save Commander and Load
+/// Commander, which open those screens (see CommanderScreens.cs).
 /// </summary>
 public sealed partial class EliteGame
 {
@@ -28,6 +29,7 @@ public sealed partial class EliteGame
         Controller,
         SoundEffects,
         Music,
+        Controls,
         SaveCommander,
         LoadCommander,
     }
@@ -37,14 +39,14 @@ public sealed partial class EliteGame
     [
         "settings.full_screen", "settings.window_size", "settings.frame", "settings.vsync",
         "settings.smooth_motion", "settings.controller", "settings.sound_effects", "settings.music",
-        "settings.save_commander", "settings.load_commander",
+        "settings.controls", "settings.save_commander", "settings.load_commander",
     ];
 
     /// <summary>The text row of the first setting (each is followed by a blank row).</summary>
     private const int SettingsFirstRow = 3;
 
     /// <summary>The last text row that the settings can use (the rows below are for the instructions).</summary>
-    private const int SettingsLastRow = 20;
+    private const int SettingsLastRow = 21;
 
     /// <summary>The column that the settings' values start in.</summary>
     private const int SettingsValueColumn = 18;
@@ -116,9 +118,10 @@ public sealed partial class EliteGame
         _cursorX = 12;
         _cursorY = 1;
         PrintTitle("settings.title");
+        ClearBottomRows();
         DrawSettingRows();
 
-        ClearBottomRows();
+        _cursorX = 1;
         _cursorY = 22;
         PrintText("settings.change");
         _cursorX = 1;
@@ -140,19 +143,18 @@ public sealed partial class EliteGame
             _ => true,
         })];
 
-    /// <summary>Whether a setting is one of the commander screens, which are opened rather than changed.</summary>
-    private static bool IsCommanderSetting(Setting setting) => setting is Setting.SaveCommander or Setting.LoadCommander;
+    /// <summary>Whether a setting is one of the screens (Controls and the commander screens), which are opened rather than changed.</summary>
+    private static bool IsScreenSetting(Setting setting) => setting is Setting.Controls or Setting.SaveCommander or Setting.LoadCommander;
 
     /// <summary>
     /// The text row of a setting that is shown: each setting is followed by a
-    /// blank row, and the commander screens come after another blank row,
-    /// together.
+    /// blank row, and the screens come after another blank row, together.
     /// </summary>
     private int SettingRow(Setting setting)
     {
         var visible = VisibleSettings();
         int index = visible.IndexOf(setting);
-        int settings = visible.Count(s => !IsCommanderSetting(s));
+        int settings = visible.Count(s => !IsScreenSetting(s));
         return index < settings
             ? SettingsFirstRow + index * 2
             : SettingsFirstRow + settings * 2 + index - settings;
@@ -285,8 +287,8 @@ public sealed partial class EliteGame
         {
             case 0x1B or 'N':
                 return true;
-            case 0x0D when IsCommanderSetting(_settingSelected):
-                OpenCommanderScreen(_settingSelected);
+            case 0x0D when IsScreenSetting(_settingSelected):
+                OpenSettingScreen(_settingSelected);
                 break;
             case 0x0D:
                 ChangeSetting(_settingSelected, 1);
@@ -297,14 +299,18 @@ public sealed partial class EliteGame
     }
 
     /// <summary>
-    /// Open the Save Commander or Load Commander screen from the Settings
-    /// screen, and come back to the Settings screen afterwards, unless a
-    /// commander was loaded, which starts the game again (as the original does
-    /// after loading).
+    /// Open the Controls, Save Commander or Load Commander screen from the
+    /// Settings screen, and come back to the Settings screen afterwards, unless
+    /// a commander was loaded, which starts the game again (as the original
+    /// does after loading).
     /// </summary>
-    private void OpenCommanderScreen(Setting setting)
+    private void OpenSettingScreen(Setting setting)
     {
-        if (setting == Setting.LoadCommander)
+        if (setting == Setting.Controls)
+        {
+            ShowControls();
+        }
+        else if (setting == Setting.LoadCommander)
         {
             if (ShowLoadCommander())
             {
@@ -332,7 +338,7 @@ public sealed partial class EliteGame
     {
         switch (setting)
         {
-            case Setting.SaveCommander or Setting.LoadCommander:
+            case Setting.Controls or Setting.SaveCommander or Setting.LoadCommander:
                 return;
             case Setting.FullScreen:
                 // The window size comes and goes, so the rows below it move

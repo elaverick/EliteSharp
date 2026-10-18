@@ -40,17 +40,22 @@ public sealed partial class EliteGame
     /// only makes the low beep, and the screen is left if the same key is
     /// pressed again straight after; doing anything else in between starts
     /// again.
+    ///
+    /// If <paramref name="stickMoves"/> is false, the stick doesn't move
+    /// through the list (on the Controls screen, where it is being tried out).
     /// </summary>
     private void RunListScreen(Action<int, int> move, Func<int, bool> press, bool functionKeysLeave = true, Action? everyFrame = null,
-        Func<bool>? confirmLeaving = null)
+        Func<bool>? confirmLeaving = null, bool stickMoves = true)
     {
+        (int X, int Y) StickDirection() => stickMoves ? ReadPadStickDirection() : (0, 0);
+
         // The function key that has been pressed once, and beeped, or 0
         int leaving = 0;
 
         // Ignore whatever is held down when the screen appears (such as the
         // key that chose it) until it is released
         int lastKey = ReadKey();
-        var lastDirection = CursorDirection(lastKey) ?? ReadPadStickDirection();
+        var lastDirection = CursorDirection(lastKey) ?? StickDirection();
         int repeat = 0;
 
         while (true)
@@ -59,7 +64,7 @@ public sealed partial class EliteGame
             everyFrame?.Invoke();
             int key = ReadKey();
 
-            var direction = CursorDirection(key) ?? ReadPadStickDirection();
+            var direction = CursorDirection(key) ?? StickDirection();
             if (direction != (0, 0))
             {
                 if (direction != lastDirection)
@@ -113,7 +118,7 @@ public sealed partial class EliteGame
             // The press may have run another list (such as choosing a laser's
             // view), so don't act on anything that it left held down
             lastKey = ReadKey();
-            lastDirection = CursorDirection(lastKey) ?? ReadPadStickDirection();
+            lastDirection = CursorDirection(lastKey) ?? StickDirection();
         }
     }
 

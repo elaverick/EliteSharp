@@ -31,7 +31,10 @@ public readonly record struct HudLayout(float OriginX, float OriginY, float Scal
 /// is one instanced draw from buffers that are written once per frame. The
 /// images (the font, the dashboard and its bulbs) are in one texture that is
 /// uploaded when the renderer starts, and the colours come from a small
-/// uniform buffer of the current palette's inks.
+/// uniform buffer of the current palette's inks. A full-colour picture (see
+/// <see cref="HudPicture"/>) is drawn behind the space view's rectangles and
+/// lines, from a texture of its own that is uploaded the first time it is
+/// shown and kept until the renderer closes.
 /// </summary>
 public sealed unsafe class HudRenderer : IDisposable
 {
@@ -53,6 +56,17 @@ public sealed unsafe class HudRenderer : IDisposable
         public DynamicBuffer Lines = new(gpu, BufferUsageFlags.VertexBufferBit);
     }
 
+    /// <summary>The picture's push constants (see HudShaders.PictureCommon).</summary>
+    [StructLayout(LayoutKind.Sequential)]
+    private struct PictureConstants
+    {
+        public Vector4 Area;
+        public Vector4 Rectangle;
+    }
+
+    /// <summary>The most pictures that can be loaded at once.</summary>
+    private const int MaxPictures = 32;
+
     private static readonly int InkBufferSize = Inks.Count * Palette.PatternLength * sizeof(uint);
 
     private readonly GpuDevice _gpu;
@@ -63,6 +77,13 @@ public sealed unsafe class HudRenderer : IDisposable
     private readonly Pipeline _quadPipeline;
     private readonly Pipeline _linePipeline;
     private readonly FrameResources[] _frames;
+    private readonly DescriptorSetLayout _pictureSetLayout;
+    private readonly DescriptorPool _picturePool;
+    private readonly PipelineLayout _picturePipelineLayout;
+    private readonly Pipeline _picturePipeline;
+
+    /// <summary>The pictures that have been loaded (or null for one that couldn't be), by path.</summary>
+    private readonly Dictionary<string, (GpuTexture Texture, DescriptorSet Set)?> _pictures = [];
 
     public HudRenderer(GpuDevice gpu, RenderTargetFormats targets, int framesInFlight)
     {
@@ -154,7 +175,57 @@ public sealed unsafe class HudRenderer : IDisposable
             Depth = DepthMode.None,
         });
 
-        foreach (var module in new[] { quadVertex, lineVertex, fragment })
+        // The pictures' pipeline, which has a texture of its own for each picture
+        var pictureBinding = new DescriptorSetLayoutBinding
+        {
+            Binding = 0,
+            DescriptorType = DescriptorType.CombinedImageSampler,
+            DescriptorCount = 1,
+            StageFlags = ShaderStageFlags.FragmentBit,
+        };
+        var pictureSetInfo = new DescriptorSetLayoutCreateInfo
+        {
+            SType = StructureType.DescriptorSetLayoutCreateInfo,
+            BindingCount = 1,
+            PBindings = &pictureBinding,
+        };
+        GpuDevice.Check(vk.CreateDescriptorSetLayout(gpu.Device, in pictureSetInfo, null, out _pictureSetLayout), "vkCreateDescriptorSetLayout");
+
+        var picturePoolSize = new DescriptorPoolSize(DescriptorType.CombinedImageSampler, MaxPictures);
+        var picturePoolInfo = new DescriptorPoolCreateInfo
+        {
+            SType = StructureType.DescriptorPoolCreateInfo,
+            MaxSets = MaxPictures,
+            PoolSizeCount = 1,
+            PPoolSizes = &picturePoolSize,
+        };
+        GpuDevice.Check(vk.CreateDescriptorPool(gpu.Device, in picturePoolInfo, null, out _picturePool), "vkCreateDescriptorPool");
+
+        var picturePush = new PushConstantRange(ShaderStageFlags.VertexBit, 0, (uint)sizeof(PictureConstants));
+        var pictureSetLayout = _pictureSetLayout;
+        var pictureLayoutInfo = new PipelineLayoutCreateInfo
+        {
+            SType = StructureType.PipelineLayoutCreateInfo,
+            SetLayoutCount = 1,
+            PSetLayouts = &pictureSetLayout,
+            PushConstantRangeCount = 1,
+            PPushConstantRanges = &picturePush,
+        };
+        GpuDevice.Check(vk.CreatePipelineLayout(gpu.Device, in pictureLayoutInfo, null, out _picturePipelineLayout), "vkCreatePipelineLayout");
+
+        var pictureVertex = gpu.CreateShaderModule(ShaderCompiler.Compile(HudShaders.PictureVertex, ShaderKind.VertexShader, "hud-picture.vert"));
+        var pictureFragment = gpu.CreateShaderModule(ShaderCompiler.Compile(HudShaders.PictureFragment, ShaderKind.FragmentShader, "hud-picture.frag"));
+        _picturePipeline = PipelineFactory.Create(gpu, targets, new PipelineDescription
+        {
+            VertexShader = pictureVertex,
+            FragmentShader = pictureFragment,
+            Topology = PrimitiveTopology.TriangleList,
+            Layout = _picturePipelineLayout,
+            Depth = DepthMode.None,
+            AlphaBlend = true,
+        });
+
+        foreach (var module in new[] { quadVertex, lineVertex, fragment, pictureVertex, pictureFragment })
         {
             vk.DestroyShaderModule(gpu.Device, module, null);
         }
@@ -246,8 +317,14 @@ public sealed unsafe class HudRenderer : IDisposable
             PixelSize = layout.Scale,
         };
 
-        // The space view, clipped to its rows
+        // The space view, clipped to its rows, with its picture behind it
         SetArea(commandBuffer, area, SpaceView(area, layout), constants);
+        if (frame.Picture is { } picture)
+        {
+            DrawPicture(commandBuffer, picture);
+            vk.CmdBindDescriptorSets(commandBuffer, PipelineBindPoint.Graphics, _pipelineLayout, 0, 1, in descriptorSet, 0, null);
+        }
+
         DrawQuads(commandBuffer, resources, 0, spaceQuads);
         DrawLines(commandBuffer, resources, 0, spaceLines);
 
@@ -291,6 +368,79 @@ public sealed unsafe class HudRenderer : IDisposable
         vk.CmdPushConstants(commandBuffer, _pipelineLayout, ShaderStageFlags.VertexBit | ShaderStageFlags.FragmentBit, 0, (uint)sizeof(LayoutConstants), &constants);
     }
 
+    /// <summary>Draw a picture (in the area that has been set), loading it if it hasn't been shown before.</summary>
+    private void DrawPicture(CommandBuffer commandBuffer, HudPicture picture)
+    {
+        if (LoadPicture(picture.Path) is not var (_, set))
+        {
+            return;
+        }
+
+        var vk = _gpu.Vk;
+        var constants = new PictureConstants
+        {
+            Area = new Vector4(Hud.Width, Hud.Height, 0, 0),
+            Rectangle = new Vector4(picture.X, picture.Y, picture.Width, picture.Height),
+        };
+        vk.CmdBindPipeline(commandBuffer, PipelineBindPoint.Graphics, _picturePipeline);
+        vk.CmdBindDescriptorSets(commandBuffer, PipelineBindPoint.Graphics, _picturePipelineLayout, 0, 1, in set, 0, null);
+        vk.CmdPushConstants(commandBuffer, _picturePipelineLayout, ShaderStageFlags.VertexBit, 0, (uint)sizeof(PictureConstants), &constants);
+        vk.CmdDraw(commandBuffer, 6, 1, 0, 0);
+    }
+
+    /// <summary>A picture's texture and descriptor set, uploading it the first time, or null if it can't be loaded.</summary>
+    private (GpuTexture Texture, DescriptorSet Set)? LoadPicture(string path)
+    {
+        if (_pictures.TryGetValue(path, out var loaded))
+        {
+            return loaded;
+        }
+
+        _pictures[path] = null;
+        if (_pictures.Count > MaxPictures)
+        {
+            return null;
+        }
+
+        PictureImage image;
+        try
+        {
+            image = PictureImage.Load(path);
+        }
+        catch (Exception e) when (e is IOException or InvalidDataException or UnauthorizedAccessException)
+        {
+            Console.Error.WriteLine($"The picture {path} can't be shown: {e.Message}");
+            return null;
+        }
+
+        var vk = _gpu.Vk;
+        var texture = _gpu.CreateColourTexture(image.Width, image.Height, image.Levels);
+        var setLayout = _pictureSetLayout;
+        var allocInfo = new DescriptorSetAllocateInfo
+        {
+            SType = StructureType.DescriptorSetAllocateInfo,
+            DescriptorPool = _picturePool,
+            DescriptorSetCount = 1,
+            PSetLayouts = &setLayout,
+        };
+        GpuDevice.Check(vk.AllocateDescriptorSets(_gpu.Device, in allocInfo, out var set), "vkAllocateDescriptorSets");
+
+        var imageInfo = new DescriptorImageInfo(texture.Sampler, texture.View, ImageLayout.ShaderReadOnlyOptimal);
+        var write = new WriteDescriptorSet
+        {
+            SType = StructureType.WriteDescriptorSet,
+            DstSet = set,
+            DstBinding = 0,
+            DescriptorCount = 1,
+            DescriptorType = DescriptorType.CombinedImageSampler,
+            PImageInfo = &imageInfo,
+        };
+        vk.UpdateDescriptorSets(_gpu.Device, 1, in write, 0, null);
+
+        _pictures[path] = (texture, set);
+        return (texture, set);
+    }
+
     private void DrawQuads(CommandBuffer commandBuffer, FrameResources resources, int first, int count)
     {
         if (count == 0)
@@ -331,6 +481,15 @@ public sealed unsafe class HudRenderer : IDisposable
             frame.Lines.Dispose();
         }
 
+        foreach (var picture in _pictures.Values)
+        {
+            picture?.Texture.Dispose();
+        }
+
+        vk.DestroyPipeline(_gpu.Device, _picturePipeline, null);
+        vk.DestroyPipelineLayout(_gpu.Device, _picturePipelineLayout, null);
+        vk.DestroyDescriptorPool(_gpu.Device, _picturePool, null);
+        vk.DestroyDescriptorSetLayout(_gpu.Device, _pictureSetLayout, null);
         vk.DestroyPipeline(_gpu.Device, _quadPipeline, null);
         vk.DestroyPipeline(_gpu.Device, _linePipeline, null);
         vk.DestroyPipelineLayout(_gpu.Device, _pipelineLayout, null);

@@ -126,4 +126,49 @@ internal static class HudShaders
             outColour = vec4(colour.rgb, 1.0);
         }
         """;
+
+    /// <summary>The declarations shared by the picture's shaders.</summary>
+    private const string PictureCommon = """
+        #version 450
+
+        // The picture, whose colours are premultiplied by their alpha
+        layout(set = 0, binding = 0) uniform sampler2D picture;
+
+        layout(push_constant) uniform Placement
+        {
+            vec4 area;       // the size of the area being drawn into, in layout units (and two unused)
+            vec4 rectangle;  // where the picture goes: x, y, width and height
+        } placement;
+        """;
+
+    /// <summary>The vertex shader for a picture, which is one rectangle (two triangles, six vertices).</summary>
+    public static readonly string PictureVertex = PictureCommon + """
+
+        layout(location = 0) out vec2 outTexel;
+
+        const vec2 corners[6] = vec2[](
+            vec2(0.0, 0.0), vec2(1.0, 0.0), vec2(0.0, 1.0),
+            vec2(1.0, 0.0), vec2(1.0, 1.0), vec2(0.0, 1.0));
+
+        void main()
+        {
+            vec2 corner = corners[gl_VertexIndex];
+            vec2 position = placement.rectangle.xy + corner * placement.rectangle.zw;
+            gl_Position = vec4(position / placement.area.xy * 2.0 - 1.0, 0.0, 1.0);
+            outTexel = corner;
+        }
+        """;
+
+    /// <summary>The fragment shader for a picture, which is blended over what is behind it.</summary>
+    public static readonly string PictureFragment = PictureCommon + """
+
+        layout(location = 0) in vec2 inTexel;
+
+        layout(location = 0) out vec4 outColour;
+
+        void main()
+        {
+            outColour = texture(picture, inTexel);
+        }
+        """;
 }

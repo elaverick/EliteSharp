@@ -23,6 +23,7 @@ GameStrings strings;
 DescriptionGrammar descriptions;
 TradingData trading;
 SoundSamples[]? soundEffects;
+ControllerProfiles controllerProfiles;
 try
 {
     if (options.GameFolder is { } gameFolder)
@@ -42,6 +43,7 @@ try
     trading = TradingData.Load();
     _ = HudAtlas.Texels;
     soundEffects = options.Sound ? SoundEffects.Load() : null;
+    controllerProfiles = ControllerProfiles.Load();
 }
 catch (Exception e) when (e is InvalidDataException or IOException or MissionLoadException or ArgumentException { ParamName: "language" })
 {
@@ -56,10 +58,11 @@ var hud = new Hud(exchange);
 var keyboard = new BbcKeyboard();
 using var sound = soundEffects != null ? SoundEngine.TryCreate(soundEffects) : null;
 sound?.LoadMusic(Music.Load);
-// The controller is always read, so it can be switched on from the Settings
-// screen; while it's switched off, it is ignored
-using var gamepad = Gamepad.TryCreate(keyboard);
-var game = new EliteGame(hud, keyboard, sound, options, gamepad, missions, strings, descriptions, trading, RealTimeClock.Instance);
+// The controllers are always read, so they can be switched on from the
+// Settings screen; while they're switched off, they are ignored
+var controllerBindings = ControllerBindingStore.Load(Path.Combine(options.DataFolder, ControllerBindingStore.FileName));
+using var controllers = Controllers.TryCreate(keyboard, controllerProfiles, controllerBindings);
+var game = new EliteGame(hud, keyboard, sound, options, controllers, missions, strings, descriptions, trading, RealTimeClock.Instance);
 
 // The game runs at its own fixed rate on its own thread, and the window draws
 // as often as the display allows, moving the 3D world smoothly between the
@@ -119,9 +122,9 @@ void ApplySettings()
     }
 
     interpolator.Enabled = options.Interpolate;
-    if (gamepad != null)
+    if (controllers != null)
     {
-        gamepad.Enabled = options.Gamepad;
+        controllers.Enabled = options.Gamepad;
     }
 }
 
@@ -185,7 +188,7 @@ window.Load += () =>
             }
         }
 
-        new ScriptRunner(args[scriptIndex + 1], keyboard, gamepad, path => renderer?.RequestCapture(path), () => closeRequested = true, Command).Start();
+        new ScriptRunner(args[scriptIndex + 1], keyboard, controllers, path => renderer?.RequestCapture(path), () => closeRequested = true, Command).Start();
     }
 };
 
@@ -222,7 +225,7 @@ window.Resize += size =>
 bool scripted = args.Any(a => a.Equals("--script", StringComparison.OrdinalIgnoreCase));
 window.FocusChanged += focused =>
 {
-    gamepad?.SetFocus(focused);
+    controllers?.SetFocus(focused);
     if (!scripted)
     {
         keyboard.SetFocus(focused);

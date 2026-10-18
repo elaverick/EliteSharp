@@ -154,6 +154,113 @@ public sealed unsafe class GpuDevice(Vk vk, PhysicalDevice physicalDevice, Devic
         return new GpuTexture(this, image, memory, view, sampler);
     }
 
+    /// <summary>
+    /// Create a texture of RGBA colours with mipmaps (each level's texels row
+    /// by row, starting with the full-size image, and each level half the
+    /// size of the one before), by copying it through a staging buffer, ready
+    /// for shaders to sample with smooth filtering.
+    /// </summary>
+    public GpuTexture CreateColourTexture(int width, int height, IReadOnlyList<byte[]> levels)
+    {
+        const Format format = Format.R8G8B8A8Unorm;
+        var imageInfo = new ImageCreateInfo
+        {
+            SType = StructureType.ImageCreateInfo,
+            ImageType = ImageType.Type2D,
+            Format = format,
+            Extent = new Extent3D((uint)width, (uint)height, 1),
+            MipLevels = (uint)levels.Count,
+            ArrayLayers = 1,
+            Samples = SampleCountFlags.Count1Bit,
+            Tiling = ImageTiling.Optimal,
+            Usage = ImageUsageFlags.SampledBit | ImageUsageFlags.TransferDstBit,
+            SharingMode = SharingMode.Exclusive,
+            InitialLayout = ImageLayout.Undefined,
+        };
+        Check(Vk.CreateImage(Device, in imageInfo, null, out var image), "vkCreateImage");
+
+        Vk.GetImageMemoryRequirements(Device, image, out var requirements);
+        var memoryInfo = new MemoryAllocateInfo
+        {
+            SType = StructureType.MemoryAllocateInfo,
+            AllocationSize = requirements.Size,
+            MemoryTypeIndex = FindMemoryType(requirements.MemoryTypeBits, MemoryPropertyFlags.DeviceLocalBit),
+        };
+        Check(Vk.AllocateMemory(Device, in memoryInfo, null, out var memory), "vkAllocateMemory");
+        Check(Vk.BindImageMemory(Device, image, memory, 0), "vkBindImageMemory");
+
+        using var staging = CreateHostBuffer((ulong)levels.Sum(l => (long)l.Length), BufferUsageFlags.TransferSrcBit);
+        var offsets = new ulong[levels.Count];
+        ulong offset = 0;
+        for (int level = 0; level < levels.Count; level++)
+        {
+            offsets[level] = offset;
+            levels[level].CopyTo(new Span<byte>((byte*)staging.Mapped + offset, levels[level].Length));
+            offset += (ulong)levels[level].Length;
+        }
+
+        var range = new ImageSubresourceRange(ImageAspectFlags.ColorBit, 0, (uint)levels.Count, 0, 1);
+        RunOnce(commandBuffer =>
+        {
+            void Transition(ImageLayout from, ImageLayout to, AccessFlags srcAccess, AccessFlags dstAccess, PipelineStageFlags srcStage, PipelineStageFlags dstStage)
+            {
+                var barrier = new ImageMemoryBarrier
+                {
+                    SType = StructureType.ImageMemoryBarrier,
+                    OldLayout = from,
+                    NewLayout = to,
+                    SrcAccessMask = srcAccess,
+                    DstAccessMask = dstAccess,
+                    SrcQueueFamilyIndex = Vk.QueueFamilyIgnored,
+                    DstQueueFamilyIndex = Vk.QueueFamilyIgnored,
+                    Image = image,
+                    SubresourceRange = range,
+                };
+                Vk.CmdPipelineBarrier(commandBuffer, srcStage, dstStage, 0, 0, null, 0, null, 1, in barrier);
+            }
+
+            Transition(ImageLayout.Undefined, ImageLayout.TransferDstOptimal, 0, AccessFlags.TransferWriteBit,
+                PipelineStageFlags.TopOfPipeBit, PipelineStageFlags.TransferBit);
+            for (int level = 0; level < levels.Count; level++)
+            {
+                var region = new BufferImageCopy
+                {
+                    BufferOffset = offsets[level],
+                    ImageSubresource = new ImageSubresourceLayers(ImageAspectFlags.ColorBit, (uint)level, 0, 1),
+                    ImageExtent = new Extent3D((uint)Math.Max(1, width >> level), (uint)Math.Max(1, height >> level), 1),
+                };
+                Vk.CmdCopyBufferToImage(commandBuffer, staging.Buffer, image, ImageLayout.TransferDstOptimal, 1, in region);
+            }
+
+            Transition(ImageLayout.TransferDstOptimal, ImageLayout.ShaderReadOnlyOptimal, AccessFlags.TransferWriteBit, AccessFlags.ShaderReadBit,
+                PipelineStageFlags.TransferBit, PipelineStageFlags.FragmentShaderBit);
+        });
+
+        var viewInfo = new ImageViewCreateInfo
+        {
+            SType = StructureType.ImageViewCreateInfo,
+            Image = image,
+            ViewType = ImageViewType.Type2D,
+            Format = format,
+            SubresourceRange = range,
+        };
+        Check(Vk.CreateImageView(Device, in viewInfo, null, out var view), "vkCreateImageView");
+
+        var samplerInfo = new SamplerCreateInfo
+        {
+            SType = StructureType.SamplerCreateInfo,
+            MagFilter = Filter.Linear,
+            MinFilter = Filter.Linear,
+            MipmapMode = SamplerMipmapMode.Linear,
+            AddressModeU = SamplerAddressMode.ClampToEdge,
+            AddressModeV = SamplerAddressMode.ClampToEdge,
+            AddressModeW = SamplerAddressMode.ClampToEdge,
+            MaxLod = levels.Count,
+        };
+        Check(Vk.CreateSampler(Device, in samplerInfo, null, out var sampler), "vkCreateSampler");
+        return new GpuTexture(this, image, memory, view, sampler);
+    }
+
     private GpuBuffer CreateBuffer(ulong size, BufferUsageFlags usage, MemoryPropertyFlags properties, bool map)
     {
         var bufferInfo = new BufferCreateInfo

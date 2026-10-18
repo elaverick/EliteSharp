@@ -80,7 +80,7 @@ public sealed partial class EliteGame
         BbcKeyboard keyboard,
         SoundEngine? sound,
         GameOptions options,
-        Gamepad? gamepad = null,
+        Controllers? controllers = null,
         MissionCatalogue? missions = null,
         GameStrings? strings = null,
         DescriptionGrammar? descriptions = null,
@@ -95,7 +95,7 @@ public sealed partial class EliteGame
         _descriptions = descriptions ?? DescriptionGrammar.Load(options.Language);
         _trading = trading ?? TradingData.Load();
         CheckTradingNames(_trading);
-        _gamepad = gamepad;
+        _controllers = controllers;
         _hud = hud;
         _keyboard = keyboard;
         _sound = sound;

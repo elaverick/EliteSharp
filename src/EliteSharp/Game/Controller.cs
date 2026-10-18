@@ -3,39 +3,47 @@ using EliteSharp.Input;
 namespace EliteSharp.Game;
 
 /// <summary>
-/// The game controller. The buttons are turned into key presses by the
-/// <see cref="GamepadMapper"/>, so here we only deal with the analogue inputs.
+/// The game controllers. The buttons are turned into key presses by the
+/// <see cref="ControllerMapper"/>, so here we only deal with the analogue
+/// inputs: the axes bound to roll, pitch, the throttle, the speed triggers and
+/// the chart's cross-hairs (see <see cref="FlightAxes"/>).
 ///
 /// The BBC Master version supports an analogue joystick: when it is configured
 /// (JSTK), DK15 in DOKEY copies the high bytes of the joystick's ADC channels
 /// straight into JSTX and JSTY, the roll and pitch rates that the keyboard
-/// otherwise nudges up and down in steps. The left stick is fed through
-/// exactly that code, so it flies just like the original's analogue joystick
+/// otherwise nudges up and down in steps. The roll and pitch axes (a
+/// gamepad's left stick, or a HOTAS's or yoke's stick) are fed through exactly
+/// that code, so they fly just like the original's analogue joystick
 /// (including the Y-channel and reverse-both options, and the key damping in
-/// the main loop). To let the keyboard and controller be used together, the
+/// the main loop). To let the keyboard and controllers be used together, the
 /// stick only takes over while it is deflected; when it springs back to the
 /// centre it sets the rates back to the centre (as a sprung joystick would)
 /// and hands control back to the keys. Selecting joystick mode with "K" while
 /// paused makes the stick take over permanently, as in the original.
 ///
-/// The speed controls are digital: each iteration of the main loop, holding
-/// Space or "?" changes the speed by one. The triggers drive these keys with
-/// pulse-width modulation, so the speed changes at a rate proportional to how
-/// far the trigger is pressed (a fully pressed trigger is the same as holding
-/// the key down).
+/// The Master also supports the Bitstik, whose rotation sets the speed
+/// directly (BS2 in the main loop), and a throttle lever is fed through that
+/// code: its position is the speed, from 0 when it is fully back to 40 when it
+/// is fully forward, and the speed keys only work while it is at 0.
+///
+/// Otherwise, the speed controls are digital: each iteration of the main
+/// loop, holding Space or "?" changes the speed by one. The speed triggers
+/// drive these keys with pulse-width modulation, so the speed changes at a
+/// rate proportional to how far the trigger is pressed (a fully pressed
+/// trigger is the same as holding the key down).
 /// </summary>
 public sealed partial class EliteGame
 {
-    /// <summary>The game controller, or null if controllers aren't being used.</summary>
-    private readonly Gamepad? _gamepad;
+    /// <summary>The game controllers, or null if controllers aren't being used.</summary>
+    private readonly Controllers? _controllers;
 
     /// <summary>Overrides the controller context (for the title screens and the pause loop).</summary>
     private PadContext? _padContextOverride;
 
-    /// <summary>Whether the left stick was controlling the roll and pitch last time round.</summary>
+    /// <summary>Whether the stick was controlling the roll and pitch last time round.</summary>
     private bool _padFlying;
 
-    /// <summary>The pulse-width modulation accumulators for the triggers.</summary>
+    /// <summary>The pulse-width modulation accumulators for the speed triggers.</summary>
     private float _accelerateCycle, _decelerateCycle;
 
     /// <summary>
@@ -48,18 +56,18 @@ public sealed partial class EliteGame
     private int JoystickReversed => ToggleOptions[5];
 
     /// <summary>Whether a controller is connected.</summary>
-    private bool PadConnected => _gamepad?.Connected == true;
+    private bool PadConnected => _controllers?.Connected == true;
 
     /// <summary>Tell the controller mapper what the game is doing.</summary>
     private void UpdatePadContext()
     {
-        if (_gamepad == null)
+        if (_controllers == null)
         {
             return;
         }
 
-        _gamepad.Mapper.Context = _padContextOverride ?? (_viewType == 0 ? PadContext.SpaceView : PadContext.Screen);
-        _gamepad.Mapper.DockingComputerOn = _autoDocking != 0;
+        _controllers.Mapper.Context = _padContextOverride ?? (_viewType == 0 ? PadContext.SpaceView : PadContext.Screen);
+        _controllers.Mapper.DockingComputerOn = _autoDocking != 0;
     }
 
     /// <summary>
@@ -81,8 +89,25 @@ public sealed partial class EliteGame
     private int StickPitchRate(float y) => (AdcY(y) ^ 0xFF ^ JoystickReversed ^ JoystickYStandard) & 0xFF;
 
     /// <summary>
-    /// Apply the controller's triggers to the speed keys (KY2 is Space, speed
-    /// up, and KY1 is "?", slow down).
+    /// The throttle as the high byte of the Bitstik's rotation channel
+    /// (JOPOS+2), scaled so that the throttle's full travel covers the speeds
+    /// from 0 to 40 (which the main loop gets by dividing it by 4), or null if
+    /// no throttle is bound. The throttle is left out while the docking
+    /// computer is on, as it sets the speed itself.
+    /// </summary>
+    private int? ReadPadThrottle()
+    {
+        if (!PadConnected || _autoDocking != 0 || _controllers!.Axes.Throttle is not { } throttle)
+        {
+            return null;
+        }
+
+        return Math.Clamp((int)MathF.Round(throttle * 160), 0, 255);
+    }
+
+    /// <summary>
+    /// Apply the controllers' speed triggers to the speed keys (KY2 is Space,
+    /// speed up, and KY1 is "?", slow down).
     /// </summary>
     private void ApplyPadTriggers()
     {
@@ -91,13 +116,13 @@ public sealed partial class EliteGame
             return;
         }
 
-        var axes = _gamepad!.Axes;
-        if (Pulse(ref _accelerateCycle, axes.RightTrigger))
+        var axes = _controllers!.Axes;
+        if (Pulse(ref _accelerateCycle, axes.SpeedUp))
         {
             _keySpeedUp = true;
         }
 
-        if (Pulse(ref _decelerateCycle, axes.LeftTrigger))
+        if (Pulse(ref _decelerateCycle, axes.SlowDown))
         {
             _keySlowDown = true;
         }
@@ -152,11 +177,11 @@ public sealed partial class EliteGame
             return false;
         }
 
-        var axes = _gamepad!.Axes;
-        if (JoystickEnabled != 0 || axes.LeftStickActive)
+        var axes = _controllers!.Axes;
+        if (JoystickEnabled != 0 || axes.StickActive)
         {
-            _rollRate = StickRollRate(axes.LeftX);
-            _pitchRate = StickPitchRate(axes.LeftY);
+            _rollRate = StickRollRate(axes.Roll);
+            _pitchRate = StickPitchRate(axes.Pitch);
             _padFlying = true;
             return true;
         }
@@ -175,8 +200,8 @@ public sealed partial class EliteGame
 
     /// <summary>
     /// TT17 with the joystick: move the chart cross-hairs with the stick,
-    /// returning false if no stick is being used. Either stick can be used
-    /// (the right stick takes priority).
+    /// returning false if no stick is being used. The cross-hairs' axes (a
+    /// gamepad's right stick) take priority over the roll and pitch axes.
     /// </summary>
     private bool ReadPadCursor(out int deltaX, out int deltaY)
     {
@@ -187,15 +212,15 @@ public sealed partial class EliteGame
             return false;
         }
 
-        var axes = _gamepad!.Axes;
+        var axes = _controllers!.Axes;
         float stickX, stickY;
-        if (axes.RightStickActive)
+        if (axes.ChartActive)
         {
-            (stickX, stickY) = (axes.RightX, axes.RightY);
+            (stickX, stickY) = (axes.ChartX, axes.ChartY);
         }
-        else if (axes.LeftStickActive || JoystickEnabled != 0)
+        else if (axes.StickActive || JoystickEnabled != 0)
         {
-            (stickX, stickY) = (axes.LeftX, axes.LeftY);
+            (stickX, stickY) = (axes.Roll, axes.Pitch);
         }
         else
         {
@@ -207,12 +232,13 @@ public sealed partial class EliteGame
         return true;
     }
 
-    /// <summary>How far the left stick must be pushed to move through a list (such as on the trading screens).</summary>
+    /// <summary>How far the stick must be pushed to move through a list (such as on the trading screens).</summary>
     private const float PadListThreshold = 0.4f;
 
     /// <summary>
-    /// The direction the left stick is pushed in, for moving through lists:
-    /// -1, 0 or +1 along whichever axis it is pushed further (with +y down).
+    /// The direction the stick (the roll and pitch axes) is pushed in, for
+    /// moving through lists: -1, 0 or +1 along whichever axis it is pushed
+    /// further (with +y down).
     /// </summary>
     private (int X, int Y) ReadPadStickDirection()
     {
@@ -221,8 +247,8 @@ public sealed partial class EliteGame
             return (0, 0);
         }
 
-        var axes = _gamepad!.Axes;
-        float x = axes.LeftX, y = axes.LeftY;
+        var axes = _controllers!.Axes;
+        float x = axes.Roll, y = axes.Pitch;
         if (MathF.Max(MathF.Abs(x), MathF.Abs(y)) < PadListThreshold)
         {
             return (0, 0);

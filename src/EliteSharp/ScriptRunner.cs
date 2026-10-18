@@ -12,11 +12,11 @@ namespace EliteSharp;
 ///   &lt;time&gt; key &lt;Key&gt; [hold]   press a key (a Silk.NET key name), optionally holding it
 ///   &lt;time&gt; shot &lt;file.png&gt;    save a screenshot
 ///   &lt;time&gt; cmd &lt;command&gt;    run a test command (see EliteGame.DebugCommand)
-///   &lt;time&gt; pad &lt;Button&gt; [hold]  press a controller button (a PadButton name)
-///   &lt;time&gt; axis &lt;name&gt; &lt;value&gt;  set a controller axis (lx, ly, rx, ry, lt, rt)
+///   &lt;time&gt; pad &lt;Button&gt; [hold]  press a gamepad button (a PadButton name)
+///   &lt;time&gt; axis &lt;name&gt; &lt;value&gt;  set a gamepad axis (lx, ly, rx, ry, lt, rt)
 ///   &lt;time&gt; quit               close the game
 /// </summary>
-public sealed class ScriptRunner(string path, BbcKeyboard keyboard, Gamepad? gamepad, Action<string> capture, Action quit, Action<string> command)
+public sealed class ScriptRunner(string path, BbcKeyboard keyboard, Controllers? gamepad, Action<string> capture, Action quit, Action<string> command)
 {
     public void Start()
     {

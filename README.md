@@ -22,8 +22,8 @@ drawn by your graphics card. You still see Elite's classic wireframes, but with
 true perspective, planets that hide what's behind them, smooth motion and a
 view that fills a widescreen display. The PC also allows some quality-of-life
 improvements the Master had no room for: you can play in a window or full
-screen at any size, fly with an Xbox controller, keep as many labelled saves as
-you like, and change settings from a proper menu.
+screen at any size, fly with an Xbox controller, a HOTAS or a flight yoke, keep
+as many labelled saves as you like, and change settings from a proper menu.
 
 EliteSharp also draws inspiration from the other 8-bit versions of Elite, such
 as those for the Commodore 64 and the NES.
@@ -35,7 +35,8 @@ as those for the Commodore 64 and the NES.
   from Microsoft (if it isn't installed, the game offers to take you there)
 - A graphics card with Vulkan 1.3 support (almost any card from the last ten years,
   with up-to-date drivers)
-- Optionally, an Xbox controller (or any controller Windows recognises)
+- Optionally, an Xbox controller (or any controller Windows recognises), a HOTAS
+  such as the Saitek X52, or a flight yoke
 
 ## Getting the game
 
@@ -192,9 +193,11 @@ Press **Alt + Enter** at any time to switch between a window and full screen.
 Press **F12** at any time (or **RB** on the controller while paused) for the
 Settings screen, where you can switch between a window and full screen, change
 the window's size and the screen's shape, turn vsync, smooth motion and the
-controller on and off, and set the volume of the sound effects and music. Move
+controllers on and off, and set the volume of the sound effects and music. Move
 up and down with the cursor keys, change the highlighted setting with left and
 right, and press **Escape** (or **B**, or **F12** again) to carry on playing.
+**Controls**, near the bottom, opens the Controls screen, where you can change
+what your controller's buttons do (see below).
 
 Your settings are saved in `settings.yml` in the data folder
 (`%APPDATA%\EliteSharp`, unless you use `--data`), along with the window's
@@ -226,9 +229,14 @@ Commander screen, a whole commander and all their saves. It asks first.
 
 ## Playing with a controller
 
-Plug in an Xbox controller (or any controller Windows recognises) and it just
-works, even while the game is running. You can use the keyboard and controller at
-the same time.
+Plug in an Xbox controller (or any controller Windows recognises), a HOTAS or a
+flight yoke and it just works, even while the game is running. You can use the
+keyboard and any number of controllers at the same time.
+
+A PlayStation 4 or 5 controller works the same way, with its own buttons in
+place of the Xbox controller's: Cross for A, Circle for B, Square for X,
+Triangle for Y, L1 and R1 for LB and RB, L2 and R2 for the triggers, Create (or
+Share) for Back and Options for Start.
 
 The **left stick** flies the ship, just like the analogue joystick you could plug
 into a BBC Master: push left and right to roll, and pull back to climb. The
@@ -250,6 +258,62 @@ chooses, **X** deletes and **B** goes back.
 
 You still need the keyboard for typing, such as naming a new commander or
 changing a save's label (**A** takes the label as it is).
+
+### HOTAS and flight yokes
+
+The game recognises the Saitek (or Logitech) **X52** and **X52 Pro** and the
+Saitek **Pro Flight Yoke**, and knows their buttons by name. The stick (or the
+yoke, turned and pushed) flies the ship just as the left stick does, and the
+**throttle** (on the yoke, the left-hand lever) sets your speed, the way the
+Bitstik's twist does on a BBC Master: wherever it is, that's your speed, from
+stopped with it fully back to full speed with it fully forward. The speed keys
+only work while it's fully back, and the docking computer takes over the speed
+while it's on. The other axes, such as the X52's twist, rotaries and slider, do
+nothing until you give them something to do. Elite's ships only roll and pitch,
+so no axis makes the ship yaw or slide.
+
+On the X52, the trigger fires the laser, the hat on the top of the stick changes
+the view, and holding the pinkie switch gives the buttons their second
+functions. On the yoke, the button on the back of the left handle fires, and the
+hat changes the view. The Controls screen shows the rest.
+
+Thunderstick Studios' **GRS Star Wars Flight Yoke** works too, in its gamepad
+mode. It has no throttle, so the left handle's thumb button speeds up and its
+trigger slows down; the right trigger fires the laser and the right thumb button
+launches a missile. Holding function button 1 gives the second functions
+(targeting and unarming missiles, E.C.M., the in-system jump and, with function
+button 2, the docking computer), and function button 2 pauses.
+
+Any joystick the game doesn't recognise shows its USB ID on the Controls
+screen, which is what a profile needs to recognise it (see Mods, below).
+
+Any other joystick works too, with its buttons, axes and hats shown by number:
+it rolls and pitches with its first two axes, and you can give it a throttle on
+the Controls screen.
+
+### The Controls screen
+
+The **Controls** screen, from the Settings screen, shows your controller (by the
+name it gives itself, such as "PS5 Controller") as an Elite-style wireframe,
+with the list of what its controls do below it. The top row of the
+list picks the controller (if you have more than one plugged in), and the next
+row picks the page: the **Axes**, or the buttons **In Flight**, on the
+**Other Screens**, as **Second Functions** (while the button at the top of that
+page is held), while **Paused**, and while **Typing**. Left and right change the
+page from anywhere in the list.
+
+Whatever you press on the controller lights up green on the picture, and its
+name, and what it does on the page, appear under the list, so you can see which
+control is which. The highlighted row's controls are marked in magenta.
+
+To change a row, highlight it and press **Return** (or **A**), then press the
+button or hat you want for it, or on the Axes page, move the axis the way the
+screen asks (which tells the game which way round it works). **Escape** cancels,
+and **Delete** clears the row. **Reset To Defaults**, at the end of the list,
+puts everything back. Your changes are saved in `controllers.yml` in the data
+folder. Each model of controller has its own bindings, and so does each kind
+of gamepad (Xbox, PlayStation 4 and PlayStation 5); any other gamepad shares
+the Xbox controller's.
 
 ## Options
 
@@ -289,6 +353,15 @@ anything it doesn't have comes from the `Assets` folder:
   the game's (so an empty folder means no missions), and if it doesn't have
   `common.yml`, the game's is used. Without a `Missions` folder, the game's
   missions are used.
+* `Controllers`: each controller profile the mod doesn't have (such as
+  `x52.yml`) is the game's own, and the mod can add profiles for other
+  controllers. A profile names a controller's buttons, axes and hats, says
+  where they are on its picture and what they do by default, and recognises
+  the controller by its USB IDs (the game's own profiles are examples). The
+  game's pictures are wireframe models drawn by `tools\draw-controllers.py`,
+  which also writes where each control is into the profiles. A gamepad
+  profile says which kinds of gamepad it is for (as SDL names them, such as
+  `ps5`).
 
 Your saved commanders live in the `Commanders` folder in `%APPDATA%\EliteSharp`
 (or the folder given with `--data`), one small file per save.

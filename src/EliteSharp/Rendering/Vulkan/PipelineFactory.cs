@@ -47,13 +47,21 @@ public sealed class PipelineDescription
     /// polygons away from the camera.
     /// </summary>
     public float DepthBiasSlope { get; init; }
+
+    /// <summary>
+    /// Whether to blend the fragments over what is already drawn by their
+    /// alpha, which is premultiplied (for the HUD's pictures, whose edges are
+    /// smoothed).
+    /// </summary>
+    public bool AlphaBlend { get; init; }
 }
 
 /// <summary>
 /// Creates the graphics pipelines, for dynamic rendering into a colour image
 /// and a depth buffer. Everything the renderers draw uses dynamic viewports,
 /// scissors and line widths, and no blending (transparent pixels are discarded
-/// instead). A pipeline with no fragment shader writes only depth.
+/// instead), apart from the HUD's pictures. A pipeline with no fragment shader
+/// writes only depth.
 /// </summary>
 public static unsafe class PipelineFactory
 {
@@ -147,7 +155,13 @@ public static unsafe class PipelineFactory
                     ColorWriteMask = description.FragmentShader == null
                         ? 0
                         : ColorComponentFlags.RBit | ColorComponentFlags.GBit | ColorComponentFlags.BBit | ColorComponentFlags.ABit,
-                    BlendEnable = false,
+                    BlendEnable = description.AlphaBlend,
+                    SrcColorBlendFactor = BlendFactor.One,
+                    DstColorBlendFactor = BlendFactor.OneMinusSrcAlpha,
+                    ColorBlendOp = BlendOp.Add,
+                    SrcAlphaBlendFactor = BlendFactor.One,
+                    DstAlphaBlendFactor = BlendFactor.OneMinusSrcAlpha,
+                    AlphaBlendOp = BlendOp.Add,
                 };
 
                 var colourBlend = new PipelineColorBlendStateCreateInfo

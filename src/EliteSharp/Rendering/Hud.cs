@@ -27,6 +27,9 @@ public enum HudGroup
 
     /// <summary>The energy bomb's lightning bolt.</summary>
     BombBolt,
+
+    /// <summary>The marks on the controller's picture on the Controls screen.</summary>
+    ControlMarkers,
 }
 
 /// <summary>
@@ -137,6 +140,9 @@ public sealed class Hud
     /// <summary>Whether to leave the 3D world out of the frames (while a screen is shown over it).</summary>
     public bool WorldHidden { get; set; }
 
+    /// <summary>The full-colour picture in the space view, if there is one (it goes when the space view is cleared).</summary>
+    public HudPicture? Picture { get; set; }
+
     /// <summary>What's on the space view, saved by <see cref="SaveScreen"/>.</summary>
     public sealed class SavedScreen
     {
@@ -150,6 +156,7 @@ public sealed class Hud
         internal bool Border { get; init; }
         internal SpacePalette Palette { get; init; }
         internal bool WorldHidden { get; init; }
+        internal HudPicture? Picture { get; init; }
     }
 
     /// <summary>
@@ -168,6 +175,7 @@ public sealed class Hud
         Border = Border,
         Palette = Palette,
         WorldHidden = WorldHidden,
+        Picture = Picture,
     };
 
     /// <summary>Put back what was on the space view when it was saved.</summary>
@@ -192,14 +200,16 @@ public sealed class Hud
         Border = saved.Border;
         Palette = saved.Palette;
         WorldHidden = saved.WorldHidden;
+        Picture = saved.Picture;
     }
 
     /// <summary>Called when building each frame, to copy the 3D world into it.</summary>
     public Action<SceneFrame>? CopyWorld { get; set; }
 
-    /// <summary>Clear the space view: all its text, lines and rectangles, and the border.</summary>
+    /// <summary>Clear the space view: all its text, lines, rectangles and picture, and the border.</summary>
     public void ClearSpaceView()
     {
+        Picture = null;
         _text.Clear();
         _lines.Clear();
         _rects.Clear();
@@ -448,6 +458,7 @@ public sealed class Hud
 
         frame.Palette = new Palette(HyperspaceColours ? SpacePalette.Hyperspace : Palette, EscapePodFitted);
         frame.DashboardVisible = DashboardVisible;
+        frame.Picture = Picture;
         frame.Time = time;
         frame.NextTime = nextTime;
         _exchange.Publish();

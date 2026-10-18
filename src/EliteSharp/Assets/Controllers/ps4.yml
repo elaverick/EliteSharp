@@ -1,0 +1,104 @@
+# The PlayStation 4's DualShock 4 controller (and the PlayStation 3's
+# DualShock 3), which SDL recognises as a PS4 (or PS3) gamepad. Like every
+# gamepad, its buttons and axes are in the order of SDL's game controller
+# layout (the Xbox controller's), so its defaults are the same as the Xbox
+# controller's, but it has its own bindings.
+#
+# The picture is 1984 x 576 pixels, and each control's position is in its
+# pixels (tools/draw-controllers.py draws it, and writes the positions here).
+name: DualShock 4 Controller
+kind: gamepad
+gamepad_types: [ps4, ps3]
+image: playstation.png
+buttons:
+  - Cross @ 1255,210
+  - Circle @ 1310,166
+  - Square @ 1195,166
+  - Triangle @ 1249,124
+  - Share @ 832,97
+  - PS @ 991,225
+  - Options @ 1150,97
+  - L3 @ 872,226
+  - R3 @ 1110,226
+  - L1 @ 752,111
+  - R1 @ 1230,111
+  - D-pad Up @ 733,131
+  - D-pad Down @ 728,202
+  - D-pad Left @ 683,166
+  - D-pad Right @ 777,166
+  - "-"
+  - "-"
+  - "-"
+  - "-"
+  - "-"
+  - Touchpad @ 991,127
+axes:
+  - Left X @ 872,226
+  - Left Y @ 872,226
+  - Right X @ 1110,226
+  - Right Y @ 1110,226
+  - L2 @ 745,46
+  - R2 @ 1237,46
+defaults:
+  axes:
+    roll: axis 0
+    pitch: axis 1
+    speed_up: axis 5
+    slow_down: axis 4
+    chart_x: axis 2
+    chart_y: axis 3
+  flight:
+    fire_laser: button 0
+    launch_missile: button 1
+    target_missile: button 2
+    unarm_missile: button 3
+    ecm: button 10
+    front_view: button 11
+    rear_view: button 12
+    left_view: button 13
+    right_view: button 14
+    in_system_jump: button 7
+    docking_computer: button 8
+    short_range_chart: button 4
+    pause: button 6
+  screens:
+    select: button 0
+    yes: button 3
+    no: button 1
+    delete: button 2
+    cursor_up: button 11
+    cursor_down: button 12
+    cursor_left: button 13
+    cursor_right: button 14
+    fast_cursor: button 10
+    launch: button 6
+    in_system_jump: button 7
+    docking_computer: button 8
+    short_range_chart: button 4
+  second_functions:
+    second_functions: button 9
+    energy_bomb: button 10
+    escape_pod: button 4
+    hyperspace: button 0
+    galactic_hyperspace: button 1
+    short_range_chart: button 13
+    galactic_chart: button 14
+    data_on_system: button 2
+    market_prices: button 12
+    status: button 11
+    inventory: button 3
+    equip_ship: button 6
+  paused:
+    resume: [button 6, button 1]
+    quit: button 4
+    volume_down: button 13
+    volume_up: button 14
+    sound_on: button 11
+    sound_off: button 12
+    reverse_pitch: button 3
+    controller_only: button 2
+    settings: button 10
+  typing:
+    accept: button 0
+    cancel: button 1
+    delete: button 2

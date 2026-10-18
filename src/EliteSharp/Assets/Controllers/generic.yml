@@ -1,0 +1,59 @@
+# The profile for any joystick that no other profile matches (and that SDL
+# doesn't recognise as a gamepad). Its buttons, axes and hats are shown by
+# number, and there's no picture. Each model of joystick has its own
+# bindings, which start as these.
+#
+# The stick rolls and pitches, but nothing sets the speed until an axis is
+# bound to the throttle (or buttons to speeding up and slowing down) on the
+# Controls screen.
+name: Joystick
+kind: joystick
+dead_zone: 0.05
+defaults:
+  axes:
+    roll: axis 0
+    pitch: axis 1
+  flight:
+    fire_laser: button 0
+    launch_missile: button 1
+    target_missile: button 2
+    unarm_missile: button 3
+    ecm: button 4
+    in_system_jump: button 5
+    docking_computer: button 6
+    short_range_chart: button 7
+    galactic_chart: button 8
+    pause: button 9
+    hyperspace: button 10
+    energy_bomb: button 11
+    front_view: hat 0 up
+    rear_view: hat 0 down
+    left_view: hat 0 left
+    right_view: hat 0 right
+  screens:
+    select: button 0
+    no: button 1
+    yes: button 2
+    delete: button 3
+    cursor_up: hat 0 up
+    cursor_down: hat 0 down
+    cursor_left: hat 0 left
+    cursor_right: hat 0 right
+    in_system_jump: button 5
+    docking_computer: button 6
+    short_range_chart: button 7
+    galactic_chart: button 8
+    launch: button 9
+    hyperspace: button 10
+  paused:
+    resume: [button 9, button 0]
+    quit: button 8
+    volume_down: hat 0 left
+    volume_up: hat 0 right
+    sound_on: hat 0 up
+    sound_off: hat 0 down
+    settings: button 4
+  typing:
+    accept: button 0
+    cancel: button 1
+    delete: button 3

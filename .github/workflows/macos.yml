@@ -38,17 +38,22 @@ jobs:
           url="https://sdk.lunarg.com/sdk/download/${VULKAN_SDK_VERSION}/mac/${archive}"
           curl --fail --location --retry 3 "${url}" --output "${RUNNER_TEMP}/${archive}"
           unzip -q "${RUNNER_TEMP}/${archive}" -d "${RUNNER_TEMP}/vulkan-sdk"
-          installer="${RUNNER_TEMP}/vulkan-sdk/InstallVulkan.app/Contents/MacOS/InstallVulkan"
-          if [[ ! -x "${installer}" ]]; then
-            echo "::error::Vulkan SDK command-line installer not found"
-            find "${RUNNER_TEMP}/vulkan-sdk" -maxdepth 5 -type f -name InstallVulkan -print
+
+          # LunarG's macOS archive uses a versioned .app bundle. Discover the
+          # installer rather than assuming a fixed bundle name or extraction layout.
+          installer="$(find "${RUNNER_TEMP}/vulkan-sdk" -type f -path '*/Contents/MacOS/*' -perm -111 -print | grep -E '/vulkansdk.*.app/Contents/MacOS/' | head -n 1 || true)"
+          if [[ -z "${installer}" ]]; then
+            echo "::error::Could not locate the executable inside the versioned Vulkan SDK installer app"
+            find "${RUNNER_TEMP}/vulkan-sdk" -maxdepth 6 -print
             exit 1
           fi
+
           sdk_dir="${HOME}/VulkanSDK/${VULKAN_SDK_VERSION}"
           "${installer}" --root "${sdk_dir}" --accept-licenses --default-answer --confirm-command install
+
           if [[ ! -f "${sdk_dir}/setup-env.sh" ]]; then
             echo "::error::Vulkan SDK setup-env.sh not found at ${sdk_dir}"
-            find "${HOME}/VulkanSDK" -maxdepth 4 -name setup-env.sh -print
+            find "${HOME}/VulkanSDK" -maxdepth 5 -name setup-env.sh -print
             exit 1
           fi
           echo "VULKAN_SDK=${sdk_dir}" >> "$GITHUB_ENV"

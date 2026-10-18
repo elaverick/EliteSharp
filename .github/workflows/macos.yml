@@ -58,6 +58,9 @@ jobs:
           fi
           echo "VULKAN_SDK=${sdk_dir}" >> "$GITHUB_ENV"
           echo "${sdk_dir}/macOS/bin" >> "$GITHUB_PATH"
+          # LunarG setup-env.sh appends to some variables that may not exist
+          # on a clean GitHub-hosted runner. Initialise them before sourcing.
+          export PKG_CONFIG_PATH="${PKG_CONFIG_PATH:-}"
           source "${sdk_dir}/setup-env.sh"
           echo "Installed Vulkan SDK ${VULKAN_SDK_VERSION}"
 

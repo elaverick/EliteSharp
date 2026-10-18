@@ -1,0 +1,116 @@
+# Build a native Apple Silicon package for the macOS tester.
+# The Vulkan SDK supplies MoltenVK and the Vulkan loader. The package keeps
+# the game's external Assets folder beside the executable, as EliteSharp expects.
+name: macOS build
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+concurrency:
+  group: macos-build-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  build-macos-arm64:
+    runs-on: macos-15
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          submodules: true
+
+      - uses: actions/setup-dotnet@v6
+        with:
+          dotnet-version: 10.0.x
+
+      - name: Install Vulkan SDK
+        shell: bash
+        env:
+          VULKAN_SDK_VERSION: 1.4.363.0
+        run: |
+          set -euo pipefail
+          archive="vulkansdk-macos-${VULKAN_SDK_VERSION}.zip"
+          url="https://sdk.lunarg.com/sdk/download/${VULKAN_SDK_VERSION}/mac/${archive}"
+          curl --fail --location --retry 3 "${url}" --output "${RUNNER_TEMP}/${archive}"
+          mkdir -p "${HOME}/VulkanSDK"
+          unzip -q "${RUNNER_TEMP}/${archive}" -d "${HOME}/VulkanSDK"
+          sdk_dir="${HOME}/VulkanSDK/${VULKAN_SDK_VERSION}"
+          if [[ ! -f "${sdk_dir}/setup-env.sh" ]]; then
+            echo "::error::Vulkan SDK setup-env.sh not found at ${sdk_dir}"
+            find "${HOME}/VulkanSDK" -maxdepth 3 -name setup-env.sh -print
+            exit 1
+          fi
+          echo "VULKAN_SDK=${sdk_dir}" >> "$GITHUB_ENV"
+          echo "${sdk_dir}/macOS/bin" >> "$GITHUB_PATH"
+          source "${sdk_dir}/setup-env.sh"
+          echo "Installed Vulkan SDK ${VULKAN_SDK_VERSION}"
+
+      - name: Test
+        run: dotnet test src/EliteSharp.sln -c Release
+
+      - name: Publish self-contained app
+        shell: bash
+        run: |
+          dotnet publish src/EliteSharp/EliteSharp.csproj \
+            -c Release \
+            -r osx-arm64 \
+            --self-contained true \
+            -p:PublishSingleFile=true \
+            -p:IncludeNativeLibrariesForSelfExtract=true \
+            -o publish/EliteSharp
+
+      - name: Bundle Vulkan runtime libraries
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p publish/EliteSharp/lib
+          # Include SDK-provided loader/MoltenVK binaries when present. Keep
+          # names and symlinks in place so the loader can resolve dependencies.
+          for library in \
+            "${VULKAN_SDK}/macOS/lib/libvulkan.1.dylib" \
+            "${VULKAN_SDK}/macOS/lib/libvulkan.dylib" \
+            "${VULKAN_SDK}/macOS/lib/libMoltenVK.dylib"; do
+            if [[ -e "$library" ]]; then
+              cp -L "$library" publish/EliteSharp/lib/
+            fi
+          done
+          echo "Vulkan SDK libraries staged:"
+          ls -la publish/EliteSharp/lib
+          echo "Apphost:"
+          ls -la publish/EliteSharp/EliteSharp
+
+      - name: Package
+        shell: bash
+        run: |
+          set -euo pipefail
+          cp README.md publish/EliteSharp/README-macOS.txt
+          cat > publish/EliteSharp/README-macOS.txt <<'EOF'
+          EliteSharp — macOS Apple Silicon test build
+
+          Requirements:
+          - Apple Silicon Mac (arm64)
+          - A Vulkan-capable setup; this package includes Vulkan SDK runtime
+            libraries when the SDK provides them.
+          - This is an unsigned test build and may trigger macOS security warnings.
+
+          Run from Terminal in this folder:
+            ./EliteSharp
+
+          Keep the Assets folder and lib folder beside the executable.
+          If the app reports a Vulkan loader or MoltenVK error, share the
+          terminal output with the EliteSharp maintainers.
+          EOF
+          ditto -c -k --sequesterRsrc --keepParent publish/EliteSharp \
+            EliteSharp-macos-arm64.zip
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: EliteSharp-macos-arm64
+          path: EliteSharp-macos-arm64.zip
+          if-no-files-found: error
+          retention-days: 14

@@ -37,12 +37,18 @@ jobs:
           archive="vulkansdk-macos-${VULKAN_SDK_VERSION}.zip"
           url="https://sdk.lunarg.com/sdk/download/${VULKAN_SDK_VERSION}/mac/${archive}"
           curl --fail --location --retry 3 "${url}" --output "${RUNNER_TEMP}/${archive}"
-          mkdir -p "${HOME}/VulkanSDK"
-          unzip -q "${RUNNER_TEMP}/${archive}" -d "${HOME}/VulkanSDK"
+          unzip -q "${RUNNER_TEMP}/${archive}" -d "${RUNNER_TEMP}/vulkan-sdk"
+          installer="${RUNNER_TEMP}/vulkan-sdk/InstallVulkan.app/Contents/MacOS/InstallVulkan"
+          if [[ ! -x "${installer}" ]]; then
+            echo "::error::Vulkan SDK command-line installer not found"
+            find "${RUNNER_TEMP}/vulkan-sdk" -maxdepth 5 -type f -name InstallVulkan -print
+            exit 1
+          fi
           sdk_dir="${HOME}/VulkanSDK/${VULKAN_SDK_VERSION}"
+          "${installer}" --root "${sdk_dir}" --accept-licenses --default-answer --confirm-command install
           if [[ ! -f "${sdk_dir}/setup-env.sh" ]]; then
             echo "::error::Vulkan SDK setup-env.sh not found at ${sdk_dir}"
-            find "${HOME}/VulkanSDK" -maxdepth 3 -name setup-env.sh -print
+            find "${HOME}/VulkanSDK" -maxdepth 4 -name setup-env.sh -print
             exit 1
           fi
           echo "VULKAN_SDK=${sdk_dir}" >> "$GITHUB_ENV"
@@ -69,16 +75,12 @@ jobs:
         run: |
           set -euo pipefail
           mkdir -p publish/EliteSharp/lib
-          # Include SDK-provided loader/MoltenVK binaries when present. Keep
-          # names and symlinks in place so the loader can resolve dependencies.
-          for library in \
-            "${VULKAN_SDK}/macOS/lib/libvulkan.1.dylib" \
-            "${VULKAN_SDK}/macOS/lib/libvulkan.dylib" \
-            "${VULKAN_SDK}/macOS/lib/libMoltenVK.dylib"; do
-            if [[ -e "$library" ]]; then
-              cp -L "$library" publish/EliteSharp/lib/
-            fi
-          done
+          # Stage loader and MoltenVK shared libraries alongside the apphost.
+          # Exact SDK paths can vary by SDK version, so discover them.
+          find "${VULKAN_SDK}/macOS" -type f \( -name 'libvulkan*.dylib' -o -name 'libMoltenVK*.dylib' \) -print -exec cp -L '{}' publish/EliteSharp/lib/ \;
+          if [[ -z "$(find publish/EliteSharp/lib -type f -name '*MoltenVK*.dylib' -print -quit)" ]]; then
+            echo "::warning::MoltenVK library was not found in the expected SDK tree; tester may need to install Vulkan SDK."
+          fi
           echo "Vulkan SDK libraries staged:"
           ls -la publish/EliteSharp/lib
           echo "Apphost:"
@@ -88,21 +90,17 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          cp README.md publish/EliteSharp/README-macOS.txt
           cat > publish/EliteSharp/README-macOS.txt <<'EOF'
           EliteSharp — macOS Apple Silicon test build
 
-          Requirements:
-          - Apple Silicon Mac (arm64)
-          - A Vulkan-capable setup; this package includes Vulkan SDK runtime
-            libraries when the SDK provides them.
-          - This is an unsigned test build and may trigger macOS security warnings.
+          This is an unsigned test build for Apple Silicon Macs. macOS may
+          warn when opening software that is not signed and notarised.
 
           Run from Terminal in this folder:
             ./EliteSharp
 
           Keep the Assets folder and lib folder beside the executable.
-          If the app reports a Vulkan loader or MoltenVK error, share the
+          If the game reports a Vulkan loader or MoltenVK error, share the
           terminal output with the EliteSharp maintainers.
           EOF
           ditto -c -k --sequesterRsrc --keepParent publish/EliteSharp \

@@ -1,16 +1,8 @@
-# Make a GitHub release when a version tag (such as v0.1.0) is pushed:
+# Build Windows and Apple Silicon packages and attach them to one GitHub Release.
 #
-#   git tag v0.1.0
-#   git push origin v0.1.0
-#
-# or from the Actions tab (Release, then Run workflow), by typing a version,
-# which tags the latest commit on the chosen branch. A version with a suffix
-# (such as 0.2.0-beta) makes a pre-release.
-#
-# The release is for 64-bit Windows, and needs the .NET 10 Runtime (which
-# isn't included, to keep the download small): a zip of a folder holding
-# EliteSharp.exe, its Assets folder and the libraries it needs. The release notes list the
-# titles of the commits since the last release (see release-notes.sh).
+# Normal release: push a version tag such as v0.5.0.
+# Manual release: run this workflow and enter the intended version.
+# This workflow does not bump version values in source files.
 name: Release
 
 on:
@@ -19,47 +11,65 @@ on:
   workflow_dispatch:
     inputs:
       version:
-        description: The version to release, such as 0.2.0
+        description: The version to release, such as 0.5.0
         required: true
+        type: string
 
 concurrency:
   group: release-${{ github.ref }}
+  cancel-in-progress: false
 
 permissions:
   contents: write
 
 jobs:
-  release:
-    runs-on: windows-latest
+  version:
+    runs-on: ubuntu-latest
+    outputs:
+      version: ${{ steps.version.outputs.version }}
+      prefix: ${{ steps.version.outputs.prefix }}
+      suffix: ${{ steps.version.outputs.suffix }}
+      tag: ${{ steps.version.outputs.tag }}
+      prerelease: ${{ steps.version.outputs.prerelease }}
+      win_zip: ${{ steps.version.outputs.win_zip }}
+      mac_zip: ${{ steps.version.outputs.mac_zip }}
     steps:
-      - uses: actions/checkout@v7
-        with:
-          # All the history and tags, for the release notes
-          fetch-depth: 0
-          # The original's source code, which some tests compare the game with
-          submodules: true
-
       - name: Work out the version
         id: version
         shell: bash
         env:
           REQUESTED: ${{ github.event_name == 'workflow_dispatch' && inputs.version || github.ref_name }}
         run: |
+          set -euo pipefail
           version="${REQUESTED#v}"
           if ! [[ "$version" =~ ^[0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z.-]+)?$ ]]; then
-            echo "::error::'$REQUESTED' isn't a version like 0.1.0 or 0.2.0-beta"
+            echo "::error::'$REQUESTED' isn't a version like 0.5.0 or 0.5.0-beta"
             exit 1
           fi
           prefix="${version%%-*}"
           suffix=""
           [[ "$version" == *-* ]] && suffix="${version#*-}"
+          prerelease=false
+          [[ -n "$suffix" ]] && prerelease=true
           {
             echo "version=$version"
             echo "prefix=$prefix"
             echo "suffix=$suffix"
             echo "tag=v$version"
-            echo "zip=EliteSharp-v$version-win-x64.zip"
+            echo "prerelease=$prerelease"
+            echo "win_zip=EliteSharp-v$version-win-x64.zip"
+            echo "mac_zip=EliteSharp-v$version-macos-arm64.zip"
           } >> "$GITHUB_OUTPUT"
+
+  build-windows:
+    needs: version
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: ${{ github.sha }}
+          fetch-depth: 0
+          submodules: true
 
       - uses: actions/setup-dotnet@v6
         with:
@@ -68,26 +78,158 @@ jobs:
       - name: Test
         run: dotnet test src/EliteSharp.sln -c Release
 
-      - name: Publish
+      - name: Publish Windows x64
         shell: bash
-        run: >
-          dotnet publish src/EliteSharp/EliteSharp.csproj
-          -c Release -r win-x64 --self-contained false
-          -p:VersionPrefix=${{ steps.version.outputs.prefix }}
-          -p:VersionSuffix=${{ steps.version.outputs.suffix }}
-          -o publish/EliteSharp
+        env:
+          VERSION_PREFIX: ${{ needs.version.outputs.prefix }}
+          VERSION_SUFFIX: ${{ needs.version.outputs.suffix }}
+        run: |
+          dotnet publish src/EliteSharp/EliteSharp.csproj \
+            -c Release -r win-x64 --self-contained false \
+            -p:VersionPrefix="$VERSION_PREFIX" \
+            -p:VersionSuffix="$VERSION_SUFFIX" \
+            -o publish/EliteSharp
 
-      - name: Zip
+      - name: Package Windows
         shell: pwsh
-        run: Compress-Archive -Path publish/EliteSharp -DestinationPath ${{ steps.version.outputs.zip }}
+        env:
+          ZIP: ${{ needs.version.outputs.win_zip }}
+        run: Compress-Archive -Path publish/EliteSharp -DestinationPath $env:ZIP
 
-      - name: Create the release
+      - uses: actions/upload-artifact@v4
+        with:
+          name: release-windows
+          path: ${{ needs.version.outputs.win_zip }}
+          if-no-files-found: error
+          retention-days: 7
+
+  build-macos:
+    needs: version
+    runs-on: macos-15
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: ${{ github.sha }}
+          fetch-depth: 0
+          submodules: true
+
+      - uses: actions/setup-dotnet@v6
+        with:
+          dotnet-version: 10.0.x
+
+      - name: Install Vulkan SDK
+        shell: bash
+        env:
+          VULKAN_SDK_VERSION: 1.4.363.0
+        run: |
+          set -euo pipefail
+          archive="vulkansdk-macos-${VULKAN_SDK_VERSION}.zip"
+          url="https://sdk.lunarg.com/sdk/download/${VULKAN_SDK_VERSION}/mac/${archive}"
+          curl --fail --location --retry 3 "$url" --output "${RUNNER_TEMP}/${archive}"
+          unzip -q "${RUNNER_TEMP}/${archive}" -d "${RUNNER_TEMP}/vulkan-sdk"
+          installer="$(find "${RUNNER_TEMP}/vulkan-sdk" -type f -path '*/Contents/MacOS/*' -perm -111 -print | grep -E '/vulkansdk.*\.app/Contents/MacOS/' | head -n 1 || true)"
+          if [[ -z "$installer" ]]; then
+            echo "::error::Could not locate executable inside the versioned Vulkan SDK installer app"
+            find "${RUNNER_TEMP}/vulkan-sdk" -maxdepth 6 -print
+            exit 1
+          fi
+          sdk_dir="${HOME}/VulkanSDK/${VULKAN_SDK_VERSION}"
+          "$installer" --root "$sdk_dir" --accept-licenses --default-answer --confirm-command install
+          if [[ ! -f "$sdk_dir/setup-env.sh" ]]; then
+            echo "::error::Vulkan SDK setup-env.sh not found at $sdk_dir"
+            exit 1
+          fi
+          echo "VULKAN_SDK=$sdk_dir" >> "$GITHUB_ENV"
+          echo "$sdk_dir/macOS/bin" >> "$GITHUB_PATH"
+          export PKG_CONFIG_PATH="${PKG_CONFIG_PATH:-}"
+          source "$sdk_dir/setup-env.sh"
+
+      - name: Test
+        run: dotnet test src/EliteSharp.sln -c Release
+
+      - name: Publish Apple Silicon
+        shell: bash
+        env:
+          VERSION_PREFIX: ${{ needs.version.outputs.prefix }}
+          VERSION_SUFFIX: ${{ needs.version.outputs.suffix }}
+        run: |
+          dotnet publish src/EliteSharp/EliteSharp.csproj \
+            -c Release -r osx-arm64 --self-contained true \
+            -p:PublishSingleFile=true \
+            -p:IncludeNativeLibrariesForSelfExtract=true \
+            -p:VersionPrefix="$VERSION_PREFIX" \
+            -p:VersionSuffix="$VERSION_SUFFIX" \
+            -o publish/EliteSharp
+
+      - name: Bundle Vulkan runtime libraries
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p publish/EliteSharp/lib
+          find "${VULKAN_SDK}/macOS" -type f \( -name 'libvulkan*.dylib' -o -name 'libMoltenVK*.dylib' \) -print -exec cp -L '{}' publish/EliteSharp/lib/ \;
+          if [[ -z "$(find publish/EliteSharp/lib -type f -name '*MoltenVK*.dylib' -print -quit)" ]]; then
+            echo "::error::MoltenVK library not found in the Vulkan SDK tree"
+            exit 1
+          fi
+
+      - name: Add macOS instructions and package
+        shell: bash
+        env:
+          ZIP: ${{ needs.version.outputs.mac_zip }}
+        run: |
+          set -euo pipefail
+          cat > publish/EliteSharp/README-macOS.txt <<'EOF'
+          EliteSharp — macOS Apple Silicon build
+
+          This is an unsigned build. macOS may warn when opening software that
+          is not signed and notarised.
+
+          Run from Terminal in this folder:
+            ./EliteSharp
+
+          Keep the Assets and lib folders beside the executable.
+          EOF
+          ditto -c -k --sequesterRsrc --keepParent publish/EliteSharp "$ZIP"
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: release-macos
+          path: ${{ needs.version.outputs.mac_zip }}
+          if-no-files-found: error
+          retention-days: 7
+
+  publish-release:
+    needs: [version, build-windows, build-macos]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: ${{ github.sha }}
+          fetch-depth: 0
+
+      - uses: actions/download-artifact@v4
+        with:
+          name: release-windows
+          path: dist
+
+      - uses: actions/download-artifact@v4
+        with:
+          name: release-macos
+          path: dist
+
+      - name: Create the GitHub Release
         shell: bash
         env:
           GH_TOKEN: ${{ github.token }}
-          TAG: ${{ steps.version.outputs.tag }}
-          ZIP: ${{ steps.version.outputs.zip }}
-          PRERELEASE: ${{ steps.version.outputs.suffix != '' && '--prerelease' || '' }}
+          TAG: ${{ needs.version.outputs.tag }}
+          PRERELEASE: ${{ needs.version.outputs.prerelease }}
+          WIN_ZIP: ${{ needs.version.outputs.win_zip }}
+          MAC_ZIP: ${{ needs.version.outputs.mac_zip }}
         run: |
+          set -euo pipefail
           bash .github/release-notes.sh "$TAG" "$GITHUB_SHA" > release-notes.md
-          gh release create "$TAG" "$ZIP" --title "EliteSharp $TAG" --notes-file release-notes.md --target "$GITHUB_SHA" $PRERELEASE
+          args=(release create "$TAG" "dist/$WIN_ZIP" "dist/$MAC_ZIP" --title "EliteSharp $TAG" --notes-file release-notes.md --target "$GITHUB_SHA")
+          if [[ "$PRERELEASE" == "true" ]]; then
+            args+=(--prerelease)
+          fi
+          gh "${args[@]}"
